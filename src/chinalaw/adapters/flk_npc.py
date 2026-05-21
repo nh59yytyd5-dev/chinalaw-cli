@@ -24,7 +24,7 @@ MIN_REQUEST_INTERVAL = 0.1
 
 # 完整 chinalaw-cli 标识，含仓库链接以便上游识别 / 联系；详见 docs/COMPLIANCE.md §4。
 DEFAULT_USER_AGENT = (
-    "chinalaw-cli/0.1.0 (+https://github.com/chinalaw-cli/chinalaw-cli)"
+    "chinalaw-cli/0.1.1 (+https://github.com/chinalaw-cli/chinalaw-cli)"
 )
 BASE_URL = "https://flk.npc.gov.cn"
 HOMEPAGE_URL = f"{BASE_URL}/"

@@ -17,7 +17,7 @@ from chinalaw import ensure, metadata, service
 from chinalaw.db import DEFAULT_DB_PATH
 
 PROTOCOL_VERSION = "2025-06-18"
-SERVER_INFO = {"name": "chinalaw-mcp", "version": "0.1.0"}
+SERVER_INFO = {"name": "chinalaw-mcp", "version": "0.1.1"}
 
 
 TOOLS: list[dict[str, Any]] = metadata.mcp_tools(protocol=True)

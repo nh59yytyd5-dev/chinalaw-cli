@@ -13,7 +13,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VENV_PYTHON="${CHINALAW_VENV:-${REPO_ROOT}/.venv}/bin/python"
 
 if [ -x "$VENV_PYTHON" ]; then
-    exec "$VENV_PYTHON" -m chinalaw.mcp "$@"
+    exec env PYTHONUTF8=1 PYTHONIOENCODING=utf-8 "$VENV_PYTHON" -m chinalaw.mcp "$@"
 fi
 
-exec env PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m chinalaw.mcp "$@"
+exec env PYTHONUTF8=1 PYTHONIOENCODING=utf-8 \
+    PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m chinalaw.mcp "$@"

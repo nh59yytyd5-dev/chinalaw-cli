@@ -2584,6 +2584,7 @@ _COMMAND_HANDLERS = {
 
 
 def app(argv: list[str] | None = None) -> int:
+    _configure_text_stdio()
     parser = build_parser()
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
     args = parser.parse_args(raw_argv)

@@ -48,7 +48,7 @@ DEFAULT_REQUEST_INTERVAL = 0.5  # ADR-0008 §3.3：默认节流提到 500ms
 MIN_REQUEST_INTERVAL = 0.1
 
 # UA 同时含浏览器兼容前缀和 chinalaw-cli 标识，详见 docs/COMPLIANCE.md §4。
-TOOL_UA_TOKEN = "chinalaw-cli/0.1.0 (+https://github.com/chinalaw-cli/chinalaw-cli)"
+TOOL_UA_TOKEN = "chinalaw-cli/0.1.1 (+https://github.com/chinalaw-cli/chinalaw-cli)"
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "

@@ -284,7 +284,8 @@ class AgentSetupScriptTests(unittest.TestCase):
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
         self.assertTrue(script.exists())
-        self.assertTrue(script.stat().st_mode & 0o111)
+        if os.name != "nt":
+            self.assertTrue(script.stat().st_mode & 0o111)
         self.assertTrue(windows_script.exists())
         self.assertIn("scripts/setup-agent", readme)
         self.assertIn(".\\scripts\\setup-agent.ps1", readme)

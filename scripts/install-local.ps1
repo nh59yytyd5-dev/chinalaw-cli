@@ -18,22 +18,46 @@ else {
 $VenvDir = if ($env:CHINALAW_VENV) { $env:CHINALAW_VENV } else { Join-Path $RepoRoot ".venv" }
 $BinDir = if ($env:CHINALAW_BIN_DIR) { $env:CHINALAW_BIN_DIR } else { Join-Path $HOME ".local\bin" }
 $PythonBin = Join-Path $VenvDir "Scripts\python.exe"
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+
+function Test-PipAvailable {
+    Param([Parameter(Mandatory = $true)][string]$Python)
+    & $Python -m pip --version *> $null
+    return $LASTEXITCODE -eq 0
+}
 
 if (-not (Test-Path $PythonBin)) {
     & $BootstrapPython -m venv $VenvDir
     if ($LASTEXITCODE -ne 0) {
-        throw "failed to create virtualenv with $BootstrapPython"
+        Write-Warning "failed to create virtualenv with $BootstrapPython; wrappers will use PYTHONPATH fallback mode"
     }
 }
 
-& $PythonBin -m pip install -e $RepoRoot
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "editable install ok: $RepoRoot ($PythonBin)"
+if ((Test-Path $PythonBin) -and -not (Test-PipAvailable -Python $PythonBin)) {
+    & $PythonBin -m ensurepip --upgrade *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "bootstrapped pip inside $VenvDir"
+    }
+    else {
+        Write-Warning "virtualenv exists but pip is unavailable; wrappers will use PYTHONPATH fallback mode"
+    }
+}
+
+if (Test-Path $PythonBin) {
+    & $PythonBin -m pip install -e $RepoRoot
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "editable install ok: $RepoRoot ($PythonBin)"
+    }
+    else {
+        Write-Warning "editable install failed; wrapper will fall back to PYTHONPATH mode"
+    }
 }
 else {
-    Write-Warning "editable install failed; wrapper will fall back to PYTHONPATH mode"
+    Write-Warning "editable install skipped; wrapper will fall back to PYTHONPATH mode"
+    $PythonBin = if ($env:PYTHON) { $env:PYTHON } else { $BootstrapPython }
 }
 
 function Write-ChinalawShim {
@@ -49,6 +73,8 @@ function Write-ChinalawShim {
     $cmdContent = @"
 @echo off
 setlocal
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
 set "PYTHON=$PythonBin"
 set "PYTHONPATH=$srcPath;%PYTHONPATH%"
 "%PYTHON%" -m $Module %*
@@ -60,6 +86,8 @@ exit /b %ERRORLEVEL%
     $escapedSrc = $srcPath.Replace("'", "''")
     $ps1Content = @"
 `$Python = '$escapedPython'
+`$env:PYTHONUTF8 = '1'
+`$env:PYTHONIOENCODING = 'utf-8'
 `$env:PYTHONPATH = '$escapedSrc' + [IO.Path]::PathSeparator + `$env:PYTHONPATH
 & `$Python -m $Module @args
 exit `$LASTEXITCODE

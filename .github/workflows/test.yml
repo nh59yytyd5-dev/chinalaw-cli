@@ -112,9 +112,62 @@ jobs:
           $doctor = $doctorJson | ConvertFrom-Json
           if (-not $doctor.ok) { throw "chinalaw doctor returned ok=false" }
 
+  install-smoke:
+    name: install-smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install with scripts/install-local
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CHINALAW_BIN_DIR="$RUNNER_TEMP/chinalaw-bin"
+          scripts/install-local
+          export PATH="$CHINALAW_BIN_DIR:$PATH"
+          db="$RUNNER_TEMP/chinalaw-install-smoke.db"
+          chinalaw --no-notice --db "$db" init --format json
+          chinalaw --no-notice --db "$db" article 民法典 第一百四十三条 --format json
+          chinalaw --no-notice --db "$db" doctor --format json
+
+      - name: Install with scripts/install-local.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:CHINALAW_BIN_DIR = Join-Path $env:RUNNER_TEMP "chinalaw-bin"
+          .\scripts\install-local.ps1
+          $env:PATH = "$env:CHINALAW_BIN_DIR;$env:PATH"
+          $db = Join-Path $env:RUNNER_TEMP "chinalaw-install-smoke.db"
+
+          $initJson = chinalaw --no-notice --db $db init --format json
+          if ($LASTEXITCODE -ne 0) { throw "chinalaw init failed with exit $LASTEXITCODE" }
+          $init = $initJson | ConvertFrom-Json
+          if (-not $init.ok) { throw "chinalaw init returned ok=false" }
+
+          $articleJson = chinalaw --no-notice --db $db article 民法典 第一百四十三条 --format json
+          if ($LASTEXITCODE -ne 0) { throw "chinalaw article failed with exit $LASTEXITCODE" }
+          $article = $articleJson | ConvertFrom-Json
+          if ($null -eq $article.article) { throw "article lookup returned article=null" }
+
+          $doctorJson = chinalaw --no-notice --db $db doctor --format json
+          if ($LASTEXITCODE -ne 0) { throw "chinalaw doctor failed with exit $LASTEXITCODE" }
+          $doctor = $doctorJson | ConvertFrom-Json
+          if (-not $doctor.ok) { throw "chinalaw doctor returned ok=false" }
+
   build:
     runs-on: ubuntu-latest
-    needs: [test, lint, windows-smoke]
+    needs: [test, lint, windows-smoke, install-smoke]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

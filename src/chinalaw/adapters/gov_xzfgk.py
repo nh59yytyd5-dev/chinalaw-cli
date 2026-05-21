@@ -27,7 +27,7 @@ DEFAULT_TIMEOUT = 15
 DEFAULT_REQUEST_INTERVAL = 0.5
 MIN_REQUEST_INTERVAL = 0.1
 
-TOOL_UA_TOKEN = "chinalaw-cli/0.1.0 (+https://github.com/chinalaw-cli/chinalaw-cli)"
+TOOL_UA_TOKEN = "chinalaw-cli/0.1.1 (+https://github.com/chinalaw-cli/chinalaw-cli)"
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "

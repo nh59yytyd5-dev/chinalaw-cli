@@ -21,10 +21,31 @@ MCP_TARGET="${BIN_DIR}/chinalaw-mcp"
 mkdir -p "$BIN_DIR"
 
 if [ ! -x "$PYTHON_BIN" ]; then
-    "$BOOTSTRAP_PYTHON" -m venv "$VENV_DIR"
+    if ! "$BOOTSTRAP_PYTHON" -m venv "$VENV_DIR"; then
+        cat >&2 <<'EOF'
+warning: failed to create virtualenv; installing PATH wrappers in PYTHONPATH fallback mode.
+
+On Debian/Ubuntu, install the venv package first, for example:
+  apt-get install -y python3-venv
+
+Then rerun scripts/install-local to enable editable installation.
+EOF
+    fi
 fi
 
-if "$PYTHON_BIN" -m pip install -e "$REPO_ROOT"; then
+if [ -x "$PYTHON_BIN" ] && ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+    if "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1; then
+        echo "bootstrapped pip inside ${VENV_DIR}"
+    else
+        cat >&2 <<'EOF'
+warning: virtualenv exists but pip is unavailable; using PYTHONPATH fallback mode.
+
+On Debian/Ubuntu, install python3-venv, then rerun scripts/install-local.
+EOF
+    fi
+fi
+
+if [ -x "$PYTHON_BIN" ] && "$PYTHON_BIN" -m pip install -e "$REPO_ROOT"; then
     echo "editable install ok: ${REPO_ROOT} (${PYTHON_BIN})"
 else
     echo "editable install failed; wrapper will fall back to PYTHONPATH mode" >&2

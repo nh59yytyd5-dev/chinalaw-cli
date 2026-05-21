@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chinalaw"
-version = "0.1.0"
+version = "0.1.1"
 description = "中国法律法规检索 CLI，为 AI agent 设计，减少幻觉、按条款引用。"
 readme = "README.md"
 requires-python = ">=3.10"

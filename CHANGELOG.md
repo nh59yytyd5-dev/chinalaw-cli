@@ -5,6 +5,15 @@
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-21
+
+### 修复
+
+- 修复 Windows 默认 cp1252 输出中文 JSON 时可能触发 `UnicodeEncodeError` 的问题，CLI 入口和 wrapper 统一启用 UTF-8。
+- 修复 SQLite 初始化异常时连接未关闭导致 Windows 临时数据库文件被锁的问题。
+- 增强 `scripts/install-local` / `scripts/install-local.ps1`：venv 创建失败或 pip 缺失时不让安装直接中断，自动尝试 `ensurepip`，否则安装可用的 PYTHONPATH fallback wrapper。
+- GitHub Actions 新增 Ubuntu / macOS / Windows 三平台安装烟测，要求公开安装脚本可以完成 `init`、`article`、`doctor`。
+
 ### 新增（agent platform 稳定性，2026-05-20，issues #81/#82/#83/#84/#86/#88/#89）
 
 - 新增 `chinalaw doctor`：本地检查 PATH wrapper、默认 DB、schema、fixtures、
