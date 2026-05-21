@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install tooling
+        run: python -m pip install --upgrade ".[dev]"
+
+      - name: Compile source
+        run: PYTHONPATH=src python -m compileall -q src
+
+      - name: Lint
+        run: ruff check src
+
+      - name: Build package
+        run: python -m build
+
+      - name: Smoke installed wheel
+        run: |
+          python -m venv .venv-smoke
+          . .venv-smoke/bin/activate
+          pip install dist/*.whl
+          tmpdb="$(mktemp)"
+          chinalaw --no-notice sync --fixtures --db "$tmpdb" --format json
+          chinalaw --no-notice resolve 民法典 --db "$tmpdb" --format json
+          chinalaw --no-notice article 民法典 第一百四十三条 --db "$tmpdb" --format json

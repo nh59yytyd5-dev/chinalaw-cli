@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# Install / update chinalaw-cli skills into the user-level skill directories.
+#
+# Default: symlink each skill under .claude/skills/ to:
+#   - ~/.claude/skills/<name>            (Claude Code / Cursor / Cline)
+#   - ~/.agents/skills/<name>            (superpowers / Codex CLI ecosystem)
+#   - ~/.config/opencode/skills/<name>   (OpenCode)
+#
+# Use --dry-run to preview, --copy to copy files instead of symlinking
+# (Windows / WSL friendly), and --uninstall to remove existing entries.
+#
+# This is a tool-neutral installation — skill content is the same SKILL.md
+# directory; the multi-target install just lets different agent frameworks
+# pick them up without touching the source repo.
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SKILLS_DIR="${REPO_ROOT}/.claude/skills"
+
+DRY_RUN=0
+USE_COPY=0
+UNINSTALL=0
+TARGETS_DEFAULT=(
+    "${HOME}/.claude/skills"
+    "${HOME}/.agents/skills"
+    "${HOME}/.config/opencode/skills"
+)
+TARGETS=()
+INSTALL_MARKER=".chinalaw-cli-install"
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/install-skills [options]
+
+Install chinalaw-cli skills (.claude/skills/*) to user-level directories so
+multiple agent frameworks (Claude Code / OpenCode / Codex / Cursor / Cline)
+can load them without per-project setup.
+
+Options:
+  --dry-run       Print actions without changing anything.
+  --copy          Copy files instead of symlinking (Windows / WSL safe).
+  --uninstall     Remove previously installed entries (only ones pointing
+                  back to this checkout, never user-authored skills).
+  --target <dir>  Add a custom destination directory (repeatable). Defaults:
+                    ~/.claude/skills   (Claude Code / Cursor)
+                    ~/.agents/skills   (superpowers / Codex CLI)
+                    ~/.config/opencode/skills (OpenCode)
+  -h, --help      Show this help.
+
+Examples:
+  scripts/install-skills
+  scripts/install-skills --dry-run
+  scripts/install-skills --copy
+  scripts/install-skills --target ~/.config/opencode/skills
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        --copy) USE_COPY=1; shift ;;
+        --uninstall) UNINSTALL=1; shift ;;
+        --target)
+            [ $# -lt 2 ] && { echo "error: --target needs a value" >&2; exit 2; }
+            TARGETS+=("$2"); shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "error: unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+if [ ${#TARGETS[@]} -eq 0 ]; then
+    TARGETS=("${TARGETS_DEFAULT[@]}")
+fi
+
+if [ ! -d "$SKILLS_DIR" ]; then
+    echo "error: ${SKILLS_DIR} not found; run from a chinalaw-cli checkout" >&2
+    exit 1
+fi
+
+run() {
+    if [ "$DRY_RUN" -eq 1 ]; then
+        printf '[dry-run] %s\n' "$*"
+    else
+        "$@"
+    fi
+}
+
+write_install_marker() {
+    local dst="$1"
+    local src="$2"
+    local name="$3"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        printf '[dry-run] write managed-install marker: %s\n' "${dst}/${INSTALL_MARKER}"
+        return
+    fi
+
+    cat > "${dst}/${INSTALL_MARKER}" <<EOF
+managed_by=chinalaw-cli
+installer=scripts/install-skills
+skill=${name}
+source=${src}
+EOF
+}
+
+is_managed_copy() {
+    local dst="$1"
+    local name="$2"
+    local marker="${dst}/${INSTALL_MARKER}"
+
+    [ -f "$marker" ] || return 1
+    grep -qx "managed_by=chinalaw-cli" "$marker" 2>/dev/null || return 1
+    grep -qx "installer=scripts/install-skills" "$marker" 2>/dev/null || return 1
+    grep -qx "skill=${name}" "$marker" 2>/dev/null || return 1
+}
+
+symlink_points_to_source() {
+    local dst="$1"
+    local src="$2"
+    local link_target
+    local resolved_link
+    local resolved_src
+
+    [ -L "$dst" ] || return 1
+    link_target="$(readlink "$dst")"
+    if [[ "$link_target" != /* ]]; then
+        link_target="$(cd -P "$(dirname "$dst")" && pwd)/${link_target}"
+    fi
+    [ -d "$link_target" ] || return 1
+    resolved_link="$(cd -P "$link_target" && pwd)"
+    resolved_src="$(cd -P "$src" && pwd)"
+    [ "$resolved_link" = "$resolved_src" ]
+}
+
+# Skills are first-level directories under .claude/skills/ that contain SKILL.md.
+SKILL_NAMES=()
+for dir in "$SKILLS_DIR"/*/; do
+    [ -d "$dir" ] || continue
+    name="$(basename "$dir")"
+    if [ -f "${dir}SKILL.md" ]; then
+        SKILL_NAMES+=("$name")
+    fi
+done
+
+if [ ${#SKILL_NAMES[@]} -eq 0 ]; then
+    echo "error: no skills with SKILL.md found under ${SKILLS_DIR}" >&2
+    exit 1
+fi
+
+action_label() {
+    if [ "$UNINSTALL" -eq 1 ]; then
+        echo "uninstall"
+    elif [ "$USE_COPY" -eq 1 ]; then
+        echo "copy"
+    else
+        echo "symlink"
+    fi
+}
+
+echo "chinalaw-cli skills: $(action_label)"
+echo "  source : ${SKILLS_DIR}"
+for target in "${TARGETS[@]}"; do
+    echo "  target : ${target}"
+done
+echo "  skills : ${SKILL_NAMES[*]}"
+echo
+
+for target in "${TARGETS[@]}"; do
+    run mkdir -p "$target"
+    for name in "${SKILL_NAMES[@]}"; do
+        src="${SKILLS_DIR}/${name}"
+        dst="${target}/${name}"
+
+        if [ "$UNINSTALL" -eq 1 ]; then
+            if [ -L "$dst" ]; then
+                # Only remove symlinks that point back to this exact skill to
+                # avoid clobbering user-authored skills with the same name.
+                if symlink_points_to_source "$dst" "$src"; then
+                    run rm -f "$dst"
+                    echo "removed symlink: ${dst}"
+                else
+                    link_target="$(readlink "$dst")"
+                    echo "skip (foreign symlink): ${dst} -> ${link_target}"
+                fi
+            elif [ -d "$dst" ]; then
+                # Copy mode: only delete directories with our explicit marker.
+                # Frontmatter names are not provenance; users can author skills
+                # with the same name.
+                if is_managed_copy "$dst" "$name"; then
+                    run rm -rf "$dst"
+                    echo "removed copy: ${dst}"
+                else
+                    echo "skip (foreign dir): ${dst}"
+                fi
+            else
+                echo "skip (not present): ${dst}"
+            fi
+            continue
+        fi
+
+        # Install path: detect collision before overwriting.
+        if [ -e "$dst" ] || [ -L "$dst" ]; then
+            if [ -L "$dst" ]; then
+                link_target="$(readlink "$dst")"
+                if [ "$link_target" = "$src" ]; then
+                    echo "ok (already linked): ${dst}"
+                    continue
+                fi
+                echo "warn (foreign symlink): ${dst} -> ${link_target}; skipping" >&2
+                continue
+            fi
+            if [ -d "$dst" ]; then
+                echo "warn (existing directory): ${dst}; skipping (use --uninstall first)" >&2
+                continue
+            fi
+            echo "warn (existing file): ${dst}; skipping" >&2
+            continue
+        fi
+
+        if [ "$USE_COPY" -eq 1 ]; then
+            run cp -R "$src" "$dst"
+            write_install_marker "$dst" "$src" "$name"
+            echo "copied: ${src} -> ${dst}"
+        else
+            run ln -s "$src" "$dst"
+            echo "linked: ${dst} -> ${src}"
+        fi
+    done
+done
+
+echo
+echo "done."

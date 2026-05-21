@@ -1,0 +1,389 @@
+{
+  "id": "flk-civil-code-property-part-interpretation-1-2020",
+  "title": "最高人民法院关于适用《中华人民共和国民法典》物权编的解释（一）",
+  "short_title": "物权编解释一",
+  "aliases": [
+    "物权编解释一",
+    "物权编解释（一）",
+    "物权编解释",
+    "民法典物权编解释一",
+    "民法典物权编解释"
+  ],
+  "level": "judicial_interpretation",
+  "status": "current",
+  "issuing_body": "最高人民法院",
+  "document_number": "法释〔2020〕24号",
+  "released_at": "2020-12-29",
+  "effective_at": "2021-01-01",
+  "repealed_at": null,
+  "source_url": "https://flk.npc.gov.cn/detail?id=ff80808177e75f880178006e5ae91ae3",
+  "source_name": "flk.npc.gov.cn",
+  "source_checked_at": "2026-05-20T16:33:26.611276+00:00",
+  "source_hash": "2a60c28336bc8bc1e007c4952ac54064df8130d2021a0d81c20f70167a2be449",
+  "categories": [
+    {
+      "id": "flk:0",
+      "name": "未命名分类",
+      "parent_id": null,
+      "description": "flk codeId=None"
+    },
+    {
+      "id": "flk:1",
+      "name": "宪法",
+      "parent_id": "flk:0",
+      "description": "flk codeId=100"
+    },
+    {
+      "id": "flk:2",
+      "name": "法律",
+      "parent_id": "flk:0",
+      "description": "flk codeId=101"
+    },
+    {
+      "id": "flk:3",
+      "name": "法律",
+      "parent_id": "flk:2",
+      "description": "flk codeId=102"
+    },
+    {
+      "id": "flk:4",
+      "name": "宪法相关法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=110"
+    },
+    {
+      "id": "flk:5",
+      "name": "民法商法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=120"
+    },
+    {
+      "id": "flk:6",
+      "name": "行政法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=130"
+    },
+    {
+      "id": "flk:7",
+      "name": "经济法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=140"
+    },
+    {
+      "id": "flk:8",
+      "name": "社会法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=150"
+    },
+    {
+      "id": "flk:37",
+      "name": "生态环境法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=155"
+    },
+    {
+      "id": "flk:9",
+      "name": "刑法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=160"
+    },
+    {
+      "id": "flk:10",
+      "name": "诉讼与非诉讼程序法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=170"
+    },
+    {
+      "id": "flk:11",
+      "name": "法律解释",
+      "parent_id": "flk:2",
+      "description": "flk codeId=180"
+    },
+    {
+      "id": "flk:12",
+      "name": "有关法律问题和重大问题的决定（部分）",
+      "parent_id": "flk:2",
+      "description": "flk codeId=190"
+    },
+    {
+      "id": "flk:35",
+      "name": "修正案",
+      "parent_id": "flk:2",
+      "description": "flk codeId=195"
+    },
+    {
+      "id": "flk:13",
+      "name": "修改、废止的决定",
+      "parent_id": "flk:2",
+      "description": "flk codeId=200"
+    },
+    {
+      "id": "flk:14",
+      "name": "行政法规",
+      "parent_id": "flk:0",
+      "description": "flk codeId=201"
+    },
+    {
+      "id": "flk:32",
+      "name": "行政法规",
+      "parent_id": "flk:14",
+      "description": "flk codeId=210"
+    },
+    {
+      "id": "flk:33",
+      "name": "修改、废止的决定",
+      "parent_id": "flk:14",
+      "description": "flk codeId=215"
+    },
+    {
+      "id": "flk:15",
+      "name": "监察法规",
+      "parent_id": "flk:0",
+      "description": "flk codeId=220"
+    },
+    {
+      "id": "flk:16",
+      "name": "地方法规",
+      "parent_id": "flk:0",
+      "description": "flk codeId=221"
+    },
+    {
+      "id": "flk:17",
+      "name": "地方法规",
+      "parent_id": "flk:16",
+      "description": "flk codeId=222"
+    },
+    {
+      "id": "flk:18",
+      "name": "地方性法规",
+      "parent_id": "flk:17",
+      "description": "flk codeId=230"
+    },
+    {
+      "id": "flk:21",
+      "name": "自治条例",
+      "parent_id": "flk:17",
+      "description": "flk codeId=260"
+    },
+    {
+      "id": "flk:22",
+      "name": "单行条例",
+      "parent_id": "flk:17",
+      "description": "flk codeId=270"
+    },
+    {
+      "id": "flk:24",
+      "name": "经济特区法规",
+      "parent_id": "flk:17",
+      "description": "flk codeId=290"
+    },
+    {
+      "id": "flk:34",
+      "name": "浦东新区法规",
+      "parent_id": "flk:17",
+      "description": "flk codeId=295"
+    },
+    {
+      "id": "flk:25",
+      "name": "海南自由贸易港法规",
+      "parent_id": "flk:17",
+      "description": "flk codeId=300"
+    },
+    {
+      "id": "flk:36",
+      "name": "法规性决定",
+      "parent_id": "flk:16",
+      "description": "flk codeId=305"
+    },
+    {
+      "id": "flk:26",
+      "name": "修改、废止的决定",
+      "parent_id": "flk:16",
+      "description": "flk codeId=310"
+    },
+    {
+      "id": "flk:27",
+      "name": "司法解释",
+      "parent_id": "flk:0",
+      "description": "flk codeId=311"
+    },
+    {
+      "id": "flk:28",
+      "name": "高法司法解释",
+      "parent_id": "flk:27",
+      "description": "flk codeId=320"
+    },
+    {
+      "id": "flk:29",
+      "name": "高检司法解释",
+      "parent_id": "flk:27",
+      "description": "flk codeId=330"
+    },
+    {
+      "id": "flk:30",
+      "name": "联合发布司法解释",
+      "parent_id": "flk:27",
+      "description": "flk codeId=340"
+    },
+    {
+      "id": "flk:31",
+      "name": "修改、废止的决定",
+      "parent_id": "flk:27",
+      "description": "flk codeId=350"
+    }
+  ],
+  "category_ids": [
+    "flk:0",
+    "flk:27",
+    "flk:28"
+  ],
+  "articles": [
+    {
+      "number": "1",
+      "number_display": "第一条",
+      "text": "因不动产物权的归属，以及作为不动产物权登记基础的买卖、赠与、抵押等产生争议，当事人提起民事诉讼的，应当依法受理。当事人已经在行政诉讼中申请一并解决上述民事争议，且人民法院一并审理的除外。",
+      "part": null,
+      "position": 1
+    },
+    {
+      "number": "2",
+      "number_display": "第二条",
+      "text": "当事人有证据证明不动产登记簿的记载与真实权利状态不符、其为该不动产物权的真实权利人，请求确认其享有物权的，应予支持。",
+      "part": null,
+      "position": 2
+    },
+    {
+      "number": "3",
+      "number_display": "第三条",
+      "text": "异议登记因民法典第二百二十条第二款规定的事由失效后，当事人提起民事诉讼，请求确认物权归属的，应当依法受理。异议登记失效不影响人民法院对案件的实体审理。",
+      "part": null,
+      "position": 3
+    },
+    {
+      "number": "4",
+      "number_display": "第四条",
+      "text": "未经预告登记的权利人同意，转让不动产所有权等物权，或者设立建设用地使用权、居住权、地役权、抵押权等其他物权的，应当依照民法典第二百二十一条第一款的规定，认定其不发生物权效力。",
+      "part": null,
+      "position": 4
+    },
+    {
+      "number": "5",
+      "number_display": "第五条",
+      "text": "预告登记的买卖不动产物权的协议被认定无效、被撤销，或者预告登记的权利人放弃债权的，应当认定为民法典第二百二十一条第二款所称的“债权消灭”。",
+      "part": null,
+      "position": 5
+    },
+    {
+      "number": "6",
+      "number_display": "第六条",
+      "text": "转让人转让船舶、航空器和机动车等所有权，受让人已经支付合理价款并取得占有，虽未经登记，但转让人的债权人主张其为民法典第二百二十五条所称的“善意第三人”的，不予支持，法律另有规定的除外。",
+      "part": null,
+      "position": 6
+    },
+    {
+      "number": "7",
+      "number_display": "第七条",
+      "text": "人民法院、仲裁机构在分割共有不动产或者动产等案件中作出并依法生效的改变原有物权关系的判决书、裁决书、调解书，以及人民法院在执行程序中作出的拍卖成交裁定书、变卖成交裁定书、以物抵债裁定书，应当认定为民法典第二百二十九条所称导致物权设立、变更、转让或者消灭的人民法院、仲裁机构的法律文书。",
+      "part": null,
+      "position": 7
+    },
+    {
+      "number": "8",
+      "number_display": "第八条",
+      "text": "依据民法典第二百二十九条至第二百三十一条规定享有物权，但尚未完成动产交付或者不动产登记的权利人，依据民法典第二百三十五条至第二百三十八条的规定，请求保护其物权的，应予支持。",
+      "part": null,
+      "position": 8
+    },
+    {
+      "number": "9",
+      "number_display": "第九条",
+      "text": "共有份额的权利主体因继承、遗赠等原因发生变化时，其他按份共有人主张优先购买的，不予支持，但按份共有人之间另有约定的除外。",
+      "part": null,
+      "position": 9
+    },
+    {
+      "number": "10",
+      "number_display": "第十条",
+      "text": "民法典第三百零五条所称的“同等条件”，应当综合共有份额的转让价格、价款履行方式及期限等因素确定。",
+      "part": null,
+      "position": 10
+    },
+    {
+      "number": "11",
+      "number_display": "第十一条",
+      "text": "优先购买权的行使期间，按份共有人之间有约定的，按照约定处理；没有约定或者约定不明的，按照下列情形确定：\n（一）转让人向其他按份共有人发出的包含同等条件内容的通知中载明行使期间的，以该期间为准；\n（二）通知中未载明行使期间，或者载明的期间短于通知送达之日起十五日的，为十五日；\n（三）转让人未通知的，为其他按份共有人知道或者应当知道最终确定的同等条件之日起十五日；\n（四）转让人未通知，且无法确定其他按份共有人知道或者应当知道最终确定的同等条件的，为共有份额权属转移之日起六个月。",
+      "part": null,
+      "position": 11
+    },
+    {
+      "number": "12",
+      "number_display": "第十二条",
+      "text": "按份共有人向共有人之外的人转让其份额，其他按份共有人根据法律、司法解释规定，请求按照同等条件优先购买该共有份额的，应予支持。其他按份共有人的请求具有下列情形之一的，不予支持：\n（一）未在本解释第十一条规定的期间内主张优先购买，或者虽主张优先购买，但提出减少转让价款、增加转让人负担等实质性变更要求；\n（二）以其优先购买权受到侵害为由，仅请求撤销共有份额转让合同或者认定该合同无效。",
+      "part": null,
+      "position": 12
+    },
+    {
+      "number": "13",
+      "number_display": "第十三条",
+      "text": "按份共有人之间转让共有份额，其他按份共有人主张依据民法典第三百零五条规定优先购买的，不予支持，但按份共有人之间另有约定的除外。",
+      "part": null,
+      "position": 13
+    },
+    {
+      "number": "14",
+      "number_display": "第十四条",
+      "text": "受让人受让不动产或者动产时，不知道转让人无处分权，且无重大过失的，应当认定受让人为善意。\n真实权利人主张受让人不构成善意的，应当承担举证证明责任。",
+      "part": null,
+      "position": 14
+    },
+    {
+      "number": "15",
+      "number_display": "第十五条",
+      "text": "具有下列情形之一的，应当认定不动产受让人知道转让人无处分权：\n（一）登记簿上存在有效的异议登记；\n（二）预告登记有效期内，未经预告登记的权利人同意；\n（三）登记簿上已经记载司法机关或者行政机关依法裁定、决定查封或者以其他形式限制不动产权利的有关事项；\n（四）受让人知道登记簿上记载的权利主体错误；\n（五）受让人知道他人已经依法享有不动产物权。\n真实权利人有证据证明不动产受让人应当知道转让人无处分权的，应当认定受让人具有重大过失。",
+      "part": null,
+      "position": 15
+    },
+    {
+      "number": "16",
+      "number_display": "第十六条",
+      "text": "受让人受让动产时，交易的对象、场所或者时机等不符合交易习惯的，应当认定受让人具有重大过失。",
+      "part": null,
+      "position": 16
+    },
+    {
+      "number": "17",
+      "number_display": "第十七条",
+      "text": "民法典第三百一十一条第一款第一项所称的“受让人受让该不动产或者动产时”，是指依法完成不动产物权转移登记或者动产交付之时。\n当事人以民法典第二百二十六条规定的方式交付动产的，转让动产民事法律行为生效时为动产交付之时；当事人以民法典第二百二十七条规定的方式交付动产的，转让人与受让人之间有关转让返还原物请求权的协议生效时为动产交付之时。\n法律对不动产、动产物权的设立另有规定的，应当按照法律规定的时间认定权利人是否为善意。",
+      "part": null,
+      "position": 17
+    },
+    {
+      "number": "18",
+      "number_display": "第十八条",
+      "text": "民法典第三百一十一条第一款第二项所称“合理的价格”，应当根据转让标的物的性质、数量以及付款方式等具体情况，参考转让时交易地市场价格以及交易习惯等因素综合认定。",
+      "part": null,
+      "position": 18
+    },
+    {
+      "number": "19",
+      "number_display": "第十九条",
+      "text": "转让人将民法典第二百二十五条规定的船舶、航空器和机动车等交付给受让人的，应当认定符合民法典第三百一十一条第一款第三项规定的善意取得的条件。",
+      "part": null,
+      "position": 19
+    },
+    {
+      "number": "20",
+      "number_display": "第二十条",
+      "text": "具有下列情形之一，受让人主张依据民法典第三百一十一条规定取得所有权的，不予支持：\n（一）转让合同被认定无效；\n（二）转让合同被撤销。",
+      "part": null,
+      "position": 20
+    },
+    {
+      "number": "21",
+      "number_display": "第二十一条",
+      "text": "本解释自2021年1月1日起施行。",
+      "part": null,
+      "position": 21
+    }
+  ]
+}

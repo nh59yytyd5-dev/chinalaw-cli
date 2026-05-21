@@ -1,0 +1,48 @@
+{
+  "kind": "applicability_dataset",
+  "id": "company-law-2023-revision-time-effect-seed",
+  "name": "公司法 2023 修订时间效力示范规则",
+  "source_name": "manual-seed:time-effect-minimal",
+  "source_url": "local-file:data/applicability/company-law-2023-revision.json",
+  "source_checked_at": "2026-05-02T00:00:00+08:00",
+  "relations": [
+    {
+      "id": "rel-company-law-2023-revises-2018",
+      "relation_type": "revises",
+      "from_law_id": "flk-company-law-2024",
+      "from_law_title": "中华人民共和国公司法（2023 修订）",
+      "to_law_id": "flk-company-law-2018",
+      "to_law_title": "中华人民共和国公司法（2018 修正）",
+      "effective_at": "2024-07-01",
+      "notes": "示范关系：2023-12-29 第十四届全国人大常委会第七次会议修订通过新公司法，自 2024-07-01 起施行；旧公司法（2018 修正）自施行日起退出现行直接适用体系。资本制度、董事忠实勤勉义务、股东失权、横向人格否认等多处实质修订，具体案件须结合时间效力规则审查。"
+    }
+  ],
+  "rules": [
+    {
+      "id": "app-company-law-before-2024-07",
+      "topic": "公司治理",
+      "domain": "all",
+      "primary_law_id": "flk-company-law-2018",
+      "primary_law_title": "中华人民共和国公司法（2018 修正）",
+      "fallback_law_id": "flk-company-law-2024",
+      "fallback_law_title": "中华人民共和国公司法（2023 修订）",
+      "effective_to": "2024-06-30",
+      "rule_text": "当公司设立、章程修订、股东行为或治理争议事实主要发生在 2024-07-01 之前时，应提示 agent 优先检索 2018 修正版公司法及相关司法解释，并核对新公司法过渡条款。",
+      "transition_text": "该规则是检索线索，不直接输出适用结论；存量出资期限、董监高履职追溯、横向人格否认等典型跨期问题须单独审查。",
+      "confidence": "seed_review_required"
+    },
+    {
+      "id": "app-company-law-after-2024-07",
+      "topic": "公司治理",
+      "domain": "all",
+      "primary_law_id": "flk-company-law-2024",
+      "primary_law_title": "中华人民共和国公司法（2023 修订）",
+      "fallback_law_id": "flk-company-law-2018",
+      "fallback_law_title": "中华人民共和国公司法（2018 修正）",
+      "effective_from": "2024-07-01",
+      "rule_text": "当公司设立、章程修订、股东行为或治理争议事实主要发生在 2024-07-01 之后时，应提示 agent 优先检索 2023 修订版公司法及相关司法解释；资本制度认缴期限五年上限、股东失权、横向人格否认、董事监督义务等条文为新增或实质修订，注意核对差异。",
+      "transition_text": "该规则只用于提醒检索路径；存量公司缴资过渡、章程过渡修订、新旧规则适用顺位等问题必须单独审查。",
+      "confidence": "seed_review_required"
+    }
+  ]
+}

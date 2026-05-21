@@ -1,0 +1,344 @@
+{
+  "id": "flk-financial-leasing-contract-interpretation-2020",
+  "title": "最高人民法院关于审理融资租赁合同纠纷案件适用法律问题的解释",
+  "short_title": "融资租赁合同纠纷解释",
+  "aliases": [
+    "融资租赁合同纠纷解释",
+    "融资租赁合同解释"
+  ],
+  "level": "judicial_interpretation",
+  "status": "current",
+  "issuing_body": "最高人民法院",
+  "document_number": null,
+  "released_at": "2020-12-29",
+  "effective_at": "2021-01-01",
+  "repealed_at": null,
+  "source_url": "https://flk.npc.gov.cn/detail?id=ff808181799df6140179b09b45d92b5e",
+  "source_name": "flk.npc.gov.cn",
+  "source_checked_at": "2026-05-20T16:33:40.968752+00:00",
+  "source_hash": "3b67073cd636ef10783b241c60d922dcbaa105935715314d677531981ae9d90f",
+  "categories": [
+    {
+      "id": "flk:0",
+      "name": "未命名分类",
+      "parent_id": null,
+      "description": "flk codeId=None"
+    },
+    {
+      "id": "flk:1",
+      "name": "宪法",
+      "parent_id": "flk:0",
+      "description": "flk codeId=100"
+    },
+    {
+      "id": "flk:2",
+      "name": "法律",
+      "parent_id": "flk:0",
+      "description": "flk codeId=101"
+    },
+    {
+      "id": "flk:3",
+      "name": "法律",
+      "parent_id": "flk:2",
+      "description": "flk codeId=102"
+    },
+    {
+      "id": "flk:4",
+      "name": "宪法相关法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=110"
+    },
+    {
+      "id": "flk:5",
+      "name": "民法商法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=120"
+    },
+    {
+      "id": "flk:6",
+      "name": "行政法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=130"
+    },
+    {
+      "id": "flk:7",
+      "name": "经济法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=140"
+    },
+    {
+      "id": "flk:8",
+      "name": "社会法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=150"
+    },
+    {
+      "id": "flk:37",
+      "name": "生态环境法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=155"
+    },
+    {
+      "id": "flk:9",
+      "name": "刑法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=160"
+    },
+    {
+      "id": "flk:10",
+      "name": "诉讼与非诉讼程序法",
+      "parent_id": "flk:3",
+      "description": "flk codeId=170"
+    },
+    {
+      "id": "flk:11",
+      "name": "法律解释",
+      "parent_id": "flk:2",
+      "description": "flk codeId=180"
+    },
+    {
+      "id": "flk:12",
+      "name": "有关法律问题和重大问题的决定（部分）",
+      "parent_id": "flk:2",
+      "description": "flk codeId=190"
+    },
+    {
+      "id": "flk:35",
+      "name": "修正案",
+      "parent_id": "flk:2",
+      "description": "flk codeId=195"
+    },
+    {
+      "id": "flk:13",
+      "name": "修改、废止的决定",
+      "parent_id": "flk:2",
+      "description": "flk codeId=200"
+    },
+    {
+      "id": "flk:14",
+      "name": "行政法规",
+      "parent_id": "flk:0",
+      "description": "flk codeId=201"
+    },
+    {
+      "id": "flk:32",
+      "name": "行政法规",
+      "parent_id": "flk:14",
+      "description": "flk codeId=210"
+    },
+    {
+      "id": "flk:33",
+      "name": "修改、废止的决定",
+      "parent_id": "flk:14",
+      "description": "flk codeId=215"
+    },
+    {
+      "id": "flk:15",
+      "name": "监察法规",
+      "parent_id": "flk:0",
+      "description": "flk codeId=220"
+    },
+    {
+      "id": "flk:16",
+      "name": "地方法规",
+      "parent_id": "flk:0",
+      "description": "flk codeId=221"
+    },
+    {
+      "id": "flk:17",
+      "name": "地方法规",
+      "parent_id": "flk:16",
+      "description": "flk codeId=222"
+    },
+    {
+      "id": "flk:18",
+      "name": "地方性法规",
+      "parent_id": "flk:17",
+      "description": "flk codeId=230"
+    },
+    {
+      "id": "flk:21",
+      "name": "自治条例",
+      "parent_id": "flk:17",
+      "description": "flk codeId=260"
+    },
+    {
+      "id": "flk:22",
+      "name": "单行条例",
+      "parent_id": "flk:17",
+      "description": "flk codeId=270"
+    },
+    {
+      "id": "flk:24",
+      "name": "经济特区法规",
+      "parent_id": "flk:17",
+      "description": "flk codeId=290"
+    },
+    {
+      "id": "flk:34",
+      "name": "浦东新区法规",
+      "parent_id": "flk:17",
+      "description": "flk codeId=295"
+    },
+    {
+      "id": "flk:25",
+      "name": "海南自由贸易港法规",
+      "parent_id": "flk:17",
+      "description": "flk codeId=300"
+    },
+    {
+      "id": "flk:36",
+      "name": "法规性决定",
+      "parent_id": "flk:16",
+      "description": "flk codeId=305"
+    },
+    {
+      "id": "flk:26",
+      "name": "修改、废止的决定",
+      "parent_id": "flk:16",
+      "description": "flk codeId=310"
+    },
+    {
+      "id": "flk:27",
+      "name": "司法解释",
+      "parent_id": "flk:0",
+      "description": "flk codeId=311"
+    },
+    {
+      "id": "flk:28",
+      "name": "高法司法解释",
+      "parent_id": "flk:27",
+      "description": "flk codeId=320"
+    },
+    {
+      "id": "flk:29",
+      "name": "高检司法解释",
+      "parent_id": "flk:27",
+      "description": "flk codeId=330"
+    },
+    {
+      "id": "flk:30",
+      "name": "联合发布司法解释",
+      "parent_id": "flk:27",
+      "description": "flk codeId=340"
+    },
+    {
+      "id": "flk:31",
+      "name": "修改、废止的决定",
+      "parent_id": "flk:27",
+      "description": "flk codeId=350"
+    }
+  ],
+  "category_ids": [
+    "flk:0",
+    "flk:27",
+    "flk:28"
+  ],
+  "articles": [
+    {
+      "number": "1",
+      "number_display": "第一条",
+      "text": "人民法院应当根据民法典第七百三十五条的规定，结合标的物的性质、价值、租金的构成以及当事人的合同权利和义务，对是否构成融资租赁法律关系作出认定。\n对名为融资租赁合同，但实际不构成融资租赁法律关系的，人民法院应按照其实际构成的法律关系处理。",
+      "part": "一、融资租赁合同的认定",
+      "position": 1
+    },
+    {
+      "number": "2",
+      "number_display": "第二条",
+      "text": "承租人将其自有物出卖给出租人，再通过融资租赁合同将租赁物从出租人处租回的，人民法院不应仅以承租人和出卖人系同一人为由认定不构成融资租赁法律关系。",
+      "part": "一、融资租赁合同的认定",
+      "position": 2
+    },
+    {
+      "number": "3",
+      "number_display": "第三条",
+      "text": "承租人拒绝受领租赁物，未及时通知出租人，或者无正当理由拒绝受领租赁物，造成出租人损失，出租人向承租人主张损害赔偿的，人民法院应予支持。",
+      "part": "二、合同的履行和租赁物的公示",
+      "position": 3
+    },
+    {
+      "number": "4",
+      "number_display": "第四条",
+      "text": "出租人转让其在融资租赁合同项下的部分或者全部权利，受让方以此为由请求解除或者变更融资租赁合同的，人民法院不予支持。",
+      "part": "二、合同的履行和租赁物的公示",
+      "position": 4
+    },
+    {
+      "number": "5",
+      "number_display": "第五条",
+      "text": "有下列情形之一，出租人请求解除融资租赁合同的，人民法院应予支持：\n（一）承租人未按照合同约定的期限和数额支付租金，符合合同约定的解除条件，经出租人催告后在合理期限内仍不支付的；\n（二）合同对于欠付租金解除合同的情形没有明确约定，但承租人欠付租金达到两期以上，或者数额达到全部租金百分之十五以上，经出租人催告后在合理期限内仍不支付的；\n（三）承租人违反合同约定，致使合同目的不能实现的其他情形。",
+      "part": "三、合同的解除",
+      "position": 5
+    },
+    {
+      "number": "6",
+      "number_display": "第六条",
+      "text": "因出租人的原因致使承租人无法占有、使用租赁物，承租人请求解除融资租赁合同的，人民法院应予支持。",
+      "part": "三、合同的解除",
+      "position": 6
+    },
+    {
+      "number": "7",
+      "number_display": "第七条",
+      "text": "当事人在一审诉讼中仅请求解除融资租赁合同，未对租赁物的归属及损失赔偿提出主张的，人民法院可以向当事人进行释明。",
+      "part": "三、合同的解除",
+      "position": 7
+    },
+    {
+      "number": "8",
+      "number_display": "第八条",
+      "text": "租赁物不符合融资租赁合同的约定且出租人实施了下列行为之一，承租人依照民法典第七百四十四条、第七百四十七条的规定，要求出租人承担相应责任的，人民法院应予支持：\n（一）出租人在承租人选择出卖人、租赁物时，对租赁物的选定起决定作用的；\n（二）出租人干预或者要求承租人按照出租人意愿选择出卖人或者租赁物的；\n（三）出租人擅自变更承租人已经选定的出卖人或者租赁物的。\n承租人主张其系依赖出租人的技能确定租赁物或者出租人干预选择租赁物的，对上述事实承担举证责任。",
+      "part": "四、违约责任",
+      "position": 8
+    },
+    {
+      "number": "9",
+      "number_display": "第九条",
+      "text": "承租人逾期履行支付租金义务或者迟延履行其他付款义务，出租人按照融资租赁合同的约定要求承租人支付逾期利息、相应违约金的，人民法院应予支持。",
+      "part": "四、违约责任",
+      "position": 9
+    },
+    {
+      "number": "10",
+      "number_display": "第十条",
+      "text": "出租人既请求承租人支付合同约定的全部未付租金又请求解除融资租赁合同的，人民法院应告知其依照民法典第七百五十二条的规定作出选择。\n出租人请求承租人支付合同约定的全部未付租金，人民法院判决后承租人未予履行，出租人再行起诉请求解除融资租赁合同、收回租赁物的，人民法院应予受理。",
+      "part": "四、违约责任",
+      "position": 10
+    },
+    {
+      "number": "11",
+      "number_display": "第十一条",
+      "text": "出租人依照本解释第五条的规定请求解除融资租赁合同，同时请求收回租赁物并赔偿损失的，人民法院应予支持。\n前款规定的损失赔偿范围为承租人全部未付租金及其他费用与收回租赁物价值的差额。合同约定租赁期间届满后租赁物归出租人所有的，损失赔偿范围还应包括融资租赁合同到期后租赁物的残值。",
+      "part": "四、违约责任",
+      "position": 11
+    },
+    {
+      "number": "12",
+      "number_display": "第十二条",
+      "text": "诉讼期间承租人与出租人对租赁物的价值有争议的，人民法院可以按照融资租赁合同的约定确定租赁物价值；融资租赁合同未约定或者约定不明的，可以参照融资租赁合同约定的租赁物折旧以及合同到期后租赁物的残值确定租赁物价值。\n承租人或者出租人认为依前款确定的价值严重偏离租赁物实际价值的，可以请求人民法院委托有资质的机构评估或者拍卖确定。",
+      "part": "四、违约责任",
+      "position": 12
+    },
+    {
+      "number": "13",
+      "number_display": "第十三条",
+      "text": "出卖人与买受人因买卖合同发生纠纷，或者出租人与承租人因融资租赁合同发生纠纷，当事人仅对其中一个合同关系提起诉讼，人民法院经审查后认为另一合同关系的当事人与案件处理结果有法律上的利害关系的，可以通知其作为第三人参加诉讼。\n承租人与租赁物的实际使用人不一致，融资租赁合同当事人未对租赁物的实际使用人提起诉讼，人民法院经审查后认为租赁物的实际使用人与案件处理结果有法律上的利害关系的，可以通知其作为第三人参加诉讼。\n承租人基于买卖合同和融资租赁合同直接向出卖人主张受领租赁物、索赔等买卖合同权利的，人民法院应通知出租人作为第三人参加诉讼。",
+      "part": "五、其他规定",
+      "position": 13
+    },
+    {
+      "number": "14",
+      "number_display": "第十四条",
+      "text": "当事人因融资租赁合同租金欠付争议向人民法院请求保护其权利的诉讼时效期间为三年，自租赁期限届满之日起计算。",
+      "part": "五、其他规定",
+      "position": 14
+    },
+    {
+      "number": "15",
+      "number_display": "第十五条",
+      "text": "本解释自2014年3月1日起施行。《最高人民法院关于审理融资租赁合同纠纷案件若干问题的规定》（法发〔1996〕19号）同时废止。\n本解释施行后尚未终审的融资租赁合同纠纷案件，适用本解释；本解释施行前已经终审，当事人申请再审或者按照审判监督程序决定再审的，不适用本解释。\nPAGE\nPAGE 126",
+      "part": "五、其他规定",
+      "position": 15
+    }
+  ]
+}

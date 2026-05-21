@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Fast-forward this checkout and refresh the local agent-facing environment.
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+SYNC_FIXTURES=0
+COPY_SKILLS=0
+SKILLS=1
+DOCTOR=1
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/update-local [options]
+
+Fast-forward the checkout, refresh the global chinalaw/chinalaw-mcp wrappers,
+refresh user-level skills, optionally load fixtures, then run doctor.
+
+Options:
+  --sync-fixtures  Load builtin fixture data after updating.
+  --copy-skills    Copy skills instead of symlinking them.
+  --no-skills      Skip skills refresh.
+  --no-doctor      Skip final chinalaw doctor.
+  -h, --help       Show this help.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --sync-fixtures) SYNC_FIXTURES=1; shift ;;
+        --copy-skills) COPY_SKILLS=1; shift ;;
+        --no-skills) SKILLS=0; shift ;;
+        --no-doctor) DOCTOR=0; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "error: unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+cd "$REPO_ROOT"
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git pull --ff-only
+fi
+
+"${REPO_ROOT}/scripts/install-local"
+
+if [ "$SKILLS" -eq 1 ]; then
+    skill_args=()
+    if [ "$COPY_SKILLS" -eq 1 ]; then
+        skill_args+=(--copy)
+    fi
+    "${REPO_ROOT}/scripts/install-skills" "${skill_args[@]}"
+fi
+
+if [ "$SYNC_FIXTURES" -eq 1 ]; then
+    chinalaw sync --fixtures --format md
+fi
+
+if [ "$DOCTOR" -eq 1 ]; then
+    chinalaw doctor --format md
+fi

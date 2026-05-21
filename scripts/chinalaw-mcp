@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Repository-local wrapper for the chinalaw MCP stdio server.
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+VENV_PYTHON="${CHINALAW_VENV:-${REPO_ROOT}/.venv}/bin/python"
+
+if [ -x "$VENV_PYTHON" ]; then
+    exec "$VENV_PYTHON" -m chinalaw.mcp "$@"
+fi
+
+exec env PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m chinalaw.mcp "$@"

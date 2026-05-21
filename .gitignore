@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# uv / venv
+.venv/
+.venv-*/
+venv/
+env/
+.python-version
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Logs
+*.log
+logs/
+
+# Runtime data / local DB
+var/
+tmp/
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db
+*.db-shm
+*.db-wal
+
+# Cache
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Test artifacts
+.coverage
+coverage.xml
+htmlcov/
+
+# Downloaded data (large, regenerable)
+data/raw/
+data/index/
+data/*.zip
+data/*.tar.gz
+
+# Local settings
+.env
+.env.local
+
+# Claude Code / OMC plugin local artifacts
+.omc/
+.claude/local/
+
+# Docker eval harness output (one dir per RUN_ID)
+runs/

@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Install this checkout as the local agent-facing `chinalaw` command.
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+BOOTSTRAP_PYTHON="${PYTHON:-python3}"
+VENV_DIR="${CHINALAW_VENV:-${REPO_ROOT}/.venv}"
+PYTHON_BIN="${VENV_DIR}/bin/python"
+BIN_DIR="${CHINALAW_BIN_DIR:-${HOME}/.local/bin}"
+TARGET="${BIN_DIR}/chinalaw"
+MCP_TARGET="${BIN_DIR}/chinalaw-mcp"
+
+mkdir -p "$BIN_DIR"
+
+if [ ! -x "$PYTHON_BIN" ]; then
+    "$BOOTSTRAP_PYTHON" -m venv "$VENV_DIR"
+fi
+
+if "$PYTHON_BIN" -m pip install -e "$REPO_ROOT"; then
+    echo "editable install ok: ${REPO_ROOT} (${PYTHON_BIN})"
+else
+    echo "editable install failed; wrapper will fall back to PYTHONPATH mode" >&2
+fi
+
+ln -sf "${REPO_ROOT}/scripts/chinalaw" "$TARGET"
+ln -sf "${REPO_ROOT}/scripts/chinalaw-mcp" "$MCP_TARGET"
+chmod +x "${REPO_ROOT}/scripts/chinalaw"
+chmod +x "${REPO_ROOT}/scripts/chinalaw-mcp"
+
+echo "installed wrapper: ${TARGET} -> ${REPO_ROOT}/scripts/chinalaw"
+echo "installed wrapper: ${MCP_TARGET} -> ${REPO_ROOT}/scripts/chinalaw-mcp"
+if ! command -v chinalaw >/dev/null 2>&1; then
+    echo "warning: chinalaw is not on PATH. Add this to your shell profile:" >&2
+    echo "  export PATH=\"${BIN_DIR}:\$PATH\"" >&2
+elif [ "$(command -v chinalaw)" != "$TARGET" ]; then
+    echo "warning: PATH resolves chinalaw to $(command -v chinalaw), not ${TARGET}" >&2
+    echo "         put ${BIN_DIR} before other script dirs if Claude Code should use this checkout." >&2
+fi
+
+"$TARGET" --version

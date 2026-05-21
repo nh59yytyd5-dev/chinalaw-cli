@@ -1,0 +1,1453 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-05-20",
+  "kind": "recommended_corpus",
+  "description": "Agent-first recommended public-law corpus profiles. This file is an installer/index manifest, not legal authority.",
+  "source_policy": "Fetch from official public sources only. Entries marked needs_verification require source/status verification during fetch before citation.",
+  "profiles": {
+    "baseline": {
+      "priority": "P0",
+      "description": "Small cross-domain baseline for offline demos and first-run grounding.",
+      "dependencies": [],
+      "aliases": [
+        "p0",
+        "base",
+        "基础"
+      ],
+      "entries": [
+        {
+          "id": "p0-constitution",
+          "fixture_id": "2c909fdd678bf17901678bf5a483004b",
+          "title": "中华人民共和国宪法",
+          "short_title": "宪法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P0",
+          "reason": "法律体系根基础，用于基本权利、国家机关和上位法约束检索。",
+          "notes": "现有 fixture 为出厂人工维护宪法版本组，含 1954、1975、1978、1979、1980、1982、1988、1993、1999、2004、2018；序言作为特殊条目可检索，宪法修正案/决议仅作维护来源链。",
+          "needs_verification": false
+        },
+        {
+          "id": "p0-civil-code",
+          "fixture_id": "flk-civil-code-2020",
+          "title": "中华人民共和国民法典",
+          "short_title": "民法典",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P0",
+          "reason": "民商、合同、物权、人格权、婚姻家庭、继承、侵权等工作流的基础法典。",
+          "notes": "现有 fixture 已含全文；仍可用 ensure 在本地 seed/stub 时补全。",
+          "needs_verification": false
+        },
+        {
+          "id": "p0-criminal-law",
+          "fixture_id": "flk-criminal-law-1997",
+          "title": "中华人民共和国刑法",
+          "short_title": "刑法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P0",
+          "reason": "刑事实体法基础；刑事合规、刑辩、风控必须本地可查。",
+          "notes": "现有 fixture 为出厂人工维护合并文本版本组，含 1980-01-01 至 2024-03-01 各关键版本；司法文书应引用修正后的刑法条文，修正案/决定仅作维护来源链。刑法溯及力仍须单独核查第十二条及相关规则。",
+          "needs_verification": false
+        },
+        {
+          "id": "p0-civil-procedure-law",
+          "fixture_id": "flk-civil-procedure-law-2023",
+          "title": "中华人民共和国民事诉讼法",
+          "short_title": "民诉法",
+          "aliases": [
+            "民事诉讼法"
+          ],
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P0",
+          "reason": "民商争议、执行、管辖、证据、再审等程序问题基础。",
+          "notes": "现有 fixture 已含 2023 修正全文。",
+          "needs_verification": false
+        },
+        {
+          "id": "p0-criminal-procedure-law",
+          "fixture_id": "ff8080816f135f46016f1d1b81b01351",
+          "title": "中华人民共和国刑事诉讼法",
+          "short_title": "刑诉法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P0",
+          "reason": "刑事程序、强制措施、证据、辩护权和审判流程基础。",
+          "notes": "现有 fixture 已含 2018 年修正后的现行文本。",
+          "needs_verification": false
+        },
+        {
+          "id": "p0-administrative-litigation-law",
+          "fixture_id": "2c909fdd678bf17901678bf858550a0f",
+          "title": "中华人民共和国行政诉讼法",
+          "short_title": "行诉法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P0",
+          "reason": "行政争议、政府合规、信息公开等工作流的程序基础。",
+          "notes": "现有 fixture 已含 2017 年修正后的现行文本。",
+          "needs_verification": false
+        },
+        {
+          "id": "p0-civil-procedure-interpretation",
+          "fixture_id": "ff80818181cdceb30181d801c31c4070",
+          "title": "最高人民法院关于适用《中华人民共和国民事诉讼法》的解释",
+          "short_title": "民诉法解释",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P0",
+          "reason": "民诉法裸条文不足以支撑多数程序检索，解释在诉讼工作流中高频。",
+          "notes": "现有 fixture 已含全文；需随民诉法后续修订持续核验。",
+          "needs_verification": false
+        },
+        {
+          "id": "p0-criminal-procedure-interpretation",
+          "fixture_id": "court_main:fabu/xiangqing/286491",
+          "title": "最高人民法院关于适用《中华人民共和国刑事诉讼法》的解释",
+          "short_title": "刑诉法解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P0",
+          "reason": "刑事程序查询离不开，尤其是证据、庭前会议、审判程序等细节。",
+          "notes": "现有 fixture 已含法释〔2021〕1号全文，体量较大但基础性强。",
+          "needs_verification": false
+        }
+      ]
+    },
+    "general": {
+      "priority": "P1",
+      "description": "Most legal workflows: civil/commercial, admin, labor, data, consumer and basic court practice.",
+      "dependencies": [
+        "baseline"
+      ],
+      "aliases": [
+        "p1",
+        "通用"
+      ],
+      "entries": [
+        {
+          "id": "p1-administrative-penalty-law",
+          "title": "中华人民共和国行政处罚法",
+          "short_title": "行政处罚法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "行政执法、监管合规、处罚程序高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-administrative-reconsideration-law",
+          "title": "中华人民共和国行政复议法",
+          "short_title": "行政复议法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "行政救济基础，与行政诉讼、行政处罚联动。",
+          "notes": "应以 2023 修订、2024 施行文本为当前基准。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-state-compensation-law",
+          "title": "中华人民共和国国家赔偿法",
+          "short_title": "国家赔偿法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "行政、刑事错案、国家赔偿责任常用。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-labor-law",
+          "fixture_id": "flk-labor-law-1994-2018",
+          "title": "中华人民共和国劳动法",
+          "short_title": "劳动法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "劳动关系、工时、休息休假和劳动保护基础。",
+          "notes": "当前 fixture 为 seed 时 ensure 必须联网补全。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-labor-contract-law",
+          "title": "中华人民共和国劳动合同法",
+          "short_title": "劳动合同法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "入职、履行、解除、经济补偿、赔偿金计算高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-labor-dispute-arbitration-law",
+          "title": "中华人民共和国劳动争议调解仲裁法",
+          "short_title": "劳动争议调解仲裁法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "劳动争议程序基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-company-law",
+          "fixture_id": "flk-company-law-2024",
+          "title": "中华人民共和国公司法",
+          "short_title": "公司法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "商事主体、股权、治理、投融资基础。",
+          "notes": "2023 修订、2024-07-01 施行；现有 fixture 已含全文。",
+          "needs_verification": false
+        },
+        {
+          "id": "p1-arbitration-law",
+          "title": "中华人民共和国仲裁法",
+          "short_title": "仲裁法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "合同争议、商事争议通用程序法。",
+          "needs_verification": false,
+          "fixture_id": "flk-arbitration-law-1994-2017",
+          "notes": "现有 fixture 已含全文（96 条）。"
+        },
+        {
+          "id": "p1-personal-information-protection-law",
+          "title": "中华人民共和国个人信息保护法",
+          "short_title": "个人信息保护法",
+          "aliases": [
+            "个保法"
+          ],
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "AI、数据、雇佣、平台、合规查询高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-data-security-law",
+          "title": "中华人民共和国数据安全法",
+          "short_title": "数据安全法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "数据合规基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-cybersecurity-law",
+          "title": "中华人民共和国网络安全法",
+          "short_title": "网络安全法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "网络安全、平台合规、个人信息与数据规则的上位基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-consumer-rights-law",
+          "title": "中华人民共和国消费者权益保护法",
+          "short_title": "消费者权益保护法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "平台、电商、产品服务纠纷常用。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-public-security-administration-punishments-law",
+          "title": "中华人民共和国治安管理处罚法",
+          "short_title": "治安管理处罚法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "行政处罚与轻微违法、刑行衔接高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-litigation-fee-measures",
+          "title": "诉讼费用交纳办法",
+          "short_title": "诉讼费用办法",
+          "level": "admin_regulation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "诉讼成本估算和案件方案设计高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-civil-code-time-effect",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》时间效力的若干规定",
+          "short_title": "民法典时间效力规定",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "处理民法典前后法律适用，agent 易误判。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-code-time-effect-2020",
+          "notes": "现有 fixture 已含全文（28 条）。"
+        },
+        {
+          "id": "p1-civil-code-general-part-interpretation",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》总则编若干问题的解释",
+          "short_title": "民法典总则编解释",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "民事法律行为、代理、时效等通用规则。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-code-general-part-interpretation-2022",
+          "notes": "现有 fixture 已含全文（39 条）。"
+        },
+        {
+          "id": "p1-civil-code-property-part-interpretation-1",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》物权编的解释（一）",
+          "short_title": "民法典物权编解释（一）",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "物权变动、登记、善意取得等通用高频。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-code-property-part-interpretation-1-2020",
+          "notes": "现有 fixture 已含全文（21 条）。"
+        },
+        {
+          "id": "p1-civil-code-contract-general-interpretation",
+          "fixture_id": "court-contract-interpretation-2023",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》合同编通则若干问题的解释",
+          "short_title": "合同编通则解释",
+          "aliases": [
+            "合通解释",
+            "民法典合同编通则解释"
+          ],
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "合同成立、效力、履行、解除、违约的通用解释。",
+          "notes": "现有 fixture 已含全文。",
+          "needs_verification": false
+        },
+        {
+          "id": "p1-civil-code-security-interpretation",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》有关担保制度的解释",
+          "short_title": "民法典担保制度解释",
+          "aliases": [
+            "担保制度解释"
+          ],
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "融资、担保、商事争议高频。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-code-security-interpretation-2020",
+          "notes": "现有 fixture 已含全文（71 条）。"
+        },
+        {
+          "id": "p1-civil-code-tort-interpretation-1",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》侵权责任编的解释（一）",
+          "short_title": "民法典侵权责任编解释（一）",
+          "aliases": [
+            "侵权责任编解释（一）",
+            "侵权责任编解释一"
+          ],
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "侵权责任、雇主责任、网络侵权等民事赔偿争议高频。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-code-tort-interpretation-1-2024",
+          "notes": "现有 fixture 已含全文（26 条）。"
+        },
+        {
+          "id": "p1-civil-evidence-provisions",
+          "title": "最高人民法院关于民事诉讼证据的若干规定",
+          "short_title": "民事证据规定",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "民商诉讼事实认定、举证责任和证据能力高频。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-evidence-provisions-2019",
+          "notes": "现有 fixture 已含全文（100 条）。"
+        },
+        {
+          "id": "p1-administrative-litigation-interpretation",
+          "title": "最高人民法院关于适用《中华人民共和国行政诉讼法》的解释",
+          "short_title": "行诉法解释",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "行政诉讼裸法不足，解释高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p1-labor-dispute-interpretation-1",
+          "title": "最高人民法院关于审理劳动争议案件适用法律问题的解释（一）",
+          "short_title": "劳动争议解释（一）",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P1",
+          "reason": "劳动争议通用高频解释。",
+          "needs_verification": true
+        }
+      ]
+    },
+    "contracts": {
+      "priority": "P2",
+      "description": "Contract drafting/review and civil-commercial dispute profile.",
+      "dependencies": [
+        "general"
+      ],
+      "aliases": [
+        "contract",
+        "合同"
+      ],
+      "entries": [
+        {
+          "id": "p2-contracts-private-lending",
+          "title": "最高人民法院关于审理民间借贷案件适用法律若干问题的规定",
+          "short_title": "民间借贷规定",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "借款、利息、保证、职业放贷等高频。",
+          "needs_verification": false,
+          "fixture_id": "flk-private-lending-interpretation-2020",
+          "notes": "现有 fixture 已含全文（31 条）。"
+        },
+        {
+          "id": "p2-contracts-sale-contract-interpretation",
+          "title": "最高人民法院关于审理买卖合同纠纷案件适用法律问题的解释",
+          "short_title": "买卖合同解释",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "买卖合同是最常见有名合同之一。",
+          "needs_verification": false,
+          "fixture_id": "flk-sale-contract-interpretation-2020",
+          "notes": "现有 fixture 已含全文（33 条）。"
+        },
+        {
+          "id": "p2-contracts-financial-leasing-interpretation",
+          "title": "最高人民法院关于审理融资租赁合同纠纷案件适用法律问题的解释",
+          "short_title": "融资租赁合同解释",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "融资租赁、售后回租、担保功能争议常用。",
+          "needs_verification": false,
+          "fixture_id": "flk-financial-leasing-contract-interpretation-2020",
+          "notes": "现有 fixture 已含全文（15 条）。"
+        },
+        {
+          "id": "p2-contracts-independent-guarantee",
+          "title": "最高人民法院关于审理独立保函纠纷案件若干问题的规定",
+          "short_title": "独立保函规定",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "银行保函、跨境交易、工程担保常用。",
+          "needs_verification": false,
+          "fixture_id": "flk-independent-guarantee-interpretation-2016",
+          "notes": "现有 fixture 已含全文（26 条）。"
+        },
+        {
+          "id": "p2-contracts-negotiable-instruments-law",
+          "title": "中华人民共和国票据法",
+          "short_title": "票据法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "商票、汇票、本票、追索权等常用。",
+          "needs_verification": false,
+          "fixture_id": "flk-negotiable-instruments-law-1995-2004",
+          "notes": "现有 fixture 已含全文（110 条）。"
+        },
+        {
+          "id": "p2-contracts-insurance-law",
+          "title": "中华人民共和国保险法",
+          "short_title": "保险法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "保险合同、保险人说明义务、理赔和代位求偿等商事争议高频。",
+          "needs_verification": false,
+          "fixture_id": "flk-insurance-law-2015",
+          "notes": "现有 fixture 已含全文（185 条）。"
+        },
+        {
+          "id": "p2-contracts-e-commerce-law",
+          "title": "中华人民共和国电子商务法",
+          "short_title": "电子商务法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "平台交易、经营者责任、消费者争议常用。",
+          "needs_verification": false,
+          "fixture_id": "flk-e-commerce-law-2018",
+          "notes": "现有 fixture 已含全文（89 条）。"
+        }
+      ]
+    },
+    "civil-history": {
+      "priority": "P2",
+      "description": "Pre-Civil-Code civil and commercial statutes for time-effect workflows before 2021-01-01.",
+      "dependencies": [
+        "baseline"
+      ],
+      "aliases": [
+        "civil_history",
+        "旧民商法",
+        "民法典前"
+      ],
+      "entries": [
+        {
+          "id": "p2-civil-history-contract-law",
+          "title": "中华人民共和国合同法",
+          "short_title": "合同法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "fetch_status": "repealed",
+          "priority": "P2",
+          "reason": "2021-01-01 前合同事实的基础旧法。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-civil-history-property-law",
+          "title": "中华人民共和国物权法",
+          "short_title": "物权法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "fetch_status": "repealed",
+          "priority": "P2",
+          "reason": "2021-01-01 前物权、担保物权事实的基础旧法。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-civil-history-guarantee-law",
+          "title": "中华人民共和国担保法",
+          "short_title": "担保法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "fetch_status": "repealed",
+          "priority": "P2",
+          "reason": "民法典担保制度前的保证、抵押、质押争议仍需追溯。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-civil-history-tort-liability-law",
+          "title": "中华人民共和国侵权责任法",
+          "short_title": "侵权责任法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "fetch_status": "repealed",
+          "priority": "P2",
+          "reason": "2021-01-01 前侵权事实的基础旧法。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-civil-history-general-principles-civil-law",
+          "title": "中华人民共和国民法通则",
+          "short_title": "民法通则",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "fetch_status": "repealed",
+          "priority": "P2",
+          "reason": "民法总则/民法典前的基础民事规则。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-civil-history-general-provisions-civil-law",
+          "title": "中华人民共和国民法总则",
+          "short_title": "民法总则",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "fetch_status": "repealed",
+          "priority": "P2",
+          "reason": "2017-2020 期间基础民事规则，与民法典时间效力判断衔接。",
+          "needs_verification": true
+        }
+      ]
+    },
+    "company": {
+      "priority": "P2",
+      "description": "Company, investment, liquidation and bankruptcy profile.",
+      "dependencies": [
+        "general"
+      ],
+      "aliases": [
+        "corporate",
+        "公司",
+        "商事"
+      ],
+      "entries": [
+        {
+          "id": "p2-company-partnership-enterprise-law",
+          "title": "中华人民共和国合伙企业法",
+          "short_title": "合伙企业法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "合伙企业、基金架构、普通/有限合伙责任基础。",
+          "needs_verification": false,
+          "fixture_id": "flk-partnership-enterprise-law-2006",
+          "notes": "现有 fixture 已含全文（109 条）。"
+        },
+        {
+          "id": "p2-company-foreign-investment-law",
+          "title": "中华人民共和国外商投资法",
+          "short_title": "外商投资法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "涉外投融资、准入和外资企业治理基础。",
+          "needs_verification": false,
+          "fixture_id": "flk-foreign-investment-law-2019",
+          "notes": "现有 fixture 已含全文（42 条）。"
+        },
+        {
+          "id": "p2-company-enterprise-bankruptcy-law",
+          "title": "中华人民共和国企业破产法",
+          "short_title": "企业破产法",
+          "aliases": [
+            "破产法"
+          ],
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "破产清算、重整、和解基础。",
+          "needs_verification": false,
+          "fixture_id": "flk-enterprise-bankruptcy-law-2006",
+          "notes": "现有 fixture 已含全文（136 条）。"
+        },
+        {
+          "id": "p2-company-company-law-time-effect",
+          "title": "最高人民法院关于适用《中华人民共和国公司法》时间效力的若干规定",
+          "short_title": "公司法时间效力规定",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "新旧公司法衔接与溯及力判断刚需。",
+          "notes": "2024-07-01 施行，应与新公司法绑定检索。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-company-article-88-reply",
+          "title": "最高人民法院关于《中华人民共和国公司法》第八十八条第一款不溯及适用的批复",
+          "short_title": "公司法第八十八条批复",
+          "level": "judicial_interpretation",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "股权转让出资责任争议高频。",
+          "needs_verification": true,
+          "notes": "现有 fixture 已含全文（1 条）。 暂不随包内置：当前 court_main 清洗会把标题中的“第八十八条”误作批复条号，待无条号批复解析修复后再纳入 fixture。"
+        },
+        {
+          "id": "p2-company-interpretation-2",
+          "title": "最高人民法院关于适用《中华人民共和国公司法》若干问题的规定（二）",
+          "short_title": "公司法解释（二）",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "公司解散、清算责任等常用。",
+          "notes": "受 2023 公司法影响，需核验现行清理状态。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-company-interpretation-3",
+          "title": "最高人民法院关于适用《中华人民共和国公司法》若干问题的规定（三）",
+          "short_title": "公司法解释（三）",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "出资、抽逃出资、股东资格常用。",
+          "notes": "受 2023 公司法影响，需核验现行清理状态。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-company-bankruptcy-interpretation-1",
+          "title": "最高人民法院关于适用《中华人民共和国企业破产法》若干问题的规定（一）",
+          "short_title": "破产法解释（一）",
+          "level": "judicial_interpretation",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "破产申请、受理和破产原因高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-company-bankruptcy-interpretation-2",
+          "title": "最高人民法院关于适用《中华人民共和国企业破产法》若干问题的规定（二）",
+          "short_title": "破产法解释（二）",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "债务人财产、取回权、撤销权等高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-company-bankruptcy-interpretation-3",
+          "title": "最高人民法院关于适用《中华人民共和国企业破产法》若干问题的规定（三）",
+          "short_title": "破产法解释（三）",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "债权申报、债权人会议等高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-company-jiu-min-minutes",
+          "title": "全国法院民商事审判工作会议纪要",
+          "short_title": "九民纪要",
+          "level": "judicial_meeting_minutes",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "公司、担保、金融、破产裁判思路高频。",
+          "notes": "会议纪要不是司法解释，不应作为强制法源引用。",
+          "needs_verification": true
+        }
+      ]
+    },
+    "labor": {
+      "priority": "P2",
+      "description": "Labor disputes, HR compliance and social insurance profile.",
+      "dependencies": [
+        "general"
+      ],
+      "aliases": [
+        "employment",
+        "劳动"
+      ],
+      "entries": [
+        {
+          "id": "p2-labor-contract-law-regulation",
+          "title": "中华人民共和国劳动合同法实施条例",
+          "short_title": "劳动合同法实施条例",
+          "level": "admin_regulation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "劳动合同法适用细化。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-labor-social-insurance-law",
+          "title": "中华人民共和国社会保险法",
+          "short_title": "社会保险法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "社保、工伤、补缴、待遇争议基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-labor-work-injury-insurance-regulation",
+          "title": "工伤保险条例",
+          "short_title": "工伤保险条例",
+          "level": "admin_regulation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "工伤认定、待遇和用工责任高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-labor-migrant-wage-regulation",
+          "title": "保障农民工工资支付条例",
+          "short_title": "农民工工资支付条例",
+          "level": "admin_regulation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "工资支付、建设工程欠薪高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-labor-paid-annual-leave-regulation",
+          "title": "职工带薪年休假条例",
+          "short_title": "年休假条例",
+          "level": "admin_regulation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "年休假折算、未休年休假工资高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-labor-female-employee-protection",
+          "title": "女职工劳动保护特别规定",
+          "short_title": "女职工劳动保护规定",
+          "level": "admin_regulation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "孕产期、哺乳期、劳动保护。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-labor-dispute-interpretation-2",
+          "title": "最高人民法院关于审理劳动争议案件适用法律问题的解释（二）",
+          "short_title": "劳动争议解释（二）",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "2025 年新劳动争议解释，影响社保、竞业限制、关联用工等。",
+          "notes": "应核验与既有劳动争议解释（一）的衔接关系。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-labor-arbitration-case-rules",
+          "title": "劳动人事争议仲裁办案规则",
+          "short_title": "劳动仲裁办案规则",
+          "level": "department_rule",
+          "primary_source": "gjgzk",
+          "source_status": "unsupported",
+          "installable": false,
+          "skip_reason": "unsupported_source",
+          "priority": "P2",
+          "reason": "劳动仲裁流程、举证、审限。",
+          "notes": "国家规章库 adapter 尚未实现，暂不自动 fetch。",
+          "needs_verification": true
+        }
+      ]
+    },
+    "criminal": {
+      "priority": "P2",
+      "description": "Criminal defense/compliance profile: procedure, procuratorate, sentencing and high-frequency crime interpretations.",
+      "dependencies": [
+        "baseline"
+      ],
+      "aliases": [
+        "刑事",
+        "criminal-defense"
+      ],
+      "entries": [
+        {
+          "id": "p2-criminal-procuratorate-procedure-rules",
+          "title": "人民检察院刑事诉讼规则",
+          "short_title": "检察院刑诉规则",
+          "level": "judicial_policy",
+          "primary_source": "spp_gov_cn",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "批捕、起诉、退补、羁押必要性、监督等检察流程基础。",
+          "notes": "spp_gov_cn 通过 bounded cross_search 在 gfwj/nbgz 等静态栏目内发现；现行全文可 fetch。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-public-security-procedure-rules",
+          "title": "公安机关办理刑事案件程序规定",
+          "short_title": "公安刑案程序规定",
+          "level": "department_rule",
+          "primary_source": "mps_gov_cn",
+          "source_status": "unsupported",
+          "installable": false,
+          "skip_reason": "unsupported_source",
+          "priority": "P2",
+          "reason": "立案、侦查、强制措施、取证、涉案财物等基础。",
+          "notes": "公安部 source adapter 尚未实现，暂不自动 fetch。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-guilty-plea-leniency-opinion",
+          "title": "关于适用认罪认罚从宽制度的指导意见",
+          "short_title": "认罪认罚指导意见",
+          "level": "judicial_policy",
+          "primary_source": "spp_gov_cn",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "认罪认罚、量刑建议、具结书和辩护策略常用。",
+          "notes": "spp_gov_cn 通过 bounded cross_search 在 gfwj 等静态栏目内发现；该文件非第N条结构，清洗为单个“正文”条目。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-sentencing-procedure-opinion",
+          "title": "关于规范量刑程序若干问题的意见",
+          "short_title": "量刑程序意见",
+          "level": "judicial_policy",
+          "primary_source": "spp_gov_cn",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "量刑事实调查、量刑建议和法庭调查辩论。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；作为长期来源覆盖缺口跟踪于 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-common-crimes-sentencing-guidance",
+          "title": "最高人民法院关于常见犯罪的量刑指导意见",
+          "short_title": "常见犯罪量刑指导意见",
+          "level": "judicial_policy",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "量刑预测、认罪认罚协商、辩护意见核心。",
+          "notes": "court_main 可通过去除试行后缀后的规范标题发现并抓取 2014 年最高法文本。后续如需两高 2021 量刑/量刑建议文件，应另行核验来源，不在本条替代。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-crime-name-rules",
+          "title": "最高人民法院关于执行《中华人民共和国刑法》确定罪名的规定",
+          "short_title": "罪名规定（法院）",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "罪名索引、罪名到条文映射基础。",
+          "notes": "需要与补充规定一至八建立关系；当前公开 fetch 路径暂不能稳定发现较旧文件，长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-theft-interpretation",
+          "title": "最高人民法院 最高人民检察院关于办理盗窃刑事案件适用法律若干问题的解释",
+          "short_title": "盗窃解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "财产犯罪高频。",
+          "notes": "court_gongbao 通过 bounded cross_search 跨 sfjs/sfwj 静态栏目深搜发现；首次 fetch 约 30 秒。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-fraud-interpretation",
+          "title": "最高人民法院 最高人民检察院关于办理诈骗刑事案件具体应用法律若干问题的解释",
+          "short_title": "诈骗解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "诈骗、电诈、合同诈骗边界常用。",
+          "notes": "当前公开 fetch 路径暂不能稳定发现较旧公报文件；长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-telecom-fraud-opinion-1",
+          "title": "最高人民法院 最高人民检察院 公安部关于办理电信网络诈骗等刑事案件适用法律若干问题的意见",
+          "short_title": "电诈意见（一）",
+          "level": "judicial_policy",
+          "primary_source": "spp_gov_cn",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "电信网络诈骗、共同犯罪和证据规则常用。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；作为长期来源覆盖缺口跟踪于 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-illegal-fundraising-interpretation",
+          "title": "最高人民法院关于审理非法集资刑事案件具体应用法律若干问题的解释",
+          "short_title": "非法集资解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_main",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "非吸、集资诈骗、涉众金融风险高频。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-cybercrime-interpretation",
+          "title": "最高人民法院 最高人民检察院关于办理非法利用信息网络、帮助信息网络犯罪活动等刑事案件适用法律若干问题的解释",
+          "short_title": "帮信/非法利用信息网络解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "帮信罪、非法利用信息网络罪高频。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-personal-info-crime-interpretation",
+          "title": "最高人民法院 最高人民检察院关于办理侵犯公民个人信息刑事案件适用法律若干问题的解释",
+          "short_title": "公民个人信息刑事解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "数据合规与刑事风险交叉高频。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-money-laundering-interpretation",
+          "title": "最高人民法院 最高人民检察院关于办理洗钱刑事案件适用法律若干问题的解释",
+          "short_title": "洗钱解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "反洗钱、金融犯罪、上游犯罪合规高频。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-conceal-crime-proceeds-interpretation",
+          "title": "最高人民法院 最高人民检察院关于办理掩饰、隐瞒犯罪所得、犯罪所得收益刑事案件适用法律若干问题的解释",
+          "short_title": "掩隐解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "电诈、盗窃、洗钱、虚拟资产下游处理高频。",
+          "notes": "需注意新旧解释替代关系；当前公开 fetch 路径暂不能稳定发现该文件，长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-bribery-corruption-interpretation",
+          "title": "最高人民法院 最高人民检察院关于办理贪污贿赂刑事案件适用法律若干问题的解释",
+          "short_title": "贪污贿赂解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "职务犯罪辩护与企业反腐合规。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-drug-crime-interpretation",
+          "title": "最高人民法院关于审理毒品犯罪案件适用法律若干问题的解释",
+          "short_title": "毒品犯罪解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "毒品数量、情节、共同犯罪等高频。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；长期来源覆盖缺口见 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-drunk-dangerous-driving-opinion",
+          "title": "最高人民法院 最高人民检察院 公安部 司法部关于办理醉酒危险驾驶刑事案件的意见",
+          "short_title": "醉驾意见",
+          "level": "judicial_policy",
+          "primary_source": "spp_gov_cn",
+          "source_status": "manual_review",
+          "installable": false,
+          "priority": "P2",
+          "reason": "危险驾驶最常见轻罪之一。",
+          "notes": "当前公开 fetch 路径尚未 smoke 通过；作为长期来源覆盖缺口跟踪于 issue #99。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-criminal-ip-crime-interpretation",
+          "title": "最高人民法院 最高人民检察院关于办理侵犯知识产权刑事案件适用法律若干问题的解释",
+          "short_title": "侵犯知识产权刑事解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_gongbao",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "知产刑事合规、商业秘密、商标、著作权犯罪。",
+          "needs_verification": true
+        }
+      ]
+    },
+    "admin": {
+      "priority": "P2",
+      "description": "Administrative litigation, administrative enforcement and government compliance profile.",
+      "dependencies": [
+        "general"
+      ],
+      "aliases": [
+        "administrative",
+        "行政"
+      ],
+      "entries": [
+        {
+          "id": "p2-admin-administrative-license-law",
+          "title": "中华人民共和国行政许可法",
+          "short_title": "行政许可法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "许可、审批、市场准入高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-admin-administrative-compulsion-law",
+          "title": "中华人民共和国行政强制法",
+          "short_title": "行政强制法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "查封、扣押、冻结、强制执行基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-admin-government-information-regulation",
+          "title": "中华人民共和国政府信息公开条例",
+          "short_title": "政府信息公开条例",
+          "level": "admin_regulation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "政府信息公开申请、复议和诉讼高频。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-admin-administrative-agreement-provisions",
+          "title": "最高人民法院关于审理行政协议案件若干问题的规定",
+          "short_title": "行政协议规定",
+          "level": "judicial_interpretation",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "PPP、招商引资、特许经营协议纠纷核心规则。",
+          "needs_verification": true
+        }
+      ]
+    },
+    "real-estate": {
+      "priority": "P2",
+      "description": "Real-estate and construction engineering profile.",
+      "dependencies": [
+        "general"
+      ],
+      "aliases": [
+        "real_estate",
+        "construction",
+        "房地产",
+        "建工"
+      ],
+      "entries": [
+        {
+          "id": "p2-real-estate-urban-real-estate-law",
+          "title": "中华人民共和国城市房地产管理法",
+          "short_title": "城市房地产管理法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "土地使用权出让、转让和商品房预售基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-real-estate-land-administration-law",
+          "title": "中华人民共和国土地管理法",
+          "short_title": "土地管理法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "土地征收、建设用地、耕地保护基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-real-estate-construction-contract-interpretation-1",
+          "title": "最高人民法院关于审理建设工程施工合同纠纷案件适用法律问题的解释（一）",
+          "short_title": "建工解释（一）",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "工程款结算、工期索赔、实际施工人、优先受偿权高频。",
+          "needs_verification": false,
+          "fixture_id": "flk-construction-contract-interpretation-1-2020",
+          "notes": "现有 fixture 已含全文（45 条）。"
+        },
+        {
+          "id": "p2-real-estate-commercial-housing-sale-interpretation",
+          "title": "最高人民法院关于审理商品房买卖合同纠纷案件适用法律若干问题的解释",
+          "short_title": "商品房买卖解释",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "逾期交房、虚假宣传、一房二卖等商品房纠纷高频。",
+          "needs_verification": false,
+          "fixture_id": "flk-commercial-housing-sale-interpretation-2020",
+          "notes": "现有 fixture 已含全文（24 条）。"
+        }
+      ]
+    },
+    "family": {
+      "priority": "P2",
+      "description": "Marriage, family and inheritance profile.",
+      "dependencies": [
+        "general"
+      ],
+      "aliases": [
+        "marriage",
+        "inheritance",
+        "婚姻家庭",
+        "继承"
+      ],
+      "entries": [
+        {
+          "id": "p2-family-marriage-family-interpretation-1",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》婚姻家庭编的解释（一）",
+          "short_title": "婚家编解释（一）",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "离婚财产分割、夫妻共同债务、子女抚养基础。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-code-marriage-family-interpretation-1-2020",
+          "notes": "现有 fixture 已含全文（91 条）。"
+        },
+        {
+          "id": "p2-family-marriage-family-interpretation-2",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》婚姻家庭编的解释（二）",
+          "short_title": "婚家编解释（二）",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "离婚协议财产处分、假离婚、债权人撤销等新规则。",
+          "notes": "应核验施行日期和最终文本。 现有 fixture 已含全文（23 条）。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-code-marriage-family-interpretation-2-2025"
+        },
+        {
+          "id": "p2-family-inheritance-interpretation-1",
+          "title": "最高人民法院关于适用《中华人民共和国民法典》继承编的解释（一）",
+          "short_title": "继承编解释（一）",
+          "level": "judicial_interpretation",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "遗嘱形式、遗产范围、代位继承等基础。",
+          "needs_verification": false,
+          "fixture_id": "flk-civil-code-inheritance-interpretation-1-2020",
+          "notes": "现有 fixture 已含全文（45 条）。"
+        }
+      ]
+    },
+    "ip": {
+      "priority": "P2",
+      "description": "Intellectual property and anti-unfair-competition profile.",
+      "dependencies": [
+        "general"
+      ],
+      "aliases": [
+        "intellectual-property",
+        "知识产权"
+      ],
+      "entries": [
+        {
+          "id": "p2-ip-copyright-law",
+          "title": "中华人民共和国著作权法",
+          "short_title": "著作权法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "著作权确权、侵权和许可基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-ip-patent-law",
+          "title": "中华人民共和国专利法",
+          "short_title": "专利法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "专利确权、侵权和许可基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-ip-trademark-law",
+          "title": "中华人民共和国商标法",
+          "short_title": "商标法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "商标确权、侵权和许可基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-ip-anti-unfair-competition-law",
+          "title": "中华人民共和国反不正当竞争法",
+          "short_title": "反不正当竞争法",
+          "aliases": [
+            "反法"
+          ],
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "商业秘密、混淆行为、商业诋毁和互联网不正当竞争基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-ip-anti-unfair-competition-interpretation",
+          "title": "最高人民法院关于适用《中华人民共和国反不正当竞争法》若干问题的解释",
+          "short_title": "反不正当竞争法解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "细化反不正当竞争规制边界。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-ip-punitive-damages-interpretation",
+          "title": "最高人民法院关于审理侵害知识产权民事案件适用惩罚性赔偿的解释",
+          "short_title": "知产惩罚性赔偿解释",
+          "level": "judicial_interpretation",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "故意侵权、情节严重和惩罚性赔偿倍数判断高频。",
+          "needs_verification": true
+        }
+      ]
+    },
+    "securities": {
+      "priority": "P2",
+      "description": "Capital market law, CSRC rules and exchange/self-regulatory profile.",
+      "dependencies": [
+        "general"
+      ],
+      "aliases": [
+        "capital-market",
+        "证券",
+        "资本市场"
+      ],
+      "entries": [
+        {
+          "id": "p2-securities-securities-law",
+          "title": "中华人民共和国证券法",
+          "short_title": "证券法",
+          "level": "law",
+          "primary_source": "flk_npc",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "信息披露、内幕交易、操纵市场和注册制基础。",
+          "needs_verification": false,
+          "fixture_id": "flk-securities-law-2019",
+          "notes": "现有 fixture 已含全文（226 条）。"
+        },
+        {
+          "id": "p2-securities-false-statement-interpretation",
+          "title": "最高人民法院关于审理证券市场虚假陈述侵权民事赔偿案件的若干规定",
+          "short_title": "虚假陈述新规",
+          "level": "judicial_interpretation",
+          "primary_source": "court_main",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "重大性、交易因果关系、损失计算等证券索赔核心。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-securities-disclosure-measures",
+          "title": "上市公司信息披露管理办法",
+          "short_title": "信披办法",
+          "level": "department_rule",
+          "primary_source": "csrc_gov_cn",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "上市公司重大事件和董监高信披义务边界。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-securities-sse-stock-listing-rules",
+          "title": "上海证券交易所股票上市规则",
+          "short_title": "上交所股票上市规则",
+          "level": "self_regulatory_rule",
+          "primary_source": "sse_com_cn",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "上市公司持续监管和交易所自律规则基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-securities-szse-stock-listing-rules",
+          "title": "深圳证券交易所股票上市规则",
+          "short_title": "深交所股票上市规则",
+          "level": "self_regulatory_rule",
+          "primary_source": "szse_cn",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "上市公司持续监管和交易所自律规则基础。",
+          "needs_verification": true
+        },
+        {
+          "id": "p2-securities-bse-stock-listing-rules",
+          "title": "北京证券交易所股票上市规则",
+          "short_title": "北交所股票上市规则",
+          "level": "self_regulatory_rule",
+          "primary_source": "bse_cn",
+          "source_status": "supported",
+          "priority": "P2",
+          "reason": "北交所上市公司持续监管基础。",
+          "needs_verification": true
+        }
+      ]
+    }
+  }
+}

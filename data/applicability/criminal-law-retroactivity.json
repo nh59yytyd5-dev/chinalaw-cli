@@ -1,0 +1,45 @@
+{
+  "kind": "applicability_dataset",
+  "id": "criminal-law-retroactivity-seed",
+  "name": "刑法溯及力检索警示规则",
+  "source_name": "manual-seed:criminal-law-retroactivity",
+  "source_url": "local-file:data/applicability/criminal-law-retroactivity.json",
+  "source_checked_at": "2026-05-20T00:00:00+08:00",
+  "relations": [],
+  "rules": [
+    {
+      "id": "app-criminal-law-retroactivity-general",
+      "topic": "刑法溯及力",
+      "domain": "criminal",
+      "primary_law_id": "flk-criminal-law-1997",
+      "primary_law_title": "中华人民共和国刑法",
+      "fallback_law_id": null,
+      "fallback_law_title": null,
+      "effective_from": "1980-01-01",
+      "rule_text": "刑事案件遇到跨期事实时，不得仅按事实日期或裁判日期机械选用单一版本。应先检索行为时有效的刑法文本，再检索裁判时/现行文本，并围绕《刑法》第十二条核查是否存在“当时法律不认为是犯罪”“本法不认为是犯罪”或“处刑较轻”等从旧兼从轻情形；已经生效的判决还须注意继续有效规则。",
+      "transition_text": "该规则只提供检索路径，不输出适用结论。建议依次运行：`chinalaw history 刑法`、`chinalaw article 刑法 <相关条号> --as-of <行为日期>`、`chinalaw article 刑法 <相关条号> --as-of <裁判日期或今日>`、`chinalaw article 刑法 12 --as-of <裁判日期或今日>`、`chinalaw trace 刑法 <相关条号> --from-as-of <行为日期> --to-as-of <裁判日期或今日>`。如果行为发生在 1997-10-01 前，还要单独核查 1979 年刑法和当时有效的特别决定/补充规定；不要把 1979 年刑法第十二条误当作现行刑法溯及力条款。",
+      "confidence": "manual_review_required",
+      "metadata": {
+        "guardrail": "not_legal_conclusion",
+        "requires_article_12_review": true
+      }
+    },
+    {
+      "id": "app-criminal-liability-cross-period",
+      "topic": "刑事责任",
+      "domain": "criminal",
+      "primary_law_id": "flk-criminal-law-1997",
+      "primary_law_title": "中华人民共和国刑法",
+      "fallback_law_id": null,
+      "fallback_law_title": null,
+      "effective_from": "1980-01-01",
+      "rule_text": "刑事责任、定罪量刑、追诉时效、单位犯罪、罪名增删或法定刑变化等问题，只要事实横跨刑法版本变化，就应触发刑法溯及力审查。",
+      "transition_text": "先用 `--as-of` 获取行为时文本，再用 `history` / `diff` / `trace` 对比新旧条文；不得只引用现行刑法原文。",
+      "confidence": "manual_review_required",
+      "metadata": {
+        "guardrail": "not_legal_conclusion",
+        "requires_article_12_review": true
+      }
+    }
+  ]
+}

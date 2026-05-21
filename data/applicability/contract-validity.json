@@ -1,0 +1,48 @@
+{
+  "kind": "applicability_dataset",
+  "id": "contract-validity-time-effect-seed",
+  "name": "合同效力时间效力示范规则",
+  "source_name": "manual-seed:time-effect-minimal",
+  "source_url": "local-file:data/applicability/contract-validity.json",
+  "source_checked_at": "2026-04-30T00:00:00+08:00",
+  "relations": [
+    {
+      "id": "rel-civil-code-replaces-contract-law",
+      "relation_type": "replaces",
+      "from_law_id": "flk-civil-code-2020",
+      "from_law_title": "中华人民共和国民法典",
+      "to_law_id": "flk-contract-law-1999",
+      "to_law_title": "中华人民共和国合同法",
+      "effective_at": "2021-01-01",
+      "notes": "示范关系：民法典施行后，合同法作为单行法退出现行直接适用体系；具体案件仍需结合民法典时间效力规则审查。"
+    }
+  ],
+  "rules": [
+    {
+      "id": "app-contract-validity-before-2021",
+      "topic": "合同效力",
+      "domain": "all",
+      "primary_law_id": "flk-contract-law-1999",
+      "primary_law_title": "中华人民共和国合同法",
+      "fallback_law_id": "flk-civil-code-2020",
+      "fallback_law_title": "中华人民共和国民法典",
+      "effective_to": "2020-12-31",
+      "rule_text": "当合同成立、履行或争议事实主要发生在 2021-01-01 之前时，应提示 agent 优先检索当时有效的合同法及相关司法解释，并核对民法典时间效力规则。",
+      "transition_text": "该规则是检索线索，不直接输出适用结论；旧法文本未入库时必须 fetch 或通过上游数据库补全后再引用。",
+      "confidence": "seed_review_required"
+    },
+    {
+      "id": "app-contract-validity-after-2021",
+      "topic": "合同效力",
+      "domain": "all",
+      "primary_law_id": "flk-civil-code-2020",
+      "primary_law_title": "中华人民共和国民法典",
+      "fallback_law_id": "flk-contract-law-1999",
+      "fallback_law_title": "中华人民共和国合同法",
+      "effective_from": "2021-01-01",
+      "rule_text": "当合同成立、履行或争议事实主要发生在 2021-01-01 之后时，应提示 agent 优先检索民法典合同编及相关司法解释；如事实跨越施行日前后，应继续检索民法典时间效力规则。",
+      "transition_text": "该规则只用于提醒检索路径；跨期事实、继续性合同、既判力和溯及适用问题必须单独审查。",
+      "confidence": "seed_review_required"
+    }
+  ]
+}

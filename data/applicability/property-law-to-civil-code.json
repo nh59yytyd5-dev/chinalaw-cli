@@ -1,0 +1,48 @@
+{
+  "kind": "applicability_dataset",
+  "id": "property-law-to-civil-code-time-effect-seed",
+  "name": "物权法到民法典物权编的时间效力示范规则",
+  "source_name": "manual-seed:time-effect-minimal",
+  "source_url": "local-file:data/applicability/property-law-to-civil-code.json",
+  "source_checked_at": "2026-05-02T00:00:00+08:00",
+  "relations": [
+    {
+      "id": "rel-civil-code-replaces-property-law",
+      "relation_type": "replaces",
+      "from_law_id": "flk-civil-code-2020",
+      "from_law_title": "中华人民共和国民法典",
+      "to_law_id": "flk-property-law-2007",
+      "to_law_title": "中华人民共和国物权法",
+      "effective_at": "2021-01-01",
+      "notes": "示范关系：民法典施行后，物权法整体退出现行直接适用体系，相关条文整合进民法典物权编（第二编）；具体案件仍需结合民法典时间效力规则审查。"
+    }
+  ],
+  "rules": [
+    {
+      "id": "app-property-rights-before-2021",
+      "topic": "物权",
+      "domain": "all",
+      "primary_law_id": "flk-property-law-2007",
+      "primary_law_title": "中华人民共和国物权法",
+      "fallback_law_id": "flk-civil-code-2020",
+      "fallback_law_title": "中华人民共和国民法典",
+      "effective_to": "2020-12-31",
+      "rule_text": "当物权设立、变更、消灭或权属争议事实主要发生在 2021-01-01 之前时，应提示 agent 优先检索当时有效的物权法及相关司法解释，并核对民法典时间效力规则。",
+      "transition_text": "该规则是检索线索，不直接输出适用结论；登记在簿权利、不动产权属、跨期善意取得等问题须结合民法典物权编单独审查。",
+      "confidence": "seed_review_required"
+    },
+    {
+      "id": "app-property-rights-after-2021",
+      "topic": "物权",
+      "domain": "all",
+      "primary_law_id": "flk-civil-code-2020",
+      "primary_law_title": "中华人民共和国民法典",
+      "fallback_law_id": "flk-property-law-2007",
+      "fallback_law_title": "中华人民共和国物权法",
+      "effective_from": "2021-01-01",
+      "rule_text": "当物权设立、变更、消灭或权属争议事实主要发生在 2021-01-01 之后时，应提示 agent 优先检索民法典物权编（第二编）及相关司法解释；如事实跨越施行日前后，应继续检索民法典时间效力规则。",
+      "transition_text": "该规则只用于提醒检索路径；继续性物权关系、登记溯及效力、共有物分割等跨期问题必须单独审查。",
+      "confidence": "seed_review_required"
+    }
+  ]
+}

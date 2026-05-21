@@ -1,0 +1,48 @@
+{
+  "kind": "applicability_dataset",
+  "id": "security-to-civil-code-time-effect-seed",
+  "name": "担保法到民法典担保部分的时间效力示范规则",
+  "source_name": "manual-seed:time-effect-minimal",
+  "source_url": "local-file:data/applicability/security-to-civil-code.json",
+  "source_checked_at": "2026-05-02T00:00:00+08:00",
+  "relations": [
+    {
+      "id": "rel-civil-code-replaces-security-law",
+      "relation_type": "replaces",
+      "from_law_id": "flk-civil-code-2020",
+      "from_law_title": "中华人民共和国民法典",
+      "to_law_id": "flk-security-law-1995",
+      "to_law_title": "中华人民共和国担保法",
+      "effective_at": "2021-01-01",
+      "notes": "示范关系：民法典施行后，担保法整体退出现行直接适用体系，相关条文分别整合进民法典物权编（抵押 / 质押 / 留置）和合同编（保证）；具体案件须结合民法典时间效力规则及担保制度司法解释审查。"
+    }
+  ],
+  "rules": [
+    {
+      "id": "app-security-before-2021",
+      "topic": "担保",
+      "domain": "all",
+      "primary_law_id": "flk-security-law-1995",
+      "primary_law_title": "中华人民共和国担保法",
+      "fallback_law_id": "flk-civil-code-2020",
+      "fallback_law_title": "中华人民共和国民法典",
+      "effective_to": "2020-12-31",
+      "rule_text": "当担保合同订立或担保物权设立时间主要在 2021-01-01 之前时，应提示 agent 优先检索当时有效的担保法及相关司法解释，并核对民法典担保制度司法解释的过渡条款。",
+      "transition_text": "该规则是检索线索，不直接输出适用结论；混合担保、保证期间、抵押权与租赁关系等跨期问题须单独审查。",
+      "confidence": "seed_review_required"
+    },
+    {
+      "id": "app-security-after-2021",
+      "topic": "担保",
+      "domain": "all",
+      "primary_law_id": "flk-civil-code-2020",
+      "primary_law_title": "中华人民共和国民法典",
+      "fallback_law_id": "flk-security-law-1995",
+      "fallback_law_title": "中华人民共和国担保法",
+      "effective_from": "2021-01-01",
+      "rule_text": "当担保合同订立或担保物权设立时间主要在 2021-01-01 之后时，应提示 agent 优先检索民法典物权编与合同编中的担保规则及最高法关于民法典担保制度的司法解释；保证方式默认推定（一般保证 vs 连带责任保证）规则有变化，注意核对差异。",
+      "transition_text": "该规则只用于提醒检索路径；继续性担保、混合担保追偿、动产担保统一登记、让与担保等问题必须单独审查。",
+      "confidence": "seed_review_required"
+    }
+  ]
+}

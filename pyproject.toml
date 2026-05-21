@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "chinalaw"
+version = "0.1.0"
+description = "中国法律法规检索 CLI，为 AI agent 设计，减少幻觉、按条款引用。"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = ["law", "legal", "china", "cli", "ai-agent", "llm", "rag"]
+authors = [
+  { name = "chinalaw-cli contributors" },
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Legal Industry",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Natural Language :: Chinese (Simplified)",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Text Processing :: Indexing",
+]
+dependencies = [
+  # Runtime intentionally stays stdlib-only for the public preview.
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.5",
+  "build>=1.2",
+]
+
+[project.scripts]
+chinalaw = "chinalaw.cli:main"
+chinalaw-mcp = "chinalaw.mcp:main"
+
+[project.urls]
+Homepage = "https://github.com/nh59yytyd5-dev/chinalaw-cli"
+Repository = "https://github.com/nh59yytyd5-dev/chinalaw-cli"
+Issues = "https://github.com/nh59yytyd5-dev/chinalaw-cli/issues"
+Changelog = "https://github.com/nh59yytyd5-dev/chinalaw-cli/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chinalaw"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/data/fixtures",
+  "/data/applicability",
+  "/data/recommended_corpus.json",
+  "/docs",
+  "/.claude/skills",
+  "/scripts",
+  "/README.md",
+  "/LICENSE",
+  "/NOTICES.md",
+  "/CHANGELOG.md",
+  "/pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"data/fixtures" = "chinalaw/data/fixtures"
+"data/applicability" = "chinalaw/data/applicability"
+"data/recommended_corpus.json" = "chinalaw/data/recommended_corpus.json"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+# RUF001/002/003：本项目主语言为中文，全角标点（，。；：（）「」""''）是正确写法，不是 ambiguous。
+# 含中文 fixture / 注释 / docstring / SQL 文本片段会大量误报，统一豁免。
+ignore = ["RUF001", "RUF002", "RUF003"]

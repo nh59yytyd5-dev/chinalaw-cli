@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# One-command local setup for agent-facing chinalaw usage.
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+SYNC_FIXTURES=0
+COPY_SKILLS=0
+DRY_RUN=0
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/setup-agent [options]
+
+Install/update the global chinalaw command, install agent skills, optionally
+load demo fixtures, then run chinalaw doctor.
+
+Options:
+  --sync-fixtures  Load builtin fixture data after installing the wrapper.
+  --copy-skills    Copy skills instead of symlinking them.
+  --dry-run        Preview skill installation only; install-local still runs.
+  -h, --help       Show this help.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --sync-fixtures) SYNC_FIXTURES=1; shift ;;
+        --copy-skills) COPY_SKILLS=1; shift ;;
+        --dry-run) DRY_RUN=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "error: unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+"${REPO_ROOT}/scripts/install-local"
+
+skill_args=()
+if [ "$COPY_SKILLS" -eq 1 ]; then
+    skill_args+=(--copy)
+fi
+if [ "$DRY_RUN" -eq 1 ]; then
+    skill_args+=(--dry-run)
+fi
+"${REPO_ROOT}/scripts/install-skills" "${skill_args[@]}"
+
+if [ "$SYNC_FIXTURES" -eq 1 ]; then
+    chinalaw sync --fixtures --format md
+fi
+
+chinalaw doctor --format md
