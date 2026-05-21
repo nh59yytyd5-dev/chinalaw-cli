@@ -7,7 +7,7 @@
   "profiles": {
     "baseline": {
       "priority": "P0",
-      "description": "Small cross-domain baseline for offline demos and first-run grounding.",
+      "description": "Small cross-domain baseline for first-run grounding.",
       "dependencies": [],
       "aliases": [
         "p0",
@@ -38,7 +38,7 @@
           "source_status": "supported",
           "priority": "P0",
           "reason": "民商、合同、物权、人格权、婚姻家庭、继承、侵权等工作流的基础法典。",
-          "notes": "现有 fixture 已含全文；仍可用 ensure 在本地 seed/stub 时补全。",
+          "notes": "现有 fixture 已含全文；公开初始库不得包含 seed/stub。",
           "needs_verification": false
         },
         {
@@ -144,7 +144,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "行政执法、监管合规、处罚程序高频。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "ff8080817703add20177373df6a43e33",
+          "notes": "现有 fixture 已含全文（86 条）。"
         },
         {
           "id": "p1-administrative-reconsideration-law",
@@ -156,7 +158,8 @@
           "priority": "P1",
           "reason": "行政救济基础，与行政诉讼、行政处罚联动。",
           "notes": "应以 2023 修订、2024 施行文本为当前基准。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "ff8081818a21e6c3018a508d491a0c98"
         },
         {
           "id": "p1-state-compensation-law",
@@ -167,7 +170,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "行政、刑事错案、国家赔偿责任常用。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "2c909fdd678bf17901678bf74c26069f",
+          "notes": "现有 fixture 已含全文（42 条）。"
         },
         {
           "id": "p1-labor-law",
@@ -179,8 +184,8 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "劳动关系、工时、休息休假和劳动保护基础。",
-          "notes": "当前 fixture 为 seed 时 ensure 必须联网补全。",
-          "needs_verification": true
+          "notes": "现有 fixture 已含全文（107 条）。",
+          "needs_verification": false
         },
         {
           "id": "p1-labor-contract-law",
@@ -191,7 +196,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "入职、履行、解除、经济补偿、赔偿金计算高频。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "2c909fdd678bf17901678bf74d7106b3",
+          "notes": "现有 fixture 已含全文（98 条）。"
         },
         {
           "id": "p1-labor-dispute-arbitration-law",
@@ -202,7 +209,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "劳动争议程序基础。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "2c909fdd678bf17901678bf64f28039d",
+          "notes": "现有 fixture 已含全文（54 条）。"
         },
         {
           "id": "p1-company-law",
@@ -242,7 +251,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "AI、数据、雇佣、平台、合规查询高频。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "ff8081817b6472a3017b656cc2040044",
+          "notes": "现有 fixture 已含全文（74 条）。"
         },
         {
           "id": "p1-data-security-law",
@@ -253,7 +264,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "数据合规基础。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "ff80818179f5e0800179f885c7e70392",
+          "notes": "现有 fixture 已含全文（53 条）。"
         },
         {
           "id": "p1-cybersecurity-law",
@@ -264,7 +277,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "网络安全、平台合规、个人信息与数据规则的上位基础。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "021e7d7684474107b8f3febbb1c4f8b5",
+          "notes": "现有 fixture 已含全文（80 条）。"
         },
         {
           "id": "p1-consumer-rights-law",
@@ -275,7 +290,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "平台、电商、产品服务纠纷常用。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "2c909fdd678bf17901678bf7670606ef",
+          "notes": "现有 fixture 已含全文（63 条）。"
         },
         {
           "id": "p1-public-security-administration-punishments-law",
@@ -286,7 +303,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "行政处罚与轻微违法、刑行衔接高频。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "ff80818197af9ccc0197b159c38a0408",
+          "notes": "现有 fixture 已含全文（144 条）。"
         },
         {
           "id": "p1-litigation-fee-measures",
@@ -297,7 +316,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "诉讼成本估算和案件方案设计高频。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "ff8080816f3e98bd016f41e1395a015f",
+          "notes": "现有 fixture 已含全文（56 条）。"
         },
         {
           "id": "p1-civil-code-time-effect",
@@ -410,7 +431,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "行政诉讼裸法不足，解释高频。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "2c90e5ba65c68cf70167f29d0e604ec4",
+          "notes": "现有 fixture 已含全文（163 条）。"
         },
         {
           "id": "p1-labor-dispute-interpretation-1",
@@ -421,7 +444,9 @@
           "source_status": "supported",
           "priority": "P1",
           "reason": "劳动争议通用高频解释。",
-          "needs_verification": true
+          "needs_verification": false,
+          "fixture_id": "ff80808177e75f88017800739d621b12",
+          "notes": "现有 fixture 已含全文（54 条）。"
         }
       ]
     },

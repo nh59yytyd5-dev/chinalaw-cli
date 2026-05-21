@@ -41,6 +41,17 @@ from chinalaw.sync import sync_source
 _NOTICE_CONTEXT: dict[str, object] = {}
 
 
+def _configure_text_stdio() -> None:
+    """Keep Chinese CLI output usable when Windows pipes default to cp1252."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if reconfigure is None or encoding == "utf8":
+            continue
+        with suppress(Exception):
+            reconfigure(encoding="utf-8")
+
+
 def _add_format_arg(
     p: argparse.ArgumentParser, *, choices: tuple[str, ...] = ("json", "md")
 ) -> None:
@@ -126,6 +137,27 @@ def _sync_to_markdown(payload: dict) -> str:
         + "\n".join(f"- {t}" for t in payload.get("titles", []))
         + "\n"
     )
+
+
+def _init_to_markdown(payload: dict) -> str:
+    status = "通过" if payload.get("ok") else "需要处理"
+    sync = payload.get("fixture_sync") or {}
+    doctor_report = payload.get("doctor") or {}
+    lines = [
+        "# chinalaw init",
+        "",
+        f"- 状态：{status}",
+        f"- 数据库：`{payload.get('db_path')}`",
+        f"- 加载法规：{sync.get('laws_loaded', 0)} 部",
+        f"- 加载条文：{sync.get('articles_loaded', 0)} 条",
+        f"- doctor errors：{doctor_report.get('error_count', 0)}",
+        f"- doctor warnings：{doctor_report.get('warning_count', 0)}",
+    ]
+    next_commands = payload.get("next_commands") or []
+    if next_commands:
+        lines.extend(["", "## Next"])
+        lines.extend(f"- `{command}`" for command in next_commands)
+    return "\n".join(lines) + "\n"
 
 
 def _corpus_to_markdown(payload: dict) -> str:
@@ -643,10 +675,28 @@ def _add_sync_parser(sub) -> None:
     _add_format_arg(p_sync)
 
 
+def _add_init_parser(sub) -> None:
+    p_init = sub.add_parser(
+        "init",
+        help="初始化本地法规库：加载内置公开规范基线并运行健康检查",
+    )
+    p_init.add_argument(
+        "--strict",
+        action="store_true",
+        help="doctor warning 也视为初始化失败",
+    )
+    p_init.add_argument(
+        "--source-smoke",
+        choices=list(sources.VERIFIABLE_SOURCES),
+        help="初始化后额外跑一次可选联网 source smoke；默认不联网",
+    )
+    _add_format_arg(p_init)
+
+
 def _add_fetch_parser(sub) -> None:
     p_fetch = sub.add_parser(
         "fetch",
-        help="按法律名一条龙取条文 + 清洗 + 入库（协议级 high-level 接口，alpha）",
+        help="按法律名一条龙取条文 + 清洗 + 入库（按源适配器覆盖范围工作）",
     )
     p_fetch.add_argument("name", help="法律名（全称 / 简称 / alias）")
     p_fetch.add_argument(
@@ -715,7 +765,7 @@ def _add_discover_parser(sub) -> None:
     p_discover = sub.add_parser(
         "discover",
         help=(
-            "按状态/关键词批量列出候选法规（不下载、不入库；alpha）。"
+            "按状态/关键词批量列出候选法规（不下载、不入库）。"
             "用作 fetch 的探测前哨：先 discover 拉候选池，再 fetch "
             "--prefer-bbbs 精取。详见 docs/CLI_STATUS_FLAG_SPEC.md。"
         ),
@@ -752,7 +802,7 @@ def _add_discover_parser(sub) -> None:
 def _add_ensure_parser(sub) -> None:
     p_ensure = sub.add_parser(
         "ensure",
-        help="本地优先确保公开法规已入库：已有则跳过，缺失 / stub / seed 才 fetch（alpha）",
+        help="本地优先确保公开法规已入库：已有则跳过，缺失 / stub / seed 才 fetch",
     )
     p_ensure.add_argument(
         "names",
@@ -1293,6 +1343,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     _add_search_parser(sub)
     _add_read_parsers(sub)
+    _add_init_parser(sub)
     _add_sync_parser(sub)
     _add_fetch_parser(sub)
     _add_discover_parser(sub)
@@ -1740,6 +1791,29 @@ def _handle_list(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
     )
     _emit(laws, fmt, formatters.list_to_markdown)
     return 0
+
+
+def _handle_init(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
+    sync_result = loader.load_fixtures(db_path)
+    doctor_report = doctor.run_doctor(
+        db_path,
+        strict=args.strict,
+        source_smoke=args.source_smoke,
+    )
+    result = {
+        "kind": "init_result",
+        "ok": bool(doctor_report.get("ok")),
+        "db_path": str(db_path),
+        "fixture_sync": sync_result,
+        "doctor": doctor_report,
+        "next_commands": [
+            "chinalaw article 民法典 第一百四十三条 --format md",
+            "chinalaw search 合同效力 --kind article --limit 10 --format md",
+            "chinalaw doctor --format md",
+        ],
+    }
+    _emit(result, fmt, _init_to_markdown)
+    return 0 if result["ok"] else 1
 
 
 def _handle_sync(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
@@ -2483,6 +2557,7 @@ _COMMAND_HANDLERS = {
     "cited-by": _handle_cited_by,
     "list": _handle_list,
     "laws": _handle_list,
+    "init": _handle_init,
     "sync": _handle_sync,
     "fetch": _handle_fetch,
     "discover": _handle_discover,
@@ -2552,6 +2627,7 @@ def _suppress_broken_pipe() -> None:
 
 
 def main() -> None:
+    _configure_text_stdio()
     raise SystemExit(app())
 
 

@@ -102,4 +102,11 @@ scripts/install-skills --dry-run # 干跑预览
 scripts/install-skills --copy   # Windows / WSL 友好
 ```
 
+Windows PowerShell 原生环境使用复制安装：
+
+```powershell
+.\scripts\install-skills.ps1
+.\scripts\install-skills.ps1 -DryRun
+```
+
 see also: [`.claude/skills/README.md`](../.claude/skills/README.md) 总索引与设计说明。

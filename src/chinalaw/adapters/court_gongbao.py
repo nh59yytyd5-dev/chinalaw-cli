@@ -13,7 +13,8 @@ Level 启发式见 ``SERIAL_NO_TO_LEVEL_HINT``：``sfjs`` 默认司法解释；`
 按标题包含「纪要」/「批复」/「复函」分流到会议纪要 / 司法解释；``al`` 视为
 公报案例并归到 ``guiding_case``；其余落 ``other``。
 
-候选源详情见 ``docs/decisions/ADR-0008-multi-source-adapters.md`` §1.1。
+候选源详情见 ``docs/decisions/ADR-0008-multi-source-adapters.md`` §1.1
+与 ``docs/research/2026-05-source-coverage-survey.md`` §4.1。
 """
 
 from __future__ import annotations

@@ -462,6 +462,39 @@ JSON 输出：
 退出码：`ok=true` 返回 `0`；存在 fail 返回 `1`；`--strict` 下 warning 也会让
 `ok=false` 并返回 `1`。`doctor` 不自动修复、不自动联网、不在数据库不存在时创建数据库。
 
+#### 4.0.4 `init`
+
+`init` 是首次安装后的本地初始化入口：加载随包完整 fixture，然后运行 `doctor`。
+默认不联网，不批量 `fetch`，不读取用户素材目录。
+
+参数：
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `--strict` | bool | false | 传给 `doctor`，warning 也视为失败 |
+| `--source-smoke <source>` | enum | 无 | 初始化后额外跑一次联网 source smoke；默认跳过 |
+
+JSON 输出：
+
+```jsonc
+{
+  "kind": "init_result",
+  "ok": "boolean",
+  "db_path": "string",
+  "fixture_sync": {
+    "laws_loaded": "integer",
+    "articles_loaded": "integer",
+    "titles": ["string"],
+    "fixtures_dir": "string"
+  },
+  "doctor": "doctor_report",
+  "next_commands": ["string"]
+}
+```
+
+退出码：`ok=true` 返回 `0`；`doctor` 失败返回 `1`；参数错误返回 `2`。
+缺少某部法规或条文时，后续由 `ensure <law>` / `fetch <law>` 按任务补全。
+
 ### 4.1 `search <query>`
 
 输入：
@@ -1276,7 +1309,7 @@ JSON 输出 schema（成功 / 主流程）：
 `law.warnings`（可选）：opt-in alias_agent 路径上遇到可恢复错误时附加，结构为
 `[{"severity": "warning", "code": "alias_agent_skipped", "reason": "missing_api_key|network|invalid_response", "message": "string"}]`。
 未启用 `CHINALAW_USE_ALIAS_AGENT` 时不会出现该字段。详见
-`src/chinalaw/alias_agent.py` 的边界说明。
+[`docs/FETCH_LAYER_SPEC.md`](./FETCH_LAYER_SPEC.md) §3。
 
 JSON 输出 schema（list-matches 模式）：
 
@@ -1798,7 +1831,7 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db
 ```jsonc
 {
   "name": "甲方放款要求（示例）",          // 必填
-  "id": "acme-lending-policy",            // 可选，缺省由 name 派生
+  "id": "lending-policy",                 // 可选，缺省由 name 派生
   "short_name": "放款要求",
   "aliases": ["甲方放款要求", "放款标准"],
   "source_type": "lender_requirement",    // 必填，开放枚举

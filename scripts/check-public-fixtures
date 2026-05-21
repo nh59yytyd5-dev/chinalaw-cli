@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Validate fixtures that may be shipped in the public repository.
+
+For an agent-facing legal CLI, a partial law fixture is more dangerous than no
+fixture: a successful law lookup can make the agent trust an incomplete text.
+This gate therefore rejects seed/stub records from ``data/fixtures``.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURES_DIR = ROOT / "data" / "fixtures"
+FORBIDDEN_STATUSES = {"seed", "stub"}
+REQUIRED_SOURCE_FIELDS = ("source_name", "source_url", "source_checked_at", "source_hash")
+FORBIDDEN_COVERAGE = {"seed", "stub", "sample", "excerpt", "partial"}
+
+
+def _load_json(path: Path) -> dict:
+    with path.open(encoding="utf-8") as f:
+        payload = json.load(f)
+    if not isinstance(payload, dict):
+        raise ValueError("fixture root must be a JSON object")
+    return payload
+
+
+def main() -> int:
+    errors: list[str] = []
+    fixture_count = 0
+
+    for path in sorted(FIXTURES_DIR.glob("*.json")):
+        fixture_count += 1
+        try:
+            payload = _load_json(path)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            errors.append(f"{path.relative_to(ROOT)}: invalid JSON fixture: {exc}")
+            continue
+
+        title = payload.get("title") or path.name
+        status = payload.get("status")
+        articles = payload.get("articles") or []
+        coverage = payload.get("articles_coverage") or payload.get("coverage")
+
+        if status in FORBIDDEN_STATUSES:
+            errors.append(f"{path.relative_to(ROOT)}: forbidden public status {status!r} ({title})")
+        if coverage in FORBIDDEN_COVERAGE:
+            errors.append(
+                f"{path.relative_to(ROOT)}: forbidden public coverage {coverage!r} ({title})"
+            )
+        if not isinstance(articles, list) or not articles:
+            errors.append(f"{path.relative_to(ROOT)}: fixture has no articles ({title})")
+        else:
+            for idx, article in enumerate(articles, start=1):
+                if not isinstance(article, dict):
+                    errors.append(
+                        f"{path.relative_to(ROOT)}: article #{idx} is not an object ({title})"
+                    )
+                    continue
+                text = article.get("text")
+                if isinstance(text, list):
+                    text = "\n".join(str(item) for item in text)
+                if not str(text or "").strip():
+                    number = article.get("number_display") or article.get("number") or idx
+                    errors.append(
+                        f"{path.relative_to(ROOT)}: article {number!r} has empty text ({title})"
+                    )
+        for field in REQUIRED_SOURCE_FIELDS:
+            if not payload.get(field):
+                errors.append(f"{path.relative_to(ROOT)}: missing {field} ({title})")
+
+    if errors:
+        print("public fixture check failed:", file=sys.stderr)
+        for error in errors:
+            print(f"- {error}", file=sys.stderr)
+        return 1
+
+    print(f"public fixture check passed: {fixture_count} fixtures")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

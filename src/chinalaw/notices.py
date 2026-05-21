@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -74,6 +75,18 @@ def _notice(message: str, command: str, *, severity: str = "info") -> dict:
     return {"severity": severity, "message": message, "command": command}
 
 
+def _script_command(script: str) -> str:
+    if sys.platform.startswith("win"):
+        return f".\\scripts\\{script}.ps1"
+    return f"scripts/{script}"
+
+
+def _opencode_skills_dir() -> Path:
+    if sys.platform.startswith("win") and os.environ.get("APPDATA"):
+        return Path(os.environ["APPDATA"]) / "opencode" / "skills"
+    return Path.home() / ".config" / "opencode" / "skills"
+
+
 def _collect_install_notices(notices: dict[str, dict]) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     wrapper = repo_root / "scripts" / "chinalaw"
@@ -81,7 +94,7 @@ def _collect_install_notices(notices: dict[str, dict]) -> None:
     if not exe:
         notices["global_wrapper_mismatch"] = _notice(
             "`chinalaw` 不在 PATH 中，agent 可能调用不到本项目 CLI。",
-            "scripts/setup-agent",
+            _script_command("setup-agent"),
             severity="warning",
         )
     else:
@@ -94,7 +107,8 @@ def _collect_install_notices(notices: dict[str, dict]) -> None:
                 if target.resolve() != wrapper.resolve():
                     notices["global_wrapper_mismatch"] = _notice(
                         "`chinalaw` 指向的 wrapper 不是当前 checkout。",
-                        "scripts/update-local --no-doctor",
+                        _script_command("update-local")
+                        + (" -NoDoctor" if sys.platform.startswith("win") else " --no-doctor"),
                         severity="warning",
                     )
         except OSError:
@@ -103,7 +117,7 @@ def _collect_install_notices(notices: dict[str, dict]) -> None:
     if not shutil.which("chinalaw-mcp"):
         notices["mcp_not_installed"] = _notice(
             "`chinalaw-mcp` 不在 PATH 中；CLI + skill 仍可用，但 MCP agent 无法接入。",
-            "scripts/setup-agent",
+            _script_command("setup-agent"),
             severity="info",
         )
 
@@ -120,7 +134,7 @@ def _collect_skill_notice(notices: dict[str, dict], repo_root: Path) -> None:
     targets = [
         Path.home() / ".claude" / "skills",
         Path.home() / ".agents" / "skills",
-        Path.home() / ".config" / "opencode" / "skills",
+        _opencode_skills_dir(),
     ]
     complete_targets = []
     for target in targets:
@@ -129,7 +143,7 @@ def _collect_skill_notice(notices: dict[str, dict], repo_root: Path) -> None:
     if not complete_targets:
         notices["skills_stale"] = _notice(
             "未检测到完整用户级 chinalaw skills；agent 可能不知道检索纪律。",
-            "scripts/install-skills",
+            _script_command("install-skills"),
             severity="warning",
         )
 

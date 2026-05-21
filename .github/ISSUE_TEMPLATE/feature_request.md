@@ -10,7 +10,7 @@ assignees: ''
 提交前请先读：
 - docs/PROJECT_CHARTER.md（项目定位）
 - docs/DIFFERENTIATION.md（明确不做什么）
-- docs/CONTRACT.md（CLI / JSON / 退出码契约）
+- docs/MVP_PLAN.md（当前阶段优先级）
 
 如果你的需求落入"不做的范围"（商业法律数据库克隆、远程 SaaS / MCP 数据服务、AI 法律问答机器人等），
 issue 仍欢迎，但可能会被标记为 `wontfix` 并附说明。

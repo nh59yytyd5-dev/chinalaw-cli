@@ -6,7 +6,7 @@
 
 一般顺序：
 
-1. 读 `README.md`、`PROJECT_CHARTER.md`、`CONTRACT.md`、`ARCHITECTURE.md`。
+1. 读 `README.md`、`PROJECT_CHARTER.md`、`MVP_PLAN.md`、`CONTRACT.md`。
 2. 确认当前实现，不按旧文档猜。
 3. 新功能先写最小设计说明或 ADR。
 4. 改代码。
@@ -19,6 +19,7 @@
 | 文档 | 职责 |
 |------|------|
 | `PROJECT_CHARTER.md` | 项目定位，不写实现细节 |
+| `MVP_PLAN.md` | 当前实施计划 |
 | `CONTRACT.md` | 外部可依赖协议 |
 | `ARCHITECTURE.md` | 当前代码结构 |
 | `EXAMPLES.md` | 可执行调用示例 |
@@ -26,7 +27,7 @@
 | `DATA_INDEX.md` | 数据覆盖和补全路径 |
 | `decisions/ADR-*.md` | 重要决策记录 |
 
-不要在多个文档重复长篇战略论证。方向冲突时，以 `PROJECT_CHARTER.md`、`CONTRACT.md` 和 `README.md` 为准。
+不要在多个文档重复长篇战略论证。方向冲突时，以 `PROJECT_CHARTER.md` 和 `MVP_PLAN.md` 为准。
 
 ## 3. 代码边界
 

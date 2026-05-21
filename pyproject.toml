@@ -30,13 +30,13 @@ classifiers = [
   "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
-  # Runtime intentionally stays stdlib-only for the public preview.
+  # 暂未引入任何运行时依赖；首批拟引入见 NOTICES.md 第 1 节的候选清单。
 ]
 
 [project.optional-dependencies]
 dev = [
-  "ruff>=0.5",
-  "build>=1.2",
+  "pytest>=8.0",  # test runner，确保 clean checkout 后可直接运行测试套件。
+  "ruff>=0.5",  # lint
 ]
 
 [project.scripts]
@@ -82,3 +82,8 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 # RUF001/002/003：本项目主语言为中文，全角标点（，。；：（）「」""''）是正确写法，不是 ambiguous。
 # 含中文 fixture / 注释 / docstring / SQL 文本片段会大量误报，统一豁免。
 ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试 fixture 大量出现长中文法条 / 案号 / URL 字符串，强行换行反而割裂语义。
+# 仅 tests/ 目录下豁免 line-too-long。
+"tests/*" = ["E501"]

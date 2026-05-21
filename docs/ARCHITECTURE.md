@@ -1,6 +1,6 @@
 # 架构设计
 
-> 本文档只描述当前实现和近期演进边界。产品定位见 [`PROJECT_CHARTER.md`](./PROJECT_CHARTER.md)，外部协议见 [`CONTRACT.md`](./CONTRACT.md)。
+> 本文档只描述当前实现和近期演进边界。产品定位见 [`PROJECT_CHARTER.md`](./PROJECT_CHARTER.md)，当前计划见 [`MVP_PLAN.md`](./MVP_PLAN.md)。
 
 ## 1. 当前形态
 

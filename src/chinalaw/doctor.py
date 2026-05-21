@@ -76,6 +76,20 @@ def _add(
     checks.append(payload)
 
 
+def _script_hint(script: str) -> str:
+    if sys.platform.startswith("win"):
+        return f"运行 .\\scripts\\{script}.ps1。"
+    return f"运行 scripts/{script}。"
+
+
+def _path_hint() -> str:
+    if sys.platform.startswith("win"):
+        return (
+            "运行 .\\scripts\\install-local.ps1，或把 %USERPROFILE%\\.local\\bin 加入 Path。"
+        )
+    return "运行 scripts/install-local，或把 $HOME/.local/bin 加入 PATH。"
+
+
 def _check_path(checks: list[dict[str, Any]]) -> None:
     exe = shutil.which("chinalaw")
     if not exe:
@@ -84,7 +98,7 @@ def _check_path(checks: list[dict[str, Any]]) -> None:
             "path",
             "warn",
             "`chinalaw` 不在 PATH 中",
-            hint="运行 scripts/install-local，或把 $HOME/.local/bin 加入 PATH。",
+            hint=_path_hint(),
         )
         return
 
@@ -207,10 +221,15 @@ def _check_skills(checks: list[dict[str, Any]]) -> None:
         return
 
     expected = sorted(p.name for p in source.iterdir() if (p / "SKILL.md").exists())
+    opencode_skills = (
+        Path(os.environ["APPDATA"]) / "opencode" / "skills"
+        if sys.platform.startswith("win") and os.environ.get("APPDATA")
+        else Path.home() / ".config" / "opencode" / "skills"
+    )
     targets = [
         Path.home() / ".claude" / "skills",
         Path.home() / ".agents" / "skills",
-        Path.home() / ".config" / "opencode" / "skills",
+        opencode_skills,
     ]
     present: dict[str, list[str]] = {}
     for target in targets:
@@ -233,7 +252,7 @@ def _check_skills(checks: list[dict[str, Any]]) -> None:
             "skills_installed",
             status,
             message,
-            hint="如需刷新，运行 scripts/install-skills。",
+            hint=f"如需刷新，{_script_hint('install-skills')}",
             data={"expected": expected, "present": present},
         )
     else:
@@ -242,7 +261,7 @@ def _check_skills(checks: list[dict[str, Any]]) -> None:
             "skills_installed",
             "warn",
             "未检测到用户级 chinalaw skills",
-            hint="运行 scripts/install-skills，让 Claude Code / Codex / OpenCode 全局加载。",
+            hint=f"{_script_hint('install-skills')}让 Claude Code / Codex / OpenCode 全局加载。",
             data={"expected": expected, "targets": [str(t) for t in targets]},
         )
 
@@ -257,7 +276,7 @@ def _check_mcp(checks: list[dict[str, Any]]) -> None:
             "mcp_available",
             "warn",
             "`chinalaw-mcp` 不在 PATH 中",
-            hint="运行 scripts/install-local；MCP 不是主路径，CLI+skill 仍可用。",
+            hint=f"{_script_hint('install-local')}MCP 不是主路径，CLI+skill 仍可用。",
         )
 
 

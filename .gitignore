@@ -12,7 +12,6 @@ build/
 
 # uv / venv
 .venv/
-.venv-*/
 venv/
 env/
 .python-version

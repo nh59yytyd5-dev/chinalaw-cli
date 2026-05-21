@@ -39,8 +39,8 @@ patch 版本，并在 [`CHANGELOG.md`](./CHANGELOG.md) 中以 `### 修复（安�
 本仓库的安全策略覆盖：
 
 - `chinalaw` Python 包代码（`src/chinalaw/`）
-- 默认 fixture 数据（`data/fixtures/`、`data/applicability/`、
-  `data/recommended_corpus.json`）
+- 默认 fixture 数据（`data/fixtures/`、`data/applicability/`、`data/packs/`、
+  `data/norms/`）
 - CI 配置（`.github/workflows/`）
 - 发布产物（PyPI wheel、sdist）
 

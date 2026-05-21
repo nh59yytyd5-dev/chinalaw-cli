@@ -11,7 +11,7 @@ assignees: ''
 
 1. 这不是安全漏洞（安全问题请按 SECURITY.md 渠道私下报告）。
 2. 没有重复 issue（搜一下相似关键词）。
-3. 已读 README / docs/CONTRACT.md，知道当前 public preview 阶段哪些能力仍可能变化。
+3. 已读 README / docs/CONTRACT.md，知道当前 alpha 阶段哪些命令稳定、哪些是 maintainer-only。
 -->
 
 ## 复现步骤
@@ -41,8 +41,8 @@ PYTHONPATH=src python3 -m chinalaw search 工作时间 --format json
 ## 是否涉及真实数据源
 
 - [ ] 离线场景（fixtures / 本地 DB），不涉及上游
-- [ ] 涉及 `flk_npc` / `gov_xzfgk` / `court_gongbao` / `court_main` / `spp_gov_cn` / `csrc_gov_cn`（请说明 `verify-source` 输出 / 时间）
-- [ ] 涉及私域规范 (`norm ingest`) / 规范包 (`pack`) 等 preview 能力
+- [ ] 涉及 `flk_npc` / `court_gongbao` / `spp_gov_cn`（请说明 `verify-source` 输出 / 时间）
+- [ ] 涉及私域规范 (`norm ingest`) / 规范包 (`pack`)
 
 ## 其他信息
 

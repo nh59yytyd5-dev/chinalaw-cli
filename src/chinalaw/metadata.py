@@ -117,8 +117,39 @@ COMMAND_SPECS: dict[str, dict[str, Any]] = {
         },
         follow_ups=[
             "scripts/install-local",
+            ".\\scripts\\install-local.ps1",
             "scripts/install-skills",
+            ".\\scripts\\install-skills.ps1",
             "chinalaw sync --fixtures",
+        ],
+    ),
+    "init": _command(
+        "init",
+        summary=(
+            "Initialize the local public-law database by loading bundled "
+            "fixtures and then running doctor."
+        ),
+        risk="local-write",
+        side_effect="creates or updates the local database with bundled fixture content",
+        network="none unless --source-smoke is set",
+        flags=[
+            _arg("--strict", description="Treat doctor warnings as init failure."),
+            _arg("--source-smoke", description="Optional network smoke for one source."),
+            _arg("--format", choices=["json", "md"], description="Output format."),
+        ],
+        output_kind="init_result",
+        exit_codes={
+            "0": "fixtures loaded and doctor ok",
+            "1": "doctor reports failure",
+            "2": "usage error",
+        },
+        common_misuse=[
+            "Do not expect init to fetch every possible law; "
+            "use ensure/fetch for task-specific gaps."
+        ],
+        follow_ups=[
+            "chinalaw article 民法典 第一百四十三条 --format md",
+            "chinalaw doctor --format md",
         ],
     ),
     "resolve": _command(

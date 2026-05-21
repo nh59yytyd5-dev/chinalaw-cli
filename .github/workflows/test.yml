@@ -2,10 +2,12 @@ name: tests
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
   pull_request:
-    branches: [main]
+    branches: [master, main]
 
+# 默认离线 CI：不联网执行 verify-source / probe，避免上游波动导致红 build
+# （维护者可在 release 前手工执行 PYTHONPATH=src python3 -m chinalaw verify-source ...）
 permissions:
   contents: read
 
@@ -14,12 +16,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: windows-latest
+            python-version: "3.12"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,24 +41,99 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install tooling
-        run: python -m pip install --upgrade ".[dev]"
+      - name: Show versions
+        run: |
+          python --version
+          python -c "import sqlite3; print('sqlite', sqlite3.sqlite_version)"
 
-      - name: Compile source
-        run: PYTHONPATH=src python -m compileall -q src
+      - name: Compile-only sanity check
+        env:
+          PYTHONPATH: src
+        run: python -m compileall -q src tests
 
-      - name: Lint
-        run: ruff check src
+      - name: Run unit tests (offline)
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
 
-      - name: Build package
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: python -m pip install --upgrade "ruff>=0.5"
+
+      - name: Lint with ruff
+        run: ruff check src tests
+
+  windows-smoke:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Show versions
+        shell: pwsh
+        run: |
+          python --version
+          python -c "import sqlite3; print('sqlite', sqlite3.sqlite_version)"
+
+      - name: Install editable package
+        run: python -m pip install -e .
+
+      - name: Smoke init and article lookup
+        shell: pwsh
+        run: |
+          $db = Join-Path $env:RUNNER_TEMP "chinalaw-windows.db"
+          $initJson = chinalaw --no-notice --db $db init --format json
+          if ($LASTEXITCODE -ne 0) { throw "chinalaw init failed with exit $LASTEXITCODE" }
+          $init = $initJson | ConvertFrom-Json
+          if (-not $init.ok) { throw "chinalaw init returned ok=false" }
+
+          $articleJson = chinalaw --no-notice --db $db article 民法典 第一百四十三条 --format json
+          if ($LASTEXITCODE -ne 0) { throw "chinalaw article failed with exit $LASTEXITCODE" }
+          $article = $articleJson | ConvertFrom-Json
+          if ($null -eq $article.article) { throw "article lookup returned article=null" }
+
+          $doctorJson = chinalaw --no-notice --db $db doctor --format json
+          if ($LASTEXITCODE -ne 0) { throw "chinalaw doctor failed with exit $LASTEXITCODE" }
+          $doctor = $doctorJson | ConvertFrom-Json
+          if (-not $doctor.ok) { throw "chinalaw doctor returned ok=false" }
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, lint, windows-smoke]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade build
+
+      - name: Build sdist + wheel
         run: python -m build
 
-      - name: Smoke installed wheel
+      - name: Smoke import installed wheel
         run: |
           python -m venv .venv-smoke
           . .venv-smoke/bin/activate
           pip install dist/*.whl
-          tmpdb="$(mktemp)"
-          chinalaw --no-notice sync --fixtures --db "$tmpdb" --format json
-          chinalaw --no-notice resolve 民法典 --db "$tmpdb" --format json
-          chinalaw --no-notice article 民法典 第一百四十三条 --db "$tmpdb" --format json
+          chinalaw --help
+          python -c "import chinalaw; print(chinalaw.__name__)"

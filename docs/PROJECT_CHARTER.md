@@ -1,6 +1,6 @@
 # 项目宪章
 
-> 本文档是 `chinalaw-cli` 的最高层产品定位文档。协议契约见 [`CONTRACT.md`](./CONTRACT.md)，使用边界见 [`README.md`](../README.md)。
+> 本文档是 `chinalaw-cli` 的最高层产品定位文档。实现计划见 [`MVP_PLAN.md`](./MVP_PLAN.md)，协议契约见 [`CONTRACT.md`](./CONTRACT.md)。
 
 ## 1. 一句话
 

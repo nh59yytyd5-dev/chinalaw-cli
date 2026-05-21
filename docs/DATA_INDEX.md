@@ -1,79 +1,90 @@
 # Data Index
 
-This document describes the data bundled with the public preview repository.
+> 本文说明随包数据的真实覆盖范围。原则：公开初始库只能包含完整可引用的规范，
+> 不得包含 `seed` / `stub` 法规样本。
 
-## Scope
+## 1. 数据分层
 
-The repository ships a lightweight baseline under `data/fixtures/`, plus a few time-effect clue records under `data/applicability/`.
+| 层级 | 路径 | 含义 |
+| --- | --- | --- |
+| 完整随包 fixture | `data/fixtures/*.json` | `sync --fixtures` 会加载的公开规范全文或历史合并版本。必须有条文、来源 URL、核查时间和 `source_hash`。 |
+| 时间效力线索 | `data/applicability/*.json` | `relation/applicable` 使用的线索数据，不是完整法律结论。 |
+| 推荐安装清单 | `data/recommended_corpus.json` | 按领域列出建议补全的规范。它是 manifest，不是权威文本。 |
 
-The bundled data is intended for:
+CI / 发布前必须运行：
 
-- offline smoke tests;
-- common civil, commercial, criminal, procedural, constitutional, labor, and securities lookup scenarios;
-- agent grounding examples where the exact article text must be retrieved before use.
+```bash
+scripts/check-public-fixtures
+```
 
-The bundled data is not intended to be a complete legal database.
+该门禁会拒绝：
 
-## Included Paths
+- `status=seed` 或 `status=stub`；
+- 空 `articles`；
+- 缺 `source_name` / `source_url` / `source_checked_at` / `source_hash`。
 
-| Path | Purpose |
+## 2. 当前随包覆盖
+
+当前 `data/fixtures` 包含 74 个完整 fixture：
+
+| 范围 | 规范 |
 | --- | --- |
-| `data/fixtures/*.json` | Canonical law / judicial interpretation fixtures with article text and source metadata. |
-| `data/applicability/*.json` | Minimal transition / relationship clues. These are hints, not legal conclusions. |
-| `data/recommended_corpus.json` | A manifest of recommended laws by practice area. It is an install index, not authoritative text. |
+| 基础法典 / 程序法 | 宪法历次文本、民法典、刑法历次合并文本、民事诉讼法、刑事诉讼法、行政诉讼法、仲裁法 |
+| 通用行政 / 劳动 / 数据 | 行政处罚法、行政复议法、国家赔偿法、劳动法、劳动合同法、劳动争议调解仲裁法、个人信息保护法、数据安全法、网络安全法、消费者权益保护法、治安管理处罚法、诉讼费用交纳办法 |
+| 民商事 / 公司金融 | 公司法、合伙企业法、企业破产法、外商投资法、票据法、保险法、证券法、电子商务法 |
+| 民法典配套解释 | 时间效力规定、总则编解释、物权编解释（一）、合同编通则解释、担保制度解释、侵权责任编解释（一）、婚姻家庭编解释（一）（二）、继承编解释（一） |
+| 诉讼 / 合同 / 劳动司法解释 | 民事诉讼法解释、刑事诉讼法解释、行政诉讼法解释、民事诉讼证据规定、民间借贷规定、买卖合同解释、融资租赁合同解释、独立保函规定、建设工程施工合同解释（一）、商品房买卖合同解释、劳动争议解释（一） |
 
-The public preview intentionally does not ship private local materials, user documents, commercial database exports, agent eval runs, or maintainer-only research artifacts.
+## 3. 特殊维护口径
 
-## Required Metadata
+### 宪法
 
-Every fixture should preserve enough provenance for human review:
+宪法不走普通 `fetch 宪法` 补全路径。仓库维护同一 stable id
+`2c909fdd678bf17901678bf5a483004b` 下的历次文本：1954、1975、1978、
+1979、1980、1982、1988、1993、1999、2004、2018。
 
-- `id`
-- `title`
-- `short_title`
-- `status`
-- `source_name`
-- `source_url`
-- `source_checked_at`
-- `source_hash`
-- `articles`
+- 1954、1975、1978、1982 是原始宪法文本。
+- 1979、1980 是根据全国人大修正决议合并的文本。
+- 1988 年以后版本根据宪法修正案合并。
+- “序言”作为特殊条目入库，可用 `chinalaw article 宪法 序言` 查询。
 
-If a fixture contains no article text, it must not be presented as an authoritative current law. Missing text should fail loudly through command output and validation.
+### 刑法
 
-## Local Loading
+刑法也不走普通 `fetch 刑法` 补全路径。仓库维护同一 stable id
+`flk-criminal-law-1997` 下的历次合并文本版本：1979、1997、1998、1999、
+2001-08、2001-12、2002、2005、2006、2009-02、2009-08、2011、2015、
+2017、2020、2023。
+
+- 1979 版是原始文本，1997 版是整体修订文本。
+- 1998 版根据人大常委会相关决定合并，不称为“刑法修正案”。
+- 1999 年以后版本根据后续刑法修正案及相关修改决定合并。
+- 司法文书一般应引用修正后的《中华人民共和国刑法》条文；修正案和决定作为来源链。
+- 刑法溯及力不能由 `--as-of` 自动完成；仍须核查《刑法》第十二条及相关规则。
+
+## 4. 来源与补全
+
+随包 fixture 主要来自：
+
+- 国家法律法规数据库：`flk_npc`
+- 最高人民法院主站：`court_main`
+- 人工维护官方合并文本：仅限宪法、刑法等修正案体系特殊法律
+
+补全路径：
 
 ```bash
-chinalaw sync --fixtures
-chinalaw laws --format md
-chinalaw article 民法典 第一百四十三条 --format md
+chinalaw ensure <law> --format json
+chinalaw fetch <law> --to-fixture data/fixtures/<name>.json --format json
+scripts/check-public-fixtures
 ```
 
-For an isolated smoke run:
+如果官方源只有修正案、决定、新闻稿，无法形成可引用合并文本，应先开 issue 说明
+来源链和清洗方案，不能提交半成品 fixture。
 
-```bash
-tmpdb="$(mktemp)"
-chinalaw sync --fixtures --db "$tmpdb" --format json
-chinalaw article 民法典 第一百四十三条 --db "$tmpdb" --format json
-```
+## 5. 不纳入随包数据
 
-## Updating Data
+- 用户本机私域材料。
+- 商业数据库内容、编注本、裁判要旨、专家点评。
+- 地方性法规全量、行业规则全量、案例库。
+- 官方源尚不能稳定抓取或无法确认版本状态的规范全文。
 
-Prefer this order:
-
-1. Use `chinalaw ensure <law>` or `chinalaw fetch <law>` to retrieve and clean from a public source.
-2. Verify source metadata and article count.
-3. Review the normalized JSON fixture.
-4. Add the fixture in a dedicated PR with the source URL and verification command.
-
-Do not copy from commercial databases, paid annotations, unofficial summaries, or private local material.
-
-## Time Effect
-
-`data/applicability/` provides machine-readable clues such as replacement relationships and transition topics. These records help an agent notice possible time-effect issues, but they are not legal conclusions.
-
-When facts involve historical dates, the agent should:
-
-1. identify the relevant date;
-2. inspect the current law and known predecessor law;
-3. retrieve the applicable version where available;
-4. report uncertainty if the local data does not resolve the issue.
+这些材料未来可以通过私域规范、外部 adapter 或独立数据包接入，但不能混入公开初始库。

@@ -17,7 +17,8 @@ Channel 启发式见 ``CHANNEL_TO_LEVEL_HINT``：``sfjs`` 默认司法解释；`
 启发式（含「指导意见」/「意见」 → ``judicial_policy``；含「指导性案例」 →
 ``guiding_case``）。
 
-候选源详情见 ``docs/decisions/ADR-0008-multi-source-adapters.md`` §1.2。
+候选源详情见 ``docs/decisions/ADR-0008-multi-source-adapters.md`` §1.2
+与 ``docs/research/2026-05-source-coverage-survey.md`` §4.2。
 """
 
 from __future__ import annotations

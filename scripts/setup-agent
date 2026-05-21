@@ -20,7 +20,7 @@ usage() {
 Usage: scripts/setup-agent [options]
 
 Install/update the global chinalaw command, install agent skills, optionally
-load demo fixtures, then run chinalaw doctor.
+load bundled public fixtures, then run chinalaw doctor.
 
 Options:
   --sync-fixtures  Load builtin fixture data after installing the wrapper.
