@@ -25,7 +25,7 @@
 ```bash
 git clone https://github.com/<your-fork>/chinalaw-cli.git
 cd chinalaw-cli
-PYTHONPATH=src python3 -m chinalaw status      # 应该报告 schema_version=6
+PYTHONPATH=src python3 -m chinalaw status      # 应报告当前 schema_version
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 

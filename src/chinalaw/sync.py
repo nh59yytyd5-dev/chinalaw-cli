@@ -9,6 +9,8 @@ from chinalaw.db import connect, get_meta, migrate, set_meta
 from chinalaw.loader import load_law_from_dict
 from chinalaw.sources import get_source_adapter
 
+SYNC_SOURCES: tuple[str, ...] = ("flk_npc",)
+
 
 def sync_source(
     db_path: Path | str,
@@ -30,7 +32,7 @@ def sync_source(
     overlap_days: int = 1,
 ) -> dict:
     normalized = source.strip().lower().replace("-", "_")
-    if normalized != "flk_npc":
+    if normalized not in SYNC_SOURCES:
         raise ValueError(f"unsupported source for sync: {source}")
 
     adapter = get_source_adapter(normalized)

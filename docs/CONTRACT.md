@@ -1,10 +1,10 @@
-# chinalaw-cli · Protocol Contract v0.1
+# chinalaw-cli · Protocol Contract
 
 > 这份文档钉住 chinalaw-cli 与外部世界（agent / CLI 用户 / 私域规范贡献者 / 重写实现者）之间的契约。
 >
 > **30 分钟可读完。** 如果读不完，是协议太厚了 —— 提 issue。
 >
-> 状态：**Draft**（Alpha 阶段可能微调）。一旦发布 v0.1.0，本文档进入 SemVer 兼容承诺。
+> 状态：**Draft**（v0.x 阶段可能微调）。自 v0.1.0 起，本文档按 SemVer 兼容承诺演进。
 >
 > 编写时的检验问题："如果有人用 Rust / Go 重写 chinalaw-cli，这份文档够不够？" 不够 → 继续补；够 → 停。
 
@@ -46,7 +46,7 @@
 
 ## 2. 数据模型（SQLite DDL）
 
-> 所有表 schema 由 `chinalaw.schema` 模块在 `migrate()` 时创建。当前 schema 版本 = **7**。
+> 所有表 schema 由 `chinalaw.schema` 模块在 `migrate()` 时创建。当前 schema 版本 = **9**。
 >
 > `law_relations` / `applicability_rules` 已进入 alpha 协议，用于时间效力检索线索。`alias_records` / `call_log` 仍属后续方向。
 
@@ -1526,6 +1526,89 @@ profile manifest 可为单个条目声明 `fetch_status`，用于把废止 / 已
 ```
 
 退出码：成功 0；未知 profile 或 manifest 格式错误 2。
+
+### 4.12.2 `sources list|show` (planning contract)
+
+查看官方 / 补充 / 行业来源的覆盖范围、命令能力和公开 v0.2 迁移成熟度。该命令只读
+`data/source_coverage.json`，不联网、不入库；它是 source coverage 的机器可读事实表，
+用于防止 README、issue、adapter 常量之间漂移。
+
+输入：
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `list` | literal | 无 | 列出来源摘要 |
+| `show <source>` | literal + string | 无 | 查看单个 source id，如 `flk_npc` / `gov_xzfgk` |
+| `--class` | enum | 无 | 按 `primary|supplemental|industry|manual_review|commercial_optional` 过滤 |
+| `--public-v2` | enum | 无 | 按公开 v0.2 迁移状态过滤 |
+| `--implemented-only` | flag | false | 只列已有 adapter 的来源 |
+
+`sources list` JSON：
+
+```json
+{
+  "kind": "source_coverage_sources",
+  "schema_version": "integer",
+  "as_of": "YYYY-MM-DD",
+  "path": "string",
+  "filters": {
+    "coverage_class": "string|null",
+    "public_v2": "string|null",
+    "implemented_only": "boolean"
+  },
+  "source_count": "integer",
+  "sources": [
+    {
+      "id": "string",
+      "name": "string",
+      "coverage_class": "primary|supplemental|industry|manual_review|commercial_optional",
+      "authority_layer": "string",
+      "adapter_status": "implemented|planned|future_optional|unsupported",
+      "maturity": "stable_core|candidate|beta|planned|not_baseline|unsupported",
+      "public_v2": "include|candidate|develop_only|blocked_until_investigated|defer|not_baseline",
+      "commands": {
+        "probe": "supported|unsupported",
+        "verify_source": "supported|unsupported",
+        "fetch": "supported|unsupported",
+        "discover": "supported|unsupported",
+        "sync": "supported|unsupported",
+        "status_filter": "full|current_only|unsupported"
+      }
+    }
+  ]
+}
+```
+
+`sources show` JSON：
+
+```json
+{
+  "kind": "source_coverage_source",
+  "schema_version": "integer",
+  "as_of": "YYYY-MM-DD",
+  "path": "string",
+  "source": {
+    "id": "string",
+    "name": "string",
+    "coverage_class": "string",
+    "authority_layer": "string",
+    "adapter_status": "string",
+    "maturity": "string",
+    "public_v2": "string",
+    "urls": ["string"],
+    "commands": {"fetch": "supported|unsupported"},
+    "content_scope": ["string"],
+    "limitations": ["string"]
+  }
+}
+```
+
+退出码：成功 0；未知 source 或 catalog 格式错误 1；参数错误 2。
+
+实现不变量：`data/source_coverage.json` 中 `adapter_status=implemented`、`commands.fetch`
+/ `discover` / `verify_source` / `sync` 的来源集合必须分别与 `ADAPTER_REGISTRY`、
+`FETCH_SOURCES`、`DISCOVER_SOURCES`、`VERIFIABLE_SOURCES`、`SYNC_SOURCES` 一致。
+这项由单元测试守门，新增源时不能只改 adapter 或 README。
 
 ### 4.13 `rebuild-clean` (alpha)
 

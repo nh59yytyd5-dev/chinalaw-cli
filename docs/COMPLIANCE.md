@@ -62,7 +62,7 @@
 基础形态：
 
 ```
-chinalaw-cli/0.1.0 (+https://github.com/chinalaw-cli/chinalaw-cli)
+chinalaw-cli/<version> (+https://github.com/chinalaw-cli/chinalaw-cli)
 ```
 
 部分 adapter（`court_gongbao` / `court_main` / `spp_gov_cn`）在前置带 `Mozilla/5.0

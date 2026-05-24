@@ -3,16 +3,35 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
 import io
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from chinalaw import cleaning, cli, doctor, formatters, loader, mcp, metadata, notices, service
+from chinalaw import (
+    USER_AGENT_TOKEN,
+    __version__,
+    cleaning,
+    cli,
+    discover,
+    doctor,
+    fetch,
+    formatters,
+    loader,
+    mcp,
+    metadata,
+    notices,
+    service,
+    source_coverage,
+    sources,
+)
 from chinalaw.db import connect, migrate
+from chinalaw.sync import SYNC_SOURCES
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,6 +82,129 @@ class AgentPlatformSchemaTests(unittest.TestCase):
             len(json.dumps(listed["result"]["tools"], ensure_ascii=False)),
             payload["context_budget"]["target_tools_list_chars"],
         )
+
+
+class ReleaseMetadataTests(unittest.TestCase):
+    def test_pyproject_version_matches_package_version(self) -> None:
+        pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE)
+
+        self.assertIsNotNone(match)
+        self.assertEqual(__version__, match.group(1))
+
+    def test_mcp_server_info_uses_package_version(self) -> None:
+        self.assertEqual(__version__, mcp.SERVER_INFO["version"])
+
+    def test_registered_adapter_user_agents_use_release_token(self) -> None:
+        self.assertEqual(
+            f"chinalaw-cli/{__version__} (+https://github.com/chinalaw-cli/chinalaw-cli)",
+            USER_AGENT_TOKEN,
+        )
+        seen_modules: set[str] = set()
+        for adapter in sources.ADAPTER_REGISTRY.values():
+            module_name = adapter.__class__.__module__
+            if module_name in seen_modules:
+                continue
+            seen_modules.add(module_name)
+            module = importlib.import_module(module_name)
+            user_agent = getattr(module, "DEFAULT_USER_AGENT", "")
+
+            self.assertIn(USER_AGENT_TOKEN, user_agent, module_name)
+
+
+class SourceCoverageCatalogTests(unittest.TestCase):
+    def test_catalog_aligns_with_source_capability_constants(self) -> None:
+        payload = source_coverage.list_sources()
+        by_id = {item["id"]: item for item in payload["sources"]}
+
+        self.assertEqual(set(sources.ADAPTER_REGISTRY), {
+            source_id
+            for source_id, item in by_id.items()
+            if item["adapter_status"] == "implemented"
+        })
+        self.assertEqual(set(fetch.FETCH_SOURCES), {
+            source_id
+            for source_id, item in by_id.items()
+            if item["commands"]["fetch"] == "supported"
+        })
+        self.assertEqual(set(discover.DISCOVER_SOURCES), {
+            source_id
+            for source_id, item in by_id.items()
+            if item["commands"]["discover"] == "supported"
+        })
+        self.assertEqual(set(sources.VERIFIABLE_SOURCES), {
+            source_id
+            for source_id, item in by_id.items()
+            if item["commands"]["verify_source"] == "supported"
+        })
+        self.assertEqual(set(SYNC_SOURCES), {
+            source_id
+            for source_id, item in by_id.items()
+            if item["commands"]["sync"] == "supported"
+        })
+        self.assertEqual(set(sources.STATUS_FILTER_SUPPORTED), {
+            source_id
+            for source_id, item in by_id.items()
+            if item["commands"]["status_filter"] == "full"
+        })
+        self.assertEqual(set(sources.CURRENT_ONLY_STATUS_SOURCES), {
+            source_id
+            for source_id, item in by_id.items()
+            if item["commands"]["status_filter"] == "current_only"
+        })
+
+    def test_catalog_rejects_status_filter_value_on_boolean_command(self) -> None:
+        payload = json.loads((REPO_ROOT / "data" / "source_coverage.json").read_text("utf-8"))
+        payload["sources"][0]["commands"]["fetch"] = "full"
+
+        with tempfile.TemporaryDirectory() as td:
+            catalog_path = Path(td) / "source_coverage.json"
+            catalog_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                source_coverage.SourceCoverageError,
+                "source flk_npc command fetch has invalid status 'full'",
+            ):
+                source_coverage.load_catalog(catalog_path)
+
+    def test_catalog_rejects_boolean_value_on_status_filter_command(self) -> None:
+        payload = json.loads((REPO_ROOT / "data" / "source_coverage.json").read_text("utf-8"))
+        payload["sources"][0]["commands"]["status_filter"] = "supported"
+
+        with tempfile.TemporaryDirectory() as td:
+            catalog_path = Path(td) / "source_coverage.json"
+            catalog_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                source_coverage.SourceCoverageError,
+                "source flk_npc command status_filter has invalid status 'supported'",
+            ):
+                source_coverage.load_catalog(catalog_path)
+
+    def test_cli_sources_list_and_show(self) -> None:
+        code, payload = _run_cli(
+            ["--no-notice", "sources", "list", "--implemented-only", "--format", "json"]
+        )
+
+        self.assertEqual(0, code)
+        self.assertEqual("source_coverage_sources", payload["kind"])
+        self.assertGreaterEqual(payload["source_count"], 1)
+        ids = {item["id"] for item in payload["sources"]}
+        self.assertIn("flk_npc", ids)
+        self.assertIn("gov_xzfgk", ids)
+
+        code, payload = _run_cli(["--no-notice", "sources", "show", "gov_xzfgk", "--format", "json"])
+        self.assertEqual(0, code)
+        self.assertEqual("source_coverage_source", payload["kind"])
+        self.assertEqual("gov_xzfgk", payload["source"]["id"])
+        self.assertEqual("include", payload["source"]["public_v2"])
+
+    def test_cli_sources_unknown_returns_error(self) -> None:
+        code, payload = _run_cli(["--no-notice", "sources", "show", "missing", "--format", "json"])
+
+        self.assertEqual(1, code)
+        self.assertEqual("source_coverage_error", payload["kind"])
+        self.assertEqual("SourceCoverageError", payload["error"])
 
 
 class AgentPlatformDoctorTests(unittest.TestCase):
@@ -284,8 +426,7 @@ class AgentSetupScriptTests(unittest.TestCase):
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
         self.assertTrue(script.exists())
-        if os.name != "nt":
-            self.assertTrue(script.stat().st_mode & 0o111)
+        self.assertTrue(script.stat().st_mode & 0o111)
         self.assertTrue(windows_script.exists())
         self.assertIn("scripts/setup-agent", readme)
         self.assertIn(".\\scripts\\setup-agent.ps1", readme)

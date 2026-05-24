@@ -30,7 +30,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin
 from urllib.request import Request, urlopen
 
-from chinalaw import cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning
 from chinalaw.adapters import _html as _adapter_html
 from chinalaw.document_numbers import extract_document_number
 
@@ -46,7 +46,7 @@ MIN_REQUEST_INTERVAL = 0.1
 # UA 同时含浏览器兼容前缀（避免 ASP.NET URLScan 等遗留 WAF 在纯工具 UA 下
 # 误杀）和 chinalaw-cli 标识（让站点 access log 能识别本工具）。chinalaw-cli
 # 标识始终存在，详见 docs/COMPLIANCE.md §4。
-TOOL_UA_TOKEN = "chinalaw-cli/0.1.1 (+https://github.com/chinalaw-cli/chinalaw-cli)"
+TOOL_UA_TOKEN = USER_AGENT_TOKEN
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "

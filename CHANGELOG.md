@@ -5,14 +5,31 @@
 
 ## [Unreleased]
 
-## [0.1.1] — 2026-05-21
+## [0.2.0] — 2026-05-24
 
-### 修复
+### 新增（public v0.2 source coverage catalog，2026-05-24，issue #105）
 
-- 修复 Windows 默认 cp1252 输出中文 JSON 时可能触发 `UnicodeEncodeError` 的问题，CLI 入口和 wrapper 统一启用 UTF-8。
-- 修复 SQLite 初始化异常时连接未关闭导致 Windows 临时数据库文件被锁的问题。
-- 增强 `scripts/install-local` / `scripts/install-local.ps1`：venv 创建失败或 pip 缺失时不让安装直接中断，自动尝试 `ensurepip`，否则安装可用的 PYTHONPATH fallback wrapper。
-- GitHub Actions 新增 Ubuntu / macOS / Windows 三平台安装烟测，要求公开安装脚本可以完成 `init`、`article`、`doctor`。
+- 新增 `data/source_coverage.json` 作为 source 覆盖范围、命令能力、成熟度和
+  公开 v0.2 迁移状态的机器可读事实表。
+- 新增 `chinalaw sources list|show`，支持 `--implemented-only`、`--class`、
+  `--public-v2` 与 JSON / Markdown 输出；`metadata.py`、`CONTRACT.md`、
+  `DATA_INDEX.md`、`README.md` 和 `EXAMPLES.md` 同步声明该契约。
+- `pyproject.toml` 将 `data/source_coverage.json` 纳入 wheel/sdist 包数据。
+- `gov_xzfgk` 在 source coverage 中升级为 `public_v2=include`：公开 v0.2 纳入
+  `fetch/discover` 预览路径；2026-05-24 直连 `verify-source` smoke 已验证
+  `行政法规制定程序条例` 可清洗 48 条并定位第一条；`sync --source gov_xzfgk`
+  仍不承诺。
+- source coverage catalog 测试现在校验 `ADAPTER_REGISTRY`、`FETCH_SOURCES`、
+  `DISCOVER_SOURCES`、`VERIFIABLE_SOURCES`、`SYNC_SOURCES`、
+  `STATUS_FILTER_SUPPORTED` 与 `CURRENT_ONLY_STATUS_SOURCES` 全部和 catalog
+  一致。
+- 修复 #105：catalog validator 不再用一个混合枚举校验所有 command；
+  `probe` / `verify_source` / `fetch` / `discover` / `sync` 只允许
+  `supported|unsupported`，`status_filter` 只允许
+  `full|current_only|unsupported`。
+- 修复 #2：`CONTRACT.md` 不再把协议标题钉死为 v0.1，并把当前 SQLite
+  schema 文档从过期的 v7 更新为 v9；`CONTRIBUTING.md` 不再硬编码
+  `schema_version=6` 示例。
 
 ### 新增（agent platform 稳定性，2026-05-20，issues #81/#82/#83/#84/#86/#88/#89）
 
@@ -1145,6 +1162,15 @@
   告警、CLI dry-run 预览与 warning 退出码覆盖
 - 测试套件扩展到 201 个用例，新增 `cited-by` 反向引用 service / CLI、阿拉伯到
   中文数字转换、spec 解析与 markdown 输出无重复前缀覆盖
+
+## [0.1.1] — 2026-05-21
+
+### 修复
+
+- 修复 Windows 默认 cp1252 输出中文 JSON 时可能触发 `UnicodeEncodeError` 的问题，CLI 入口和 wrapper 统一启用 UTF-8。
+- 修复 SQLite 初始化异常时连接未关闭导致 Windows 临时数据库文件被锁的问题。
+- 增强 `scripts/install-local` / `scripts/install-local.ps1`：venv 创建失败或 pip 缺失时不让安装直接中断，自动尝试 `ensurepip`，否则安装可用的 PYTHONPATH fallback wrapper。
+- GitHub Actions 新增 Ubuntu / macOS / Windows 三平台安装烟测，要求公开安装脚本可以完成 `init`、`article`、`doctor`。
 
 ## [0.1.0] — 2026-04-19
 

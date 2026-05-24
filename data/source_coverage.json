@@ -1,0 +1,463 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-05-24",
+  "kind": "source_coverage_catalog",
+  "description": "Machine-readable source coverage and maturity catalog for chinalaw-cli. This file records source capability boundaries; it is not legal authority.",
+  "policy": {
+    "principle": "Do not make every source support every command. Promote capabilities by source maturity, not by ad-hoc website additions.",
+    "layers": [
+      "fetch: one-document on-demand retrieval when detail pages are stable",
+      "discover: candidate listing when search/list semantics are bounded",
+      "sync: batch/incremental import only when pagination, ids, throttling, and version semantics are stable"
+    ],
+    "public_v2_gate": "A source may be promoted in the public release only after contract, tests, real smoke, provenance, fail-loud behavior, and anti-hardcode review pass."
+  },
+  "sources": [
+    {
+      "id": "flk_npc",
+      "name": "国家法律法规数据库",
+      "coverage_class": "primary",
+      "authority_layer": "national_laws_and_regulations",
+      "adapter_status": "implemented",
+      "maturity": "stable_core",
+      "public_v2": "include",
+      "urls": [
+        "https://flk.npc.gov.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "supported",
+        "status_filter": "full"
+      },
+      "content_scope": [
+        "宪法",
+        "法律",
+        "行政法规",
+        "部分司法解释",
+        "部分地方性法规",
+        "部分部门规章"
+      ],
+      "limitations": [
+        "宪法和刑法历史合并文本不走普通 fetch 补全路径，仍由出厂 fixture 单独维护。",
+        "source row 状态和详情页元数据需要持续 smoke，不能把单次 fetch 视为永久权威。"
+      ]
+    },
+    {
+      "id": "gov_xzfgk",
+      "name": "国家行政法规库",
+      "coverage_class": "primary",
+      "authority_layer": "administrative_regulations",
+      "adapter_status": "implemented",
+      "maturity": "candidate",
+      "public_v2": "include",
+      "urls": [
+        "https://www.gov.cn/zhengce/xzfgk/",
+        "https://xzfg.moj.gov.cn/search2.html"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "unsupported",
+        "status_filter": "current_only"
+      },
+      "content_scope": [
+        "行政法规",
+        "行政法规历史版本链线索"
+      ],
+      "limitations": [
+        "公开 v0.2 仅纳入 fetch/discover 预览路径，尚未承诺 batch sync。",
+        "2026-05-24 已通过直连 verify-source smoke：行政法规制定程序条例，48 条，第一条定位成功。"
+      ]
+    },
+    {
+      "id": "court_gongbao",
+      "name": "最高人民法院公报",
+      "coverage_class": "supplemental",
+      "authority_layer": "judicial_source",
+      "adapter_status": "implemented",
+      "maturity": "beta",
+      "public_v2": "develop_only",
+      "urls": [
+        "https://gongbao.court.gov.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "unsupported",
+        "sync": "unsupported",
+        "status_filter": "unsupported"
+      },
+      "content_scope": [
+        "最高人民法院公报司法解释",
+        "批复",
+        "会议纪要",
+        "公报案例",
+        "司法政策文件"
+      ],
+      "limitations": [
+        "不是全量司法解释数据库。",
+        "栏目语义强于全站检索语义，暂不暴露 discover/sync。"
+      ]
+    },
+    {
+      "id": "court_main",
+      "name": "最高人民法院主站",
+      "coverage_class": "supplemental",
+      "authority_layer": "judicial_source",
+      "adapter_status": "implemented",
+      "maturity": "beta",
+      "public_v2": "develop_only",
+      "urls": [
+        "https://www.court.gov.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "unsupported",
+        "sync": "unsupported",
+        "status_filter": "unsupported"
+      },
+      "content_scope": [
+        "最高人民法院主站发布的司法解释",
+        "司法政策",
+        "通知",
+        "新闻稿承载的规范文本"
+      ],
+      "limitations": [
+        "主站页面形态不等于法规数据库，必须经过清洗和标题识别。",
+        "仅作为 court_gongbao/FLK 之外的补充来源。"
+      ]
+    },
+    {
+      "id": "spp_gov_cn",
+      "name": "最高人民检察院",
+      "coverage_class": "supplemental",
+      "authority_layer": "procuratorate_source",
+      "adapter_status": "implemented",
+      "maturity": "beta",
+      "public_v2": "develop_only",
+      "urls": [
+        "https://www.spp.gov.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "unsupported",
+        "sync": "unsupported",
+        "status_filter": "unsupported"
+      },
+      "content_scope": [
+        "最高检司法解释",
+        "检察工作规范性文件",
+        "刑事司法相关材料"
+      ],
+      "limitations": [
+        "不是全量刑事规范来源。",
+        "联合发布文件需要和最高法/FLK 来源交叉核验。"
+      ]
+    },
+    {
+      "id": "csrc_gov_cn",
+      "name": "中国证监会",
+      "coverage_class": "industry",
+      "authority_layer": "securities_regulation",
+      "adapter_status": "implemented",
+      "maturity": "candidate",
+      "public_v2": "candidate",
+      "urls": [
+        "https://www.csrc.gov.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "unsupported",
+        "status_filter": "current_only"
+      },
+      "content_scope": [
+        "证监会规章",
+        "规范性文件",
+        "监管规则"
+      ],
+      "limitations": [
+        "证券监管文件类型复杂，公开 v0.2 前需要更强的 level/source_type 标注。"
+      ]
+    },
+    {
+      "id": "bse_cn",
+      "name": "北京证券交易所",
+      "coverage_class": "industry",
+      "authority_layer": "securities_self_regulatory",
+      "adapter_status": "implemented",
+      "maturity": "candidate",
+      "public_v2": "candidate",
+      "urls": [
+        "https://www.bse.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "unsupported",
+        "status_filter": "current_only"
+      },
+      "content_scope": [
+        "交易所业务规则",
+        "自律监管规则"
+      ],
+      "limitations": [
+        "自律规则不得和法律、行政法规混同；输出必须保留 level/source_type。"
+      ]
+    },
+    {
+      "id": "sse_com_cn",
+      "name": "上海证券交易所",
+      "coverage_class": "industry",
+      "authority_layer": "securities_self_regulatory",
+      "adapter_status": "implemented",
+      "maturity": "candidate",
+      "public_v2": "candidate",
+      "urls": [
+        "https://www.sse.com.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "unsupported",
+        "status_filter": "current_only"
+      },
+      "content_scope": [
+        "交易所业务规则",
+        "自律监管规则"
+      ],
+      "limitations": [
+        "附件标题和正文标题可能不同，必须经过清洗确认后入库。"
+      ]
+    },
+    {
+      "id": "szse_cn",
+      "name": "深圳证券交易所",
+      "coverage_class": "industry",
+      "authority_layer": "securities_self_regulatory",
+      "adapter_status": "implemented",
+      "maturity": "candidate",
+      "public_v2": "candidate",
+      "urls": [
+        "https://www.szse.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "unsupported",
+        "status_filter": "current_only"
+      },
+      "content_scope": [
+        "交易所业务规则",
+        "自律监管规则"
+      ],
+      "limitations": [
+        "列表 API 和附件解析都需要持续 smoke。"
+      ]
+    },
+    {
+      "id": "chinaclear_cn",
+      "name": "中国证券登记结算有限责任公司",
+      "coverage_class": "industry",
+      "authority_layer": "securities_self_regulatory",
+      "adapter_status": "implemented",
+      "maturity": "candidate",
+      "public_v2": "candidate",
+      "urls": [
+        "https://www.chinaclear.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "unsupported",
+        "status_filter": "current_only"
+      },
+      "content_scope": [
+        "登记结算业务规则",
+        "证券登记结算自律规则"
+      ],
+      "limitations": [
+        "规则层级不是国家法，引用时必须标明来源主体。"
+      ]
+    },
+    {
+      "id": "sac_net_cn",
+      "name": "中国证券业协会",
+      "coverage_class": "industry",
+      "authority_layer": "securities_self_regulatory",
+      "adapter_status": "implemented",
+      "maturity": "candidate",
+      "public_v2": "candidate",
+      "urls": [
+        "https://www.sac.net.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "unsupported",
+        "status_filter": "current_only"
+      },
+      "content_scope": [
+        "证券业协会自律规则",
+        "执业规范"
+      ],
+      "limitations": [
+        "协会规则需要和证监会规章、交易所规则区分效力层级。"
+      ]
+    },
+    {
+      "id": "gjgzk",
+      "name": "国家规章库",
+      "coverage_class": "primary",
+      "authority_layer": "department_and_local_government_rules",
+      "adapter_status": "planned",
+      "maturity": "planned",
+      "public_v2": "blocked_until_investigated",
+      "urls": [],
+      "commands": {
+        "probe": "unsupported",
+        "verify_source": "unsupported",
+        "fetch": "unsupported",
+        "discover": "unsupported",
+        "sync": "unsupported",
+        "status_filter": "unsupported"
+      },
+      "content_scope": [
+        "部门规章",
+        "地方政府规章"
+      ],
+      "limitations": [
+        "必须先完成源调查、URL/API 形态、分页和版本语义确认，再实现 adapter。"
+      ]
+    },
+    {
+      "id": "gov_policy",
+      "name": "国务院政策文件库",
+      "coverage_class": "supplemental",
+      "authority_layer": "state_council_policy_documents",
+      "adapter_status": "planned",
+      "maturity": "planned",
+      "public_v2": "defer",
+      "urls": [
+        "https://www.gov.cn/zhengce/"
+      ],
+      "commands": {
+        "probe": "unsupported",
+        "verify_source": "unsupported",
+        "fetch": "unsupported",
+        "discover": "unsupported",
+        "sync": "unsupported",
+        "status_filter": "unsupported"
+      },
+      "content_scope": [
+        "国务院政策文件",
+        "部门规范性文件线索"
+      ],
+      "limitations": [
+        "必须标注为 normative_document/policy_document，不得混同法律、行政法规。"
+      ]
+    },
+    {
+      "id": "mps_gov_cn",
+      "name": "公安部",
+      "coverage_class": "supplemental",
+      "authority_layer": "ministry_source",
+      "adapter_status": "planned",
+      "maturity": "planned",
+      "public_v2": "defer",
+      "urls": [
+        "https://www.mps.gov.cn/"
+      ],
+      "commands": {
+        "probe": "unsupported",
+        "verify_source": "unsupported",
+        "fetch": "unsupported",
+        "discover": "unsupported",
+        "sync": "unsupported",
+        "status_filter": "unsupported"
+      },
+      "content_scope": [
+        "公安机关程序规定",
+        "公安部规范性文件"
+      ],
+      "limitations": [
+        "优先检查国家规章库覆盖，源站 adapter 作为 fallback。"
+      ]
+    },
+    {
+      "id": "moj_gov_cn",
+      "name": "司法部",
+      "coverage_class": "supplemental",
+      "authority_layer": "ministry_source",
+      "adapter_status": "planned",
+      "maturity": "planned",
+      "public_v2": "defer",
+      "urls": [
+        "https://www.moj.gov.cn/"
+      ],
+      "commands": {
+        "probe": "unsupported",
+        "verify_source": "unsupported",
+        "fetch": "unsupported",
+        "discover": "unsupported",
+        "sync": "unsupported",
+        "status_filter": "unsupported"
+      },
+      "content_scope": [
+        "行政复议",
+        "律师、公证、仲裁、司法行政相关规则"
+      ],
+      "limitations": [
+        "与国家行政法规库、国家规章库存在覆盖重叠，不能重复入库成不同权威版本。"
+      ]
+    },
+    {
+      "id": "pkulaw_mcp",
+      "name": "北大法宝 MCP",
+      "coverage_class": "commercial_optional",
+      "authority_layer": "commercial_database",
+      "adapter_status": "future_optional",
+      "maturity": "not_baseline",
+      "public_v2": "not_baseline",
+      "urls": [
+        "https://mcp.pkulaw.com/"
+      ],
+      "commands": {
+        "probe": "unsupported",
+        "verify_source": "unsupported",
+        "fetch": "unsupported",
+        "discover": "unsupported",
+        "sync": "unsupported",
+        "status_filter": "unsupported"
+      },
+      "content_scope": [
+        "用户自有商业订阅可访问的数据"
+      ],
+      "limitations": [
+        "商业数据库可以作为未来可选上游 adapter，不能作为开源基础功能依赖。"
+      ]
+    }
+  ]
+}

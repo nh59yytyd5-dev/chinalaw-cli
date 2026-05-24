@@ -28,7 +28,7 @@
 
 | 数据源 | URL | 性质 | 授权 | 使用方式 | 登记日期 |
 |--------|-----|------|------|---------|---------|
-| 国家法律法规数据库 | https://flk.npc.gov.cn | 全国人大常委会办公厅主办的官方公开数据库 | 法律 / 行政法规 / 司法解释正文属公有领域（著作权法 §5） | adapter `chinalaw.adapters.flk_npc`：probe / search_list / fetch_detail（Word docx） / build_law_payload；节流默认 500ms，硬下限 100ms；UA 含 `chinalaw-cli/0.1.0` 标识 | 2026-04 |
+| 国家法律法规数据库 | https://flk.npc.gov.cn | 全国人大常委会办公厅主办的官方公开数据库 | 法律 / 行政法规 / 司法解释正文属公有领域（著作权法 §5） | adapter `chinalaw.adapters.flk_npc`：probe / search_list / fetch_detail（Word docx） / build_law_payload；节流默认 500ms，硬下限 100ms；UA 含 `chinalaw-cli/<version>` 标识 | 2026-04 |
 | 最高人民法院公报 | http://gongbao.court.gov.cn | 最高人民法院公报站点（ASP.NET 静态 HTML） | 司法解释 / 司法文件 / 公报案例 / 工作报告等正文属公有领域 | adapter `chinalaw.adapters.court_gongbao`：probe / search_list / fetch_detail / cross_search / build_law_payload；节流 500ms / 硬下限 100ms；UA 同上 | 2026-05 |
 | 最高人民检察院 | https://www.spp.gov.cn | 最高人民检察院官方站点（Tengine 静态 .shtml） | 两高 / 两高一部联合刑事司法解释 / 检察规范文件 / 指导性案例正文属公有领域 | adapter `chinalaw.adapters.spp_gov_cn`：probe / search_list / fetch_detail / build_law_payload；节流 500ms / 硬下限 100ms；UA 同上 | 2026-05 |
 

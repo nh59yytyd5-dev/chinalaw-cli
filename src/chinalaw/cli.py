@@ -25,6 +25,7 @@ from chinalaw import (
     rebuild,
     service,
     snapshots,
+    source_coverage,
     sources,
 )
 from chinalaw import (
@@ -36,7 +37,7 @@ from chinalaw import (
 )
 from chinalaw import fetch as fetch_mod
 from chinalaw.db import DEFAULT_DB_PATH
-from chinalaw.sync import sync_source
+from chinalaw.sync import SYNC_SOURCES, sync_source
 
 _NOTICE_CONTEXT: dict[str, object] = {}
 
@@ -206,6 +207,63 @@ def _corpus_to_markdown(payload: dict) -> str:
         )
         if entry.get("needs_verification"):
             lines.append("  needs_verification: true")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _sources_to_markdown(payload: dict) -> str:
+    if payload.get("kind") == "source_coverage_source":
+        source = payload.get("source") or {}
+        commands = source.get("commands") or {}
+        lines = [
+            f"# source: {source.get('id')}",
+            "",
+            f"- name: {source.get('name')}",
+            f"- class: {source.get('coverage_class')}",
+            f"- authority_layer: {source.get('authority_layer')}",
+            f"- adapter_status: {source.get('adapter_status')}",
+            f"- maturity: {source.get('maturity')}",
+            f"- public_v2: {source.get('public_v2')}",
+            "",
+            "## Commands",
+        ]
+        for name, status in commands.items():
+            lines.append(f"- `{name}`: {status}")
+        urls = source.get("urls") or []
+        if urls:
+            lines.extend(["", "## URLs"])
+            lines.extend(f"- {url}" for url in urls)
+        scope = source.get("content_scope") or []
+        if scope:
+            lines.extend(["", "## Scope"])
+            lines.extend(f"- {item}" for item in scope)
+        limitations = source.get("limitations") or []
+        if limitations:
+            lines.extend(["", "## Limitations"])
+            lines.extend(f"- {item}" for item in limitations)
+        return "\n".join(lines).rstrip() + "\n"
+
+    lines = [
+        "# source coverage",
+        "",
+        f"- schema_version: {payload.get('schema_version')}",
+        f"- as_of: {payload.get('as_of')}",
+        f"- sources: {payload.get('source_count', 0)}",
+        "",
+        "## Sources",
+    ]
+    for source in payload.get("sources") or []:
+        commands = source.get("commands") or {}
+        supported = [
+            name
+            for name in ("fetch", "discover", "sync", "verify_source")
+            if commands.get(name) == "supported"
+        ]
+        supported_text = ", ".join(supported) if supported else "none"
+        lines.append(
+            f"- `{source.get('id')}` — {source.get('coverage_class')} / "
+            f"{source.get('maturity')} / public_v2={source.get('public_v2')} / "
+            f"{supported_text}"
+        )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -598,7 +656,7 @@ def _add_sync_parser(sub) -> None:
     )
     p_sync.add_argument(
         "--source",
-        choices=["flk_npc"],
+        choices=list(SYNC_SOURCES),
         help="真实数据源名称",
     )
     p_sync.add_argument(
@@ -878,6 +936,40 @@ def _add_corpus_parser(sub) -> None:
         help="show 时不展开 dependencies。",
     )
     _add_format_arg(p_corpus)
+
+
+def _add_sources_parser(sub) -> None:
+    p_sources = sub.add_parser(
+        "sources",
+        help="查看公开来源覆盖、命令能力和 v0.2 迁移成熟度",
+    )
+    p_sources.add_argument(
+        "sources_command",
+        choices=["list", "show"],
+        help="list 列全部来源；show 查看单个来源。",
+    )
+    p_sources.add_argument(
+        "source",
+        nargs="?",
+        help="show 时指定 source id，如 flk_npc / gov_xzfgk。",
+    )
+    p_sources.add_argument(
+        "--class",
+        dest="coverage_class",
+        choices=sorted(source_coverage.SUPPORTED_COVERAGE_CLASSES),
+        help="list 过滤来源层级：primary / supplemental / industry 等。",
+    )
+    p_sources.add_argument(
+        "--public-v2",
+        choices=sorted(source_coverage.SUPPORTED_PUBLIC_V2),
+        help="list 过滤 v0.2 公开迁移状态。",
+    )
+    p_sources.add_argument(
+        "--implemented-only",
+        action="store_true",
+        help="list 时只显示已有 adapter 的来源。",
+    )
+    _add_format_arg(p_sources)
 
 
 def _add_schema_parser(sub) -> None:
@@ -1349,6 +1441,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_discover_parser(sub)
     _add_ensure_parser(sub)
     _add_corpus_parser(sub)
+    _add_sources_parser(sub)
     _add_schema_parser(sub)
     _add_doctor_parser(sub)
     _add_rebuild_clean_parser(sub)
@@ -2031,6 +2124,36 @@ def _handle_corpus(args, db_path: Path, fmt: str, parser: argparse.ArgumentParse
     return 0
 
 
+def _handle_sources(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
+    try:
+        if args.sources_command == "list":
+            result = source_coverage.list_sources(
+                coverage_class=args.coverage_class,
+                public_v2=args.public_v2,
+                implemented_only=args.implemented_only,
+            )
+        elif args.sources_command == "show":
+            if not args.source:
+                parser.error("sources show requires a source id")
+            result = source_coverage.show_source(args.source)
+        else:
+            parser.error(f"unknown sources command: {args.sources_command}")
+    except source_coverage.SourceCoverageError as exc:
+        _emit(
+            {
+                "kind": "source_coverage_error",
+                "ok": False,
+                "error": exc.__class__.__name__,
+                "message": str(exc),
+            },
+            fmt,
+            lambda payload: f"source coverage error: {payload['message']}\n",
+        )
+        return 1
+    _emit(result, fmt, _sources_to_markdown)
+    return 0
+
+
 def _handle_schema(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
     target = " ".join(getattr(args, "target", []) or []).strip()
     if not target:
@@ -2563,6 +2686,7 @@ _COMMAND_HANDLERS = {
     "discover": _handle_discover,
     "ensure": _handle_ensure,
     "corpus": _handle_corpus,
+    "sources": _handle_sources,
     "schema": _handle_schema,
     "doctor": _handle_doctor,
     "rebuild-clean": _handle_rebuild_clean,
@@ -2584,7 +2708,6 @@ _COMMAND_HANDLERS = {
 
 
 def app(argv: list[str] | None = None) -> int:
-    _configure_text_stdio()
     parser = build_parser()
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
     args = parser.parse_args(raw_argv)

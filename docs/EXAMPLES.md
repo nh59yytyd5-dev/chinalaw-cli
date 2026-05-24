@@ -97,6 +97,13 @@ PYTHONPATH=src python3 -m chinalaw ensure 劳动合同法 --format md
 `ensure --profile contracts --no-profile-deps` 当前可离线加载民间借贷、买卖、融资租赁、独立保函、票据、保险、电子商务等民商合同基础规范。
 `ensure --profile ...` 仍是 alpha，遇到 FLK 反爬挑战应停止批量安装并改为按需补全。
 
+来源覆盖能力先查 `sources`，不要从“adapter 已实现”推断它支持所有命令：
+
+```bash
+PYTHONPATH=src python3 -m chinalaw sources list --implemented-only --format md
+PYTHONPATH=src python3 -m chinalaw sources show gov_xzfgk --format json
+```
+
 `fetch` 是 agent 友好的补全入口，适合“缺哪条补哪条”。
 
 ```bash

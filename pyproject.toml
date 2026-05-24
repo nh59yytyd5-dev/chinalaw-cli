@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chinalaw"
-version = "0.1.1"
+version = "0.2.0"
 description = "中国法律法规检索 CLI，为 AI agent 设计，减少幻觉、按条款引用。"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -58,6 +58,7 @@ include = [
   "/data/fixtures",
   "/data/applicability",
   "/data/recommended_corpus.json",
+  "/data/source_coverage.json",
   "/docs",
   "/.claude/skills",
   "/scripts",
@@ -72,6 +73,7 @@ include = [
 "data/fixtures" = "chinalaw/data/fixtures"
 "data/applicability" = "chinalaw/data/applicability"
 "data/recommended_corpus.json" = "chinalaw/data/recommended_corpus.json"
+"data/source_coverage.json" = "chinalaw/data/source_coverage.json"
 
 [tool.ruff]
 line-length = 100

@@ -9,7 +9,7 @@
 shell 的 agent，在写合同审查、法律备忘录、引用核对或制度分析时，应先查本机规范
 来源，而不是凭模型记忆编法条。
 
-当前状态：`v0.1.1`。核心检索命令可用；fetch / 多源补全按具体来源持续迭代。
+当前状态：`v0.2.0`。核心检索命令可用；fetch / 多源补全按具体来源持续迭代。
 
 ## Why
 
@@ -211,7 +211,14 @@ Windows PowerShell：
 
 ## Data And Sources
 
-当前公开源 adapter 包括：
+来源覆盖范围以 `data/source_coverage.json` 为事实表，可由 CLI 查询：
+
+```bash
+chinalaw sources list --implemented-only --format md
+chinalaw sources show gov_xzfgk --format json
+```
+
+当前已实现 adapter 包括：
 
 - 国家法律法规数据库：`flk_npc`
 - 国家行政法规库（国务院入口 / 司法部承载）：`gov_xzfgk`
@@ -222,6 +229,8 @@ Windows PowerShell：
 - 证券交易所和自律规则：`sse_com_cn`、`szse_cn`、`bse_cn`、`chinaclear_cn`、`sac_net_cn`
 
 数据进入本地库前必须经过 cleaning，并保留来源、检查时间、哈希和状态字段。
+不要从“source 已实现”推断它支持所有命令；`sources show <source>` 中的
+`commands.fetch/discover/sync/verify_source/status_filter` 才是当前边界。
 涉及外部抓取时，请阅读 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)，保持低频、
 可复核、不过度请求。
 

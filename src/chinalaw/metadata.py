@@ -445,6 +445,38 @@ COMMAND_SPECS: dict[str, dict[str, Any]] = {
             "chinalaw ensure --profile baseline --format json",
         ],
     ),
+    "sources": _command(
+        "sources <list|show>",
+        summary=(
+            "Inspect source coverage, command capability boundaries, "
+            "and public v0.2 migration maturity."
+        ),
+        risk="read",
+        positional=[
+            _arg("sources_command", required=True, description="list or show."),
+            _arg("source", description="Source id for show, e.g. flk_npc."),
+        ],
+        flags=[
+            _arg("--class", description="Filter list by coverage class."),
+            _arg("--public-v2", description="Filter list by public v0.2 migration state."),
+            _arg("--implemented-only", description="Only list implemented adapters."),
+            _arg("--format", choices=["json", "md"]),
+        ],
+        output_kind="source_coverage_sources|source_coverage_source",
+        exit_codes={
+            "0": "success",
+            "1": "unknown source or malformed source coverage catalog",
+            "2": "usage error",
+        },
+        common_misuse=[
+            "Do not infer a source supports sync just because it supports fetch; "
+            "read the commands matrix."
+        ],
+        follow_ups=[
+            "chinalaw sources list --implemented-only --format md",
+            "chinalaw sources show gov_xzfgk --format json",
+        ],
+    ),
     "rebuild-clean": _command(
         "rebuild-clean",
         summary="Replay current cleaning rules against existing local laws/norms.",

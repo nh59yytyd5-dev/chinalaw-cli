@@ -10,6 +10,7 @@
 | 完整随包 fixture | `data/fixtures/*.json` | `sync --fixtures` 会加载的公开规范全文或历史合并版本。必须有条文、来源 URL、核查时间和 `source_hash`。 |
 | 时间效力线索 | `data/applicability/*.json` | `relation/applicable` 使用的线索数据，不是完整法律结论。 |
 | 推荐安装清单 | `data/recommended_corpus.json` | 按领域列出建议补全的规范。它是 manifest，不是权威文本。 |
+| 来源覆盖事实表 | `data/source_coverage.json` | 说明每个 source 的覆盖层级、命令能力、成熟度和公开 v0.2 迁移状态。它是规划/契约数据，不是法律权威文本。 |
 
 CI / 发布前必须运行：
 
@@ -22,6 +23,18 @@ scripts/check-public-fixtures
 - `status=seed` 或 `status=stub`；
 - 空 `articles`；
 - 缺 `source_name` / `source_url` / `source_checked_at` / `source_hash`。
+
+来源覆盖边界可用以下命令复核：
+
+```bash
+chinalaw sources list --implemented-only --format md
+chinalaw sources show flk_npc --format json
+```
+
+新增 source 时必须同步更新 `data/source_coverage.json`；测试会校验该事实表与
+`ADAPTER_REGISTRY`、`FETCH_SOURCES`、`DISCOVER_SOURCES`、`VERIFIABLE_SOURCES`
+、`SYNC_SOURCES`、`STATUS_FILTER_SUPPORTED` 和 `CURRENT_ONLY_STATUS_SOURCES`
+一致。
 
 ## 2. 当前随包覆盖
 
@@ -68,6 +81,13 @@ scripts/check-public-fixtures
 - 国家法律法规数据库：`flk_npc`
 - 最高人民法院主站：`court_main`
 - 人工维护官方合并文本：仅限宪法、刑法等修正案体系特殊法律
+
+可按需补全但不随包批量同步的公开 v0.2 来源：
+
+- 国家行政法规库：`gov_xzfgk`。2026-05-24 直连 `verify-source` smoke 已通过
+  `行政法规制定程序条例`：候选 `LawID=1814`，清洗 48 条，第一条定位成功。
+  本源只承诺 `fetch/discover` 预览能力；`sync --source gov_xzfgk` 不在公开
+  v0.2 范围内。
 
 补全路径：
 

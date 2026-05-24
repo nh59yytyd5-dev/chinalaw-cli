@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import runpy
 import shutil
 import subprocess
 import tempfile
@@ -10,12 +11,13 @@ import unittest
 from pathlib import Path
 
 from chinalaw import applicability, loader, service
-from chinalaw.datapaths import builtin_data_dir
+from chinalaw.datapaths import builtin_data_dir, builtin_data_file
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 INSTALL_SKILLS_SCRIPT = REPO_ROOT / "scripts" / "install-skills"
 INSTALL_SKILLS_PS1 = REPO_ROOT / "scripts" / "install-skills.ps1"
+EXPORT_PUBLIC_SCRIPT = REPO_ROOT / "scripts" / "export-public"
 
 
 class BuiltinDataPathTests(unittest.TestCase):
@@ -32,6 +34,18 @@ class BuiltinDataPathTests(unittest.TestCase):
         pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn("/data/applicability", pyproject)
         self.assertIn('"data/applicability" = "chinalaw/data/applicability"', pyproject)
+
+    def test_pyproject_packages_source_coverage_catalog(self):
+        pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertEqual(
+            REPO_ROOT / "data" / "source_coverage.json",
+            builtin_data_file("source_coverage.json"),
+        )
+        self.assertIn("/data/source_coverage.json", pyproject)
+        self.assertIn(
+            '"data/source_coverage.json" = "chinalaw/data/source_coverage.json"',
+            pyproject,
+        )
 
 
 class SkillTemplateTests(unittest.TestCase):
@@ -178,6 +192,35 @@ class SkillInstallScriptTests(unittest.TestCase):
             self.assertTrue(user_skill.exists())
             self.assertTrue((user_skill / "SKILL.md").exists())
             self.assertIn("skip (foreign dir)", result.stdout)
+
+
+@unittest.skipUnless(EXPORT_PUBLIC_SCRIPT.exists(), "optional export-public script is not included")
+class ExportPublicScriptTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.export_public = runpy.run_path(str(EXPORT_PUBLIC_SCRIPT))
+
+    def _clean_dest(self, path: Path) -> None:
+        self.export_public["_clean_dest"](path)
+
+    def test_clean_dest_refuses_existing_git_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "public"
+            git_dir = dest / ".git"
+            git_dir.mkdir(parents=True)
+            marker = git_dir / "HEAD"
+            marker.write_text("ref: refs/heads/main\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(SystemExit, "existing git worktree"):
+                self._clean_dest(dest)
+
+            self.assertTrue(marker.exists(), "export-public must not delete target .git")
+
+    def test_clean_dest_refuses_source_tree_child(self) -> None:
+        dest = REPO_ROOT / "tmp" / "export-public-danger"
+
+        with self.assertRaisesRegex(SystemExit, "source repository"):
+            self._clean_dest(dest)
 
 
 if __name__ == "__main__":
