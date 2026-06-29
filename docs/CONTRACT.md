@@ -1261,14 +1261,14 @@ v0.2.x 标记 alpha；1 个外部用户走通后于 v0.3.0 起去 alpha 标记�
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
 | `name`（位置） | str | 必填 | 法律名（全称 / 简称 / alias） |
-| `--source` | enum | `flk_npc` | 数据源；支持 `flk_npc` / `gov_xzfgk` / `court_gongbao` / `court_main` / `spp_gov_cn` / `csrc_gov_cn` / 证券交易所和自律规则源 |
+| `--source` | enum | `flk_npc` | 数据源；支持 `flk_npc` / `gov_xzfgk` / `nfra_gov_cn` / `court_gongbao` / `court_main` / `spp_gov_cn` / `csrc_gov_cn` / 证券交易所和自律规则源 |
 | `--article` | str | 无 | 中式 / 阿拉伯 / 插入条款；命中后随完整法律一起入库并在响应定位返回 |
 | `--dry-run` | flag | false | 不入库，仅输出清洗后的 law payload |
 | `--to-fixture <path>` | path | 无 | 把 law payload 写入文件；不入库（用于 PR 审查） |
 | `--list-matches` | flag | false | 仅列出搜索命中、不下载、不入库 |
-| `--prefer-id <id>` | str | 无 | 多条命中时手动指定候选主键；`gov_xzfgk` / `court_gongbao` / `court_main` / `spp_gov_cn` 也可用 detail_id 直接 fetch |
+| `--prefer-id <id>` | str | 无 | 多条命中时手动指定候选主键；`gov_xzfgk` / `nfra_gov_cn` / `court_gongbao` / `court_main` / `spp_gov_cn` 也可用 detail_id 直接 fetch |
 | `--prefer-bbbs <id>` | str | 无 | `--prefer-id` 的兼容别名；FLK 场景中该 id 即 bbbs |
-| `--status` | enum | 无 | 远程搜索候选状态过滤；仅 `flk_npc` 原生支持 `repealed|amended|current|pending_effective`；`gov_xzfgk` 和证券公开源仅接受 `current`；其它源传入时 exit 2 |
+| `--status` | enum | 无 | 远程搜索候选状态过滤；仅 `flk_npc` 原生支持 `repealed|amended|current|pending_effective`；`gov_xzfgk` / `nfra_gov_cn` 和证券公开源仅接受 `current`；其它源传入时 exit 2 |
 | `--limit` | int | 5 | 搜索候选上限 |
 | `--force` | flag | false | 即使 `source_hash` 相同也重新清洗并 upsert；用于 cleaning 规则升级后补写 |
 
@@ -1277,7 +1277,7 @@ JSON 输出 schema（成功 / 主流程）：
 ```json
 {
   "kind": "law_fetch",
-  "source": "flk_npc|gov_xzfgk|court_gongbao|court_main|spp_gov_cn|csrc_gov_cn|...",
+  "source": "flk_npc|gov_xzfgk|nfra_gov_cn|court_gongbao|court_main|spp_gov_cn|csrc_gov_cn|...",
   "name": "string (用户输入)",
   "matched_id": "string",
   "matched_bbbs": "string",        // 兼容字段；非 FLK 源填同 matched_id
@@ -1316,7 +1316,7 @@ JSON 输出 schema（list-matches 模式）：
 ```json
 {
   "kind": "law_fetch_candidates",
-  "source": "flk_npc|gov_xzfgk|court_gongbao|court_main|spp_gov_cn|csrc_gov_cn|...",
+  "source": "flk_npc|gov_xzfgk|nfra_gov_cn|court_gongbao|court_main|spp_gov_cn|csrc_gov_cn|...",
   "name": "string",
   "candidates": [{...}]
 }
@@ -1335,7 +1335,7 @@ JSON 输出 schema（list-matches 模式）：
 错误 JSON：`{"kind": "law_fetch_error", "error": "FetchNotFoundError", "message": "..."}`。当错误为 `FetchAmbiguousError` 且已有搜索候选时，可附带 `candidates` 数组，供 agent 继续调用 `--prefer-id`。
 
 选最佳匹配规则（优先级）：
-1. `--prefer-id` / `--prefer-bbbs` 命中候选；对 `gov_xzfgk` / `court_gongbao` / `court_main` / `spp_gov_cn`，`--prefer-id <detail_id>` 可直接按详情页 id fetch，不强制先搜索
+1. `--prefer-id` / `--prefer-bbbs` 命中候选；对 `gov_xzfgk` / `nfra_gov_cn` / `court_gongbao` / `court_main` / `spp_gov_cn`，`--prefer-id <detail_id>` 可直接按详情页 id fetch，不强制先搜索
 2. 本地 alias 已解析到同源 FLK 记录且可从 `source_url` 取得 bbbs 时，直接按该 bbbs fetch
 3. 唯一搜索结果直接命中
 4. `title == name` 完全匹配
@@ -1355,7 +1355,9 @@ id 直接取数，不再额外校验状态。
 
 `court_main` 注意：最高法主站通过 `https://www.court.gov.cn/search.html?content=<query>` 返回搜索结果，详情页主模式为 `/<channel>/xiangqing/<id>.html`，候选主键写作 `channel/xiangqing/id`。本源仅消费搜索第一页和显式详情页，不做无界栏目爬取；新闻稿页面只有在正文中可清洗出条文时才适合作为可引用 payload。
 
-`gov_xzfgk` 注意：国务院入口页为 `https://www.gov.cn/zhengce/xzfgk/`，实际应用由 `https://xzfg.moj.gov.cn/search2.html` 承载；候选主键写作 `LawID`。本源用于行政法规，清洗为 `level=admin_regulation`，并在响应中保留 `related_versions` 历史沿革提示。
+`gov_xzfgk` 注意：国务院入口页为 `https://www.gov.cn/zhengce/xzfgk/`，实际应用由 `https://xzfg.moj.gov.cn/search2.html` 承载；候选主键写作 `LawID`。本源用于行政法规，清洗为 `level=admin_regulation`，并在响应中保留 `related_versions` 历史沿革提示；少量已核验 `www.gov.cn/zhengce/.../content_*.htm` 国家规章库页面以 `gov_cn:content_<id>` 作为候选主键，清洗为 `level=departmental_rule`。
+
+`nfra_gov_cn` 注意：国家金融监督管理总局 / 原银保监会详情页正文来自 `DocInfo/SelectByDocId?docId=<id>` JSON 接口；候选主键写作 `docId`。当前只承诺有稳定 `docId` 或已核验线索的 bounded fetch/discover，不承诺全站同步。
 
 ### 4.11.1 `discover` (alpha)
 
@@ -1366,7 +1368,7 @@ id 直接取数，不再额外校验状态。
 
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `--source` | enum | `flk_npc` | 支持 `flk_npc`、`gov_xzfgk` 与具备站内搜索/列表语义的证券公开源：`csrc_gov_cn` / `bse_cn` / `sse_com_cn` / `szse_cn` / `chinaclear_cn` / `sac_net_cn` |
+| `--source` | enum | `flk_npc` | 支持 `flk_npc`、`gov_xzfgk`、`nfra_gov_cn` 与具备站内搜索/列表语义的证券公开源：`csrc_gov_cn` / `bse_cn` / `sse_com_cn` / `szse_cn` / `chinaclear_cn` / `sac_net_cn` |
 | `--query` | str | 空 | 标题关键词；空值表示按源默认顺序列出 |
 | `--status` | enum | 无 | `repealed|amended|current|pending_effective` |
 | `--limit` | int | 20 | 候选上限 |
@@ -1376,7 +1378,7 @@ JSON 输出 schema：
 ```json
 {
   "kind": "law_discover_candidates",
-  "source": "flk_npc|gov_xzfgk|csrc_gov_cn|bse_cn|sse_com_cn|szse_cn|chinaclear_cn|sac_net_cn",
+  "source": "flk_npc|gov_xzfgk|nfra_gov_cn|csrc_gov_cn|bse_cn|sse_com_cn|szse_cn|chinaclear_cn|sac_net_cn",
   "query": "string",
   "status": "repealed|amended|current|pending_effective|null",
   "candidates": [
@@ -1681,7 +1683,7 @@ JSON 输出 schema：
 
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `source` | enum | 必填 | 支持 `flk_npc` / `gov_xzfgk` / `court_gongbao` / `court_main` / `spp_gov_cn` / `csrc_gov_cn` / `bse_cn` / `sse_com_cn` / `szse_cn` / `chinaclear_cn` / `sac_net_cn` |
+| `source` | enum | 必填 | 支持 `flk_npc` / `gov_xzfgk` / `nfra_gov_cn` / `court_gongbao` / `court_main` / `spp_gov_cn` / `csrc_gov_cn` / `bse_cn` / `sse_com_cn` / `szse_cn` / `chinaclear_cn` / `sac_net_cn` |
 | `--query` | str | `中华人民共和国民法典` | 用于 smoke 的法规检索词 |
 | `--article` | str | `第一条` | 用于 smoke 的条文号；空字符串表示跳过条文定位 |
 | `--limit` | int | 5 | 搜索候选上限 |
@@ -1691,7 +1693,7 @@ JSON 输出 schema：
 ```json
 {
   "kind": "source_verify",
-  "source": "flk_npc|gov_xzfgk|court_gongbao|court_main|spp_gov_cn|csrc_gov_cn|bse_cn|sse_com_cn|szse_cn|chinaclear_cn|sac_net_cn",
+  "source": "flk_npc|gov_xzfgk|nfra_gov_cn|court_gongbao|court_main|spp_gov_cn|csrc_gov_cn|bse_cn|sse_com_cn|szse_cn|chinaclear_cn|sac_net_cn",
   "ok": "boolean",
   "query": "string",
   "article": "string|null",

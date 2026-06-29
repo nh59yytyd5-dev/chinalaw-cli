@@ -202,7 +202,7 @@ class FetchLawStatusFilterTests(unittest.TestCase):
     def test_current_only_status_source_accepts_current_without_sxx(self) -> None:
         """current-only 源允许 --status current，但不向 adapter 传 sxx。"""
 
-        for source_name in ("gov_xzfgk", "csrc_gov_cn"):
+        for source_name in ("gov_xzfgk", "nfra_gov_cn", "csrc_gov_cn"):
             adapter = _StatusAwareFakeAdapter()
             with tempfile.TemporaryDirectory() as td, self._patch_adapter(adapter):
                 db_path = Path(td) / "t.db"
@@ -217,7 +217,7 @@ class FetchLawStatusFilterTests(unittest.TestCase):
             self.assertNotIn("sxx", kwargs)
 
     def test_current_only_status_source_rejects_non_current(self) -> None:
-        for source_name in ("gov_xzfgk", "csrc_gov_cn"):
+        for source_name in ("gov_xzfgk", "nfra_gov_cn", "csrc_gov_cn"):
             with tempfile.TemporaryDirectory() as td:
                 db_path = Path(td) / "t.db"
                 with self.assertRaises(ValueError) as ctx:
@@ -416,7 +416,7 @@ class DiscoverLawsTests(unittest.TestCase):
         self.assertEqual(query_arg, "合同法")
 
     def test_discover_current_only_status_source_accepts_current(self) -> None:
-        for source_name in ("gov_xzfgk", "csrc_gov_cn"):
+        for source_name in ("gov_xzfgk", "nfra_gov_cn", "csrc_gov_cn"):
             adapter = _StatusAwareFakeAdapter()
             with self._patch_adapter(adapter):
                 result = discover_mod.discover_laws(
@@ -432,7 +432,7 @@ class DiscoverLawsTests(unittest.TestCase):
             self.assertNotIn("sort", kwargs)
 
     def test_discover_current_only_status_source_rejects_non_current(self) -> None:
-        for source_name in ("gov_xzfgk", "csrc_gov_cn"):
+        for source_name in ("gov_xzfgk", "nfra_gov_cn", "csrc_gov_cn"):
             with self.assertRaises(ValueError) as ctx:
                 discover_mod.discover_laws(source=source_name, status="repealed")
             self.assertIn(source_name, str(ctx.exception))
@@ -486,6 +486,7 @@ class StatusToSxxTests(unittest.TestCase):
             frozenset(
                 {
                     "gov_xzfgk",
+                    "nfra_gov_cn",
                     "csrc_gov_cn",
                     "bse_cn",
                     "sse_com_cn",
@@ -504,6 +505,7 @@ class StatusToSxxTests(unittest.TestCase):
             (
                 "flk_npc",
                 "gov_xzfgk",
+                "nfra_gov_cn",
                 "csrc_gov_cn",
                 "bse_cn",
                 "sse_com_cn",

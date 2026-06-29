@@ -81,6 +81,30 @@ class CsrcGovCnAdapterTests(unittest.TestCase):
 </html>
 """
 
+    ANNOUNCEMENT_PDF_DETAIL_FIXTURE = """
+<html>
+<head>
+<meta name="ArticleTitle" content="【第61号公告】《上市公司监管指引第3号——上市公司现金分红（2023年修订）"/>
+<meta name="PubDate" content="2023-12-15 19:46:28"/>
+<meta name="ColumnName" content="证监会公告"/>
+<title>【第61号公告】《上市公司监管指引第3号——上市公司现金分红（2023年修订）》_中国证券监督管理委员会</title>
+</head>
+<body>
+<div class="detail-news">
+  <p>中国证券监督管理委员会公告</p>
+  <p>〔2023〕61号</p>
+  <p>现公布《上市公司监管指引第3号——上市公司现金分红（2023年修订）》，自公布之日起施行。</p>
+  <p>中国证监会</p>
+  <p>2023年12月15日</p>
+  <div id="files">
+    <a href="7449656/files/附件1：上市公司监管指引第3号——上市公司现金分红（2023年修订）.pdf">附件1：上市公司监管指引第3号——上市公司现金分红（2023年修订）.pdf</a>
+    <a href="7449656/files/附件2：《上市公司监管指引第3号——上市公司现金分红（2023年修订）》修订说明.pdf">附件2：《上市公司监管指引第3号——上市公司现金分红（2023年修订）》修订说明.pdf</a>
+  </div>
+</div>
+</body>
+</html>
+"""
+
     def _search_result(self) -> csrc_gov_cn.FetchResult:
         return csrc_gov_cn.FetchResult(
             url="https://www.csrc.gov.cn/guestweb4/s",
@@ -114,6 +138,14 @@ class CsrcGovCnAdapterTests(unittest.TestCase):
             status_code=200,
             headers={"Content-Type": "application/pdf"},
             text=b"%PDF placeholder".decode("latin1"),
+        )
+
+    def _announcement_pdf_detail_result(self) -> csrc_gov_cn.FetchResult:
+        return csrc_gov_cn.FetchResult(
+            url="https://www.csrc.gov.cn/csrc/c101954/c7449656/content.shtml",
+            status_code=200,
+            headers={},
+            text=self.ANNOUNCEMENT_PDF_DETAIL_FIXTURE,
         )
 
     def test_request_uses_tool_user_agent(self) -> None:
@@ -217,6 +249,34 @@ class CsrcGovCnAdapterTests(unittest.TestCase):
         self.assertIn("/7547359/files/", fetch_bytes.call_args.args[0])
         self.assertNotIn("修订说明", fetch_bytes.call_args.args[0])
         pdf_to_text.assert_called_once()
+
+    def test_build_law_payload_uses_cash_dividend_announcement_pdf(self) -> None:
+        adapter = csrc_gov_cn.CsrcGovCnAdapter()
+        pdf_text = "\n".join(
+            [
+                "上市公司监管指引第 3 号——上市公司现金分红（2023 年修订）",
+                "第一条 为规范上市公司现金分红，维护投资者合法权益，制定本指引。",
+                "第二条 上市公司应当牢固树立回报股东的意识。",
+                "第十七条 本指引自公布之日起施行。",
+            ]
+        )
+        with (
+            patch.object(csrc_gov_cn, "_fetch_text", return_value=self._announcement_pdf_detail_result()),
+            patch.object(csrc_gov_cn, "_fetch_bytes", return_value=self._pdf_binary_result()) as fetch_bytes,
+            patch.object(csrc_gov_cn, "_pdf_bytes_to_text", return_value=pdf_text),
+        ):
+            payload = adapter.build_law_payload("csrc/c101954/c7449656")
+
+        self.assertEqual(
+            payload["title"],
+            "上市公司监管指引第3号——上市公司现金分红（2023年修订）",
+        )
+        self.assertEqual(payload["document_number"], "中国证券监督管理委员会公告〔2023〕61号")
+        self.assertEqual(payload["released_at"], "2023-12-15")
+        self.assertEqual(payload["effective_at"], "2023-12-15")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["1", "2", "17"])
+        self.assertIn("附件1", fetch_bytes.call_args.args[0])
+        self.assertNotIn("修订说明", fetch_bytes.call_args.args[0])
 
     def test_pdf_text_cleanup_removes_page_numbers_and_preserves_article_heads(self) -> None:
         raw = "\n".join(

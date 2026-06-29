@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chinalaw"
-version = "0.2.0"
+version = "0.2.1"
 description = "中国法律法规检索 CLI，为 AI agent 设计，减少幻觉、按条款引用。"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -80,10 +80,18 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "C901"]
 # RUF001/002/003：本项目主语言为中文，全角标点（，。；：（）「」""''）是正确写法，不是 ambiguous。
 # 含中文 fixture / 注释 / docstring / SQL 文本片段会大量误报，统一豁免。
 ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.mccabe]
+# 函数圈复杂度上限（防屎山 gate）。25 是基于现状实测的务实阈值：当前全库仅
+# 3 个函数超标（infer_source_id / _normalize_dependencies / fetch_law，已逐个
+# # noqa: C901 标记为待拆分技术债），因此引入它不需重写存量代码，却能拦截
+# “新增 25+ 复杂度函数”这类劣化。后续随重构逐步收紧阈值，详见
+# docs/decisions/ADR-0009-module-boundaries.md。
+max-complexity = 25
 
 [tool.ruff.lint.per-file-ignores]
 # 测试 fixture 大量出现长中文法条 / 案号 / URL 字符串，强行换行反而割裂语义。

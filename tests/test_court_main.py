@@ -89,6 +89,31 @@ class CourtMainAdapterTests(unittest.TestCase):
 </html>
 """
 
+    POLICY_ITEM_DETAIL_FIXTURE = """
+<html>
+<head>
+  <title>最高人民法院关于依法妥善审理涉新冠肺炎疫情民事案件若干问题的指导意见（二） - 中华人民共和国最高人民法院</title>
+</head>
+<body>
+<div class="title">最高人民法院关于依法妥善审理涉新冠肺炎疫情民事案件若干问题的指导意见（二）</div>
+<ul class="info">
+  <li>来源：最高人民法院</li>
+  <li>发布时间：2020-05-19</li>
+</ul>
+<div class="txt_txt" id="zoom">
+  <p>法发〔2020〕17号</p>
+  <p>最高人民法院关于依法妥善审理涉新冠肺炎疫情民事案件若干问题的指导意见（二）</p>
+  <p>一、关于合同案件的审理</p>
+  <p>1.疫情或者疫情防控措施导致买卖合同履行成本增加，继续履行不影响合同目的实现，当事人请求解除合同的，人民法院不予支持。</p>
+  <p>2.买卖合同能够继续履行，但履约成本显著增加的，人民法院应当结合案件实际情况调整价款。</p>
+  <p>二、关于破产案件的审理</p>
+  <p>18.人民法院在审查企业是否符合破产受理条件时，要注意审查企业陷入困境是否因疫情或者疫情防控措施所致。</p>
+</div>
+<div class="txt_etr">分享区</div>
+</body>
+</html>
+"""
+
     def _search_result(self) -> court_main.FetchResult:
         return court_main.FetchResult(
             url="https://www.court.gov.cn/search.html?content=%E7%A4%BA%E4%BE%8B",
@@ -111,6 +136,14 @@ class CourtMainAdapterTests(unittest.TestCase):
             status_code=200,
             headers={},
             text=self.REPLY_DETAIL_FIXTURE,
+        )
+
+    def _policy_item_detail_result(self) -> court_main.FetchResult:
+        return court_main.FetchResult(
+            url="https://www.court.gov.cn/fabu/xiangqing/230181.html",
+            status_code=200,
+            headers={},
+            text=self.POLICY_ITEM_DETAIL_FIXTURE,
         )
 
     def test_request_uses_tool_user_agent(self) -> None:
@@ -239,6 +272,22 @@ class CourtMainAdapterTests(unittest.TestCase):
         self.assertEqual(payload["articles"][0]["number"], "正文")
         self.assertEqual(payload["articles"][0]["number_display"], "正文")
         self.assertIn("不溯及适用的批复", payload["articles"][0]["text"])
+
+    def test_build_law_payload_splits_policy_guidance_numbered_items(self) -> None:
+        adapter = court_main.CourtMainAdapter()
+        with patch.object(
+            court_main,
+            "_fetch_text",
+            return_value=self._policy_item_detail_result(),
+        ):
+            payload = adapter.build_law_payload("fabu/xiangqing/230181")
+
+        self.assertEqual(payload["level"], "judicial_policy")
+        self.assertEqual(payload["document_number"], "法发〔2020〕17号")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["1", "2", "18"])
+        self.assertEqual(payload["articles"][2]["number_display"], "第18项")
+        self.assertEqual(payload["articles"][2]["part"], "二、关于破产案件的审理")
+        self.assertIn("破产受理条件", payload["articles"][2]["text"])
 
     def test_infer_document_title_preserves_direct_normative_title(self) -> None:
         title = "最高人民法院关于适用《中华人民共和国刑事诉讼法》的解释"

@@ -28,10 +28,10 @@ def open_connection(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
-        return conn
     except Exception:
         conn.close()
         raise
+    return conn
 
 
 @contextmanager

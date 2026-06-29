@@ -140,7 +140,9 @@ def _add_unique(target: list[dict], item: dict) -> None:
         target.append(item)
 
 
-def _normalize_dependencies(value: object, items: list[dict]) -> dict:
+# C901: 已知复杂（McCabe 30），规范包依赖归一；列为待拆分技术债，见
+# docs/decisions/ADR-0009-module-boundaries.md。
+def _normalize_dependencies(value: object, items: list[dict]) -> dict:  # noqa: C901
     if value is None:
         value = {}
     if not isinstance(value, dict):

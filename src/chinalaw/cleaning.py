@@ -65,8 +65,11 @@ ARTICLE_RE = re.compile(
     r"^(?P<number_display>第[〇零一二三四五六七八九十百千万两0-9]+条(?:之[〇零一二三四五六七八九十百千万两0-9]+)?)(?P<body>.*)$"
 )
 DECIMAL_ARTICLE_RE = re.compile(
-    r"^(?P<number_display>\d+(?:\.\d+)+)(?!\s*条)"
+    r"^(?P<number_display>\d{1,3}(?:\.\d{1,2})+)(?!\s*条)"
     r"(?:[　\s]+|(?=[\u4e00-\u9fff]))(?P<body>.*)$"
+)
+NUMBERED_ITEM_RE = re.compile(
+    r"^(?P<number>\d{1,3})[.．]\s*(?P<body>[\u4e00-\u9fff].*)$"
 )
 STRUCTURAL_HEADING_RE = re.compile(
     r"^(第[〇零一二三四五六七八九十百千万两0-9]+(?:编|章|节|分编).+|附则)$"
@@ -476,6 +479,61 @@ def parse_articles_from_text(text: str) -> list[dict]:
         articles.append(current)
 
     return [article for article in articles if article.get("number") and article.get("text")]
+
+
+def parse_numbered_items_from_text(text: str, *, min_items: int = 2) -> list[dict]:
+    """Parse policy/guidance documents organized as ``1. ...`` items.
+
+    This is intentionally separate from ``parse_articles_from_text`` so statute
+    cleaning does not promote ordinary numbered lists into articles.
+    """
+
+    articles: list[dict] = []
+    current: dict | None = None
+    context = _new_parse_context()
+    position = 1
+
+    for raw_line in text.splitlines():
+        line = _clean_text(raw_line.strip().lstrip("#").strip())
+        if not line:
+            continue
+        if _is_toc_line(line):
+            continue
+
+        if _is_structural_heading(line, context):
+            _update_context(context, line)
+            continue
+
+        item_match = NUMBERED_ITEM_RE.match(line)
+        if item_match:
+            number = str(int(item_match.group("number")))
+            body = item_match.group("body").strip()
+            if current is None and number != "1":
+                continue
+            if current is not None:
+                articles.append(current)
+            current = {
+                "number": number,
+                "number_display": f"第{number}项",
+                "text": body,
+                "part": _part_label(context),
+                "position": position,
+            }
+            position += 1
+            continue
+
+        if current is not None:
+            _append_article_text(current, line)
+
+    if current is not None:
+        articles.append(current)
+
+    articles = [
+        article for article in articles if article.get("number") and article.get("text")
+    ]
+    if len(articles) < min_items:
+        return []
+    return articles
 
 
 def normalize_articles(articles: list[dict]) -> list[dict]:

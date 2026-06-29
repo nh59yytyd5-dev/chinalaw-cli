@@ -106,6 +106,13 @@ FONTZOOM_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 MATCH_IGNORED_RE = re.compile(r"[\s　、，,]+")
+CHINESE_DATE_RE = re.compile(
+    r"(?P<year>(?:19|20)\d{2})年\s*(?P<month>\d{1,2})月\s*(?P<day>\d{1,2})日"
+)
+EFFECTIVE_DATE_RE = re.compile(
+    r"自\s*(?P<year>(?:19|20)\d{2})年\s*"
+    r"(?P<month>\d{1,2})月\s*(?P<day>\d{1,2})日\s*起施行"
+)
 
 # 文号识别已上提到 ``chinalaw.document_numbers.extract_document_number``，
 # adapter 不再维护本地正则；详见
@@ -117,6 +124,14 @@ MATCH_IGNORED_RE = re.compile(r"[\s　、，,]+")
 # detail_id 校验：路径片段，允许字母 / 数字 / 下划线 / 斜杠；不允许空字符串。
 # 例：``xwfbh/wsfbt/202501/t20250116_679579`` / ``spp/sfjs/201802/t20180201_363640``。
 DETAIL_ID_FULLMATCH_RE = re.compile(r"^[\w/\-]+$")
+
+KNOWN_DETAIL_METADATA = {
+    # SPP page omits the judicial-interpretation document number, but official
+    # securities-market mirrors publish the same interpretation as 法释〔2019〕10号.
+    "spp/xwfbh/wsfbh/201906/t20190628_423377": {
+        "document_number": "法释〔2019〕10号",
+    },
+}
 
 
 @dataclass
@@ -280,6 +295,71 @@ def _title_matches_query(title: str | None, query: str | None) -> bool:
     if not needle:
         return True
     return needle in _match_text(title)
+
+
+def _date_from_match(match: re.Match[str]) -> str:
+    return (
+        f"{int(match.group('year')):04d}-"
+        f"{int(match.group('month')):02d}-"
+        f"{int(match.group('day')):02d}"
+    )
+
+
+def _issuer_tokens(issuing_body: str) -> list[str]:
+    return [
+        token
+        for token in re.split(r"[\s、，,]+", issuing_body or "")
+        if token
+    ]
+
+
+def _clean_text_line(raw: str | None) -> str:
+    return re.sub(r"\s+", " ", unescape(raw or "")).strip()
+
+
+def _line_matches_issuer(line: str, issuing_body: str) -> bool:
+    compact_line = _match_text(line)
+    tokens = _issuer_tokens(issuing_body)
+    return bool(tokens) and all(_match_text(token) in compact_line for token in tokens)
+
+
+def _infer_released_at(text: str, issuing_body: str) -> str | None:
+    lines = [_clean_text_line(line) for line in (text or "").splitlines()]
+    lines = [line for line in lines if line]
+    previous = ""
+    for line in lines:
+        match = CHINESE_DATE_RE.fullmatch(line)
+        if match and _line_matches_issuer(previous, issuing_body):
+            return _date_from_match(match)
+        previous = line
+    published = re.search(
+        r"发布时间[:：]\s*"
+        r"(?P<date>(?:19|20)\d{2}年\s*\d{1,2}月\s*\d{1,2}日)",
+        text or "",
+    )
+    if published:
+        match = CHINESE_DATE_RE.search(published.group("date"))
+        if match:
+            return _date_from_match(match)
+    return None
+
+
+def _infer_effective_at(text: str) -> str | None:
+    match = EFFECTIVE_DATE_RE.search(text or "")
+    return _date_from_match(match) if match else None
+
+
+def _title_aliases(title: str) -> list[str]:
+    aliases: list[str] = []
+    variants = (
+        title.replace("最高人民法院 最高人民检察院", "最高人民法院、最高人民检察院"),
+        title.replace("最高人民法院 最高人民检察院", "最高人民法院最高人民检察院"),
+    )
+    for variant in variants:
+        cleaned = variant.strip()
+        if cleaned and cleaned != title and cleaned not in aliases:
+            aliases.append(cleaned)
+    return aliases
 
 
 def _html_to_text(content_html: str) -> str:
@@ -680,8 +760,17 @@ class SppGovCnAdapter:
         channel = (search_row or {}).get("channel")
         level = _infer_level(channel, title)
         short_title = _infer_short_title(title)
-        document_number = cleaning.extract_document_number_from_preamble(text)
         issuing_body = _infer_issuing_body(title)
+        metadata_override = KNOWN_DETAIL_METADATA.get(normalized, {})
+        document_number = (
+            cleaning.extract_document_number_from_preamble(text)
+            or metadata_override.get("document_number")
+        )
+        released_at = metadata_override.get("released_at") or _infer_released_at(
+            text, issuing_body
+        )
+        effective_at = metadata_override.get("effective_at") or _infer_effective_at(text)
+        aliases = _title_aliases(title)
         articles = cleaning.parse_articles_from_text(text)
 
         if not articles and level != "guiding_case":
@@ -690,13 +779,13 @@ class SppGovCnAdapter:
                     "id": f"spp_gov_cn:{normalized}",
                     "title": title,
                     "short_title": short_title,
-                    "aliases": [],
+                    "aliases": aliases,
                     "level": level,
                     "status": "current",
                     "issuing_body": issuing_body,
                     "document_number": document_number,
-                    "released_at": None,
-                    "effective_at": None,
+                    "released_at": released_at,
+                    "effective_at": effective_at,
                     "repealed_at": None,
                     "source_url": detail.get("url"),
                     "source_name": "spp.gov.cn",
@@ -717,6 +806,9 @@ class SppGovCnAdapter:
             status="current",
             issuing_body=issuing_body,
             document_number=document_number,
+            released_at=released_at,
+            effective_at=effective_at,
+            aliases=aliases,
             source_url=detail.get("url"),
             source_name="spp.gov.cn",
             source_checked_at=detail.get("checked_at"),

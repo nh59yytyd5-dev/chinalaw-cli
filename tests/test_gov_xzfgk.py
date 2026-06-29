@@ -78,6 +78,27 @@ class GovXzfgkAdapterTests(unittest.TestCase):
 </html>
 """
 
+    GOV_CN_DETAIL_FIXTURE = """
+<html>
+<head>
+<title>商业银行股权管理暂行办法__中国政府网</title>
+<meta name="lanmu" content="部门规章">
+<meta name="firstpublishedtime" content="2018-01-09 17:00:00">
+</head>
+<body>
+<div id="UCAP-CONTENT">
+  <p>商业银行股权管理暂行办法</p>
+  <p>中国银监会令2018年第1号</p>
+  <p>第一章 总则</p>
+  <p>第一条 为加强商业银行股权管理，规范商业银行股东行为，制定本办法。</p>
+  <p>第十二条 商业银行股东不得委托他人或接受他人委托持有商业银行股权。</p>
+  <p>第五十九条 本办法自2018年1月5日起施行。</p>
+</div>
+<div class="gjgzk_wz">相关链接</div>
+</body>
+</html>
+"""
+
     def _search_result(self) -> gov_xzfgk.FetchResult:
         return gov_xzfgk.FetchResult(
             url="https://xzfg.moj.gov.cn/SearchAdvancedFront?title=x",
@@ -92,6 +113,14 @@ class GovXzfgkAdapterTests(unittest.TestCase):
             status_code=200,
             headers={"Last-Modified": "Thu, 21 May 2026 00:00:00 GMT"},
             text=self.DETAIL_FIXTURE,
+        )
+
+    def _gov_cn_detail_result(self) -> gov_xzfgk.FetchResult:
+        return gov_xzfgk.FetchResult(
+            url="https://www.gov.cn/zhengce/2018-01/09/content_5725824.htm",
+            status_code=200,
+            headers={"Last-Modified": "Tue, 09 Jan 2018 00:00:00 GMT"},
+            text=self.GOV_CN_DETAIL_FIXTURE,
         )
 
     def test_search_list_parses_rows_and_version_chain(self) -> None:
@@ -110,6 +139,23 @@ class GovXzfgkAdapterTests(unittest.TestCase):
         self.assertEqual(row["effective_at"], "2026-07-01")
         self.assertEqual(len(row["related_versions"]), 3)
         self.assertTrue(row["related_versions"][-1]["current"])
+
+    def test_search_list_falls_back_to_known_gov_cn_static_rows(self) -> None:
+        adapter = gov_xzfgk.GovXzfgkAdapter()
+        empty = gov_xzfgk.FetchResult(
+            url="https://xzfg.moj.gov.cn/SearchAdvancedFront?title=x",
+            status_code=200,
+            headers={},
+            text="<html><body></body></html>",
+        )
+        with patch.object(gov_xzfgk, "_fetch_text", return_value=empty):
+            result = adapter.search_list("商业银行股权管理暂行办法", page_size=5)
+
+        self.assertEqual(len(result["rows"]), 1)
+        row = result["rows"][0]
+        self.assertEqual(row["detail_id"], "gov_cn:content_5725824")
+        self.assertEqual(row["title"], "商业银行股权管理暂行办法")
+        self.assertEqual(row["source_name"], "www.gov.cn")
 
     def test_build_law_payload_cleans_admin_regulation_detail(self) -> None:
         adapter = gov_xzfgk.GovXzfgkAdapter()
@@ -130,6 +176,24 @@ class GovXzfgkAdapterTests(unittest.TestCase):
         self.assertEqual(payload["articles"][0]["number_display"], "第一条")
         self.assertEqual(len(payload["related_versions"]), 2)
 
+    def test_build_law_payload_cleans_gov_cn_department_rule_detail(self) -> None:
+        adapter = gov_xzfgk.GovXzfgkAdapter()
+        with patch.object(gov_xzfgk, "_fetch_text", return_value=self._gov_cn_detail_result()):
+            payload = adapter.build_law_payload(
+                "https://www.gov.cn/zhengce/2018-01/09/content_5725824.htm"
+            )
+
+        self.assertEqual(payload["id"], "gov_xzfgk:gov_cn:content_5725824")
+        self.assertEqual(payload["title"], "商业银行股权管理暂行办法")
+        self.assertEqual(payload["level"], "departmental_rule")
+        self.assertEqual(payload["issuing_body"], "中国银行业监督管理委员会")
+        self.assertEqual(payload["document_number"], "中国银监会令2018年第1号")
+        self.assertEqual(payload["released_at"], "2018-01-09")
+        self.assertEqual(payload["effective_at"], "2018-01-05")
+        self.assertEqual(payload["source_name"], "www.gov.cn")
+        self.assertEqual(len(payload["articles"]), 3)
+        self.assertEqual(payload["articles"][1]["number"], "12")
+
     def test_source_registry_and_source_id_inference_include_gov_xzfgk(self) -> None:
         self.assertIn("gov_xzfgk", sources.ADAPTER_REGISTRY)
         self.assertIn("gov_xzfgk", sources.VERIFIABLE_SOURCES)
@@ -141,6 +205,17 @@ class GovXzfgkAdapterTests(unittest.TestCase):
         }
         self.assertEqual(infer_source(payload), "gov_xzfgk")
         self.assertEqual(infer_source_id(payload, "gov_xzfgk"), "1814")
+
+        static_payload = {
+            "id": "gov_xzfgk:gov_cn:content_5725824",
+            "source_url": "https://www.gov.cn/zhengce/2018-01/09/content_5725824.htm",
+            "source_name": "www.gov.cn",
+        }
+        self.assertEqual(infer_source(static_payload), "gov_xzfgk")
+        self.assertEqual(
+            infer_source_id(static_payload, "gov_xzfgk"),
+            "gov_cn:content_5725824",
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

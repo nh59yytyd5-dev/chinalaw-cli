@@ -167,6 +167,30 @@ class ResolveLocalFetchHintTests(unittest.TestCase):
             self.assertEqual(hint["detail_id"], spp_path)
             self.assertNotIn("bbbs", hint)
 
+    def test_gov_xzfgk_accepts_gov_cn_source_name_alias(self) -> None:
+        """gov_xzfgk 同时消费 xzfg.moj.gov.cn 和 gov.cn 静态规章页。"""
+
+        detail_id = "gov_cn:content_5725824"
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "t.db"
+            _seed(
+                db,
+                _build_payload(
+                    law_id=f"gov_xzfgk:{detail_id}",
+                    title="商业银行股权管理暂行办法",
+                    aliases=["商业银行股权管理暂行办法"],
+                    source_name="www.gov.cn",
+                    source_url="https://www.gov.cn/zhengce/2018-01/09/content_5725824.htm",
+                ),
+            )
+            hint = fetch._resolve_local_fetch_hint(
+                db, "商业银行股权管理暂行办法", "gov_xzfgk"
+            )
+            self.assertIsNotNone(hint)
+            self.assertEqual(hint["id"], detail_id)
+            self.assertEqual(hint["detail_id"], detail_id)
+            self.assertNotIn("bbbs", hint)
+
     # 2. 退化路径 ----------------------------------------------------------
 
     def test_unknown_source_returns_none(self) -> None:
@@ -262,6 +286,7 @@ class SourceNameMarkersTests(unittest.TestCase):
                 "court_gongbao",
                 "court_main",
                 "gov_xzfgk",
+                "nfra_gov_cn",
                 "spp_gov_cn",
                 "csrc_gov_cn",
                 "bse_cn",
@@ -288,6 +313,12 @@ class SourceNameMarkersTests(unittest.TestCase):
         )
         self.assertEqual(
             fetch.SOURCE_NAME_MARKERS["gov_xzfgk"], "xzfg.moj.gov.cn"
+        )
+        self.assertEqual(
+            fetch.SOURCE_NAME_MARKER_ALIASES["gov_xzfgk"], ("www.gov.cn",)
+        )
+        self.assertEqual(
+            fetch.SOURCE_NAME_MARKERS["nfra_gov_cn"], "www.nfra.gov.cn"
         )
         self.assertEqual(
             fetch.SOURCE_NAME_MARKERS["spp_gov_cn"], "spp.gov.cn"

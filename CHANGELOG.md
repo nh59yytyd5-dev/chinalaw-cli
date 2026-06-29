@@ -5,6 +5,52 @@
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-06-30
+
+### 修复
+
+- `resolve` / `article <title>` 在同名 `current` 法规并存时，优先选择较新的
+  发布 / 施行版本，而不是被旧版本的条文数量压过；同时在 resolve payload
+  中保留 `document_number`，便于确认命中的具体版本。
+- Windows 测试和安装路径更稳：CLI 入口统一配置 UTF-8 stdio，损坏 SQLite
+  初始化失败时会关闭连接，Windows 下不再断言 POSIX executable bit。
+- `audit file` 短引解析支持多字短引 `九民§28`，避免误抽为 `民§28` 并错误指向
+  《民法典》。
+
+### 新增
+
+- 新增 `nfra_gov_cn` adapter 和测试，支持有稳定 `docId` 或已核验线索的国家金融
+  监督管理总局 / 原银保监会 bounded `fetch` / `discover` / `verify-source`；
+  catalog 中仍标为 `develop_only`，不作为公开稳定推荐来源承诺。
+- `gov_xzfgk` 增加少量已核验 `www.gov.cn/zhengce/.../content_*.htm`
+  国家规章库静态页面线索，清洗为 `departmental_rule`，并在 source catalog /
+  CONTRACT 中说明不是全量国家规章库 adapter。
+
+### 发行硬化
+
+- 统一所有注册 adapter 的 User-Agent 到包级 `USER_AGENT_TOKEN`，随
+  `__version__` 自动更新，避免 release 后仍发送旧版本 UA。
+- 恢复跨平台 `install-smoke` CI，并保留 `scripts/install-local` /
+  `scripts/install-local.ps1` 在 venv 或 pip 不完整环境下的 PYTHONPATH fallback。
+- 新增 release metadata 测试，校验 `pyproject.toml`、`chinalaw.__version__`、
+  MCP server info 和 adapter UA 一致。
+
+### 重构（模块边界与防屎山机制，2026-06-19，ADR-0009）
+
+- 把 `service.py` 的 trace 子系统（`_TRACE_*` 常量 + 13 个 `_trace_*` helper +
+  公开 `trace_article_as_of`，约 555 行）拆分到独立模块 `chinalaw.trace`；
+  `service.py` 3380→2831 行，末尾 re-export `trace_article_as_of` 保持
+  `chinalaw.service.trace_article_as_of` 向后兼容（cli 调用与测试 `@patch` 依赖此路径）。
+- 把 `cli.py` 内联的 10 个 `_*_to_markdown` 渲染函数及 `_LEVEL_LABELS`/`_VIA_LABELS`
+  常量收口到 `formatters.py`，改为公开 `xxx_to_markdown`；cli 调用点统一走
+  `formatters.xxx_to_markdown`。`cli.py` 2759→2385 行，`formatters.py` 1578→1960 行。
+- ruff 新增圈复杂度 gate：`select` 加 `C901`，`max-complexity = 25`；当前 5 个存量
+  热点（`infer_source_id`/`_normalize_dependencies`/`fetch_law`/`analyze`/`aggregate`）
+  逐个 `# noqa: C901` 标记为待拆分技术债。
+- 新增 `docs/decisions/ADR-0009-module-boundaries.md`，固化模块边界纪律、CLI 层职责、
+  复杂度 gate 理由与渐进收紧（ratchet）路线。
+- 纯搬移、零行为变更：675 tests 全绿、ruff 全绿、公开 API 39 项不变。
+
 ## [0.2.0] — 2026-05-24
 
 ### 新增（public v0.2 source coverage catalog，2026-05-24，issue #105）
@@ -13,7 +59,8 @@
   公开 v0.2 迁移状态的机器可读事实表。
 - 新增 `chinalaw sources list|show`，支持 `--implemented-only`、`--class`、
   `--public-v2` 与 JSON / Markdown 输出；`metadata.py`、`CONTRACT.md`、
-  `DATA_INDEX.md`、`README.md` 和 `EXAMPLES.md` 同步声明该契约。
+  `DATA_INDEX.md`、`README.md`、`PUBLIC_README.md`、`EXAMPLES.md` 和
+  `MVP_PLAN.md` 同步声明该契约。
 - `pyproject.toml` 将 `data/source_coverage.json` 纳入 wheel/sdist 包数据。
 - `gov_xzfgk` 在 source coverage 中升级为 `public_v2=include`：公开 v0.2 纳入
   `fetch/discover` 预览路径；2026-05-24 直连 `verify-source` smoke 已验证
@@ -27,8 +74,8 @@
   `probe` / `verify_source` / `fetch` / `discover` / `sync` 只允许
   `supported|unsupported`，`status_filter` 只允许
   `full|current_only|unsupported`。
-- 修复 #2：`CONTRACT.md` 不再把协议标题钉死为 v0.1，并把当前 SQLite
-  schema 文档从过期的 v7 更新为 v9；`CONTRIBUTING.md` 不再硬编码
+- 修复公开仓库 #2：`CONTRACT.md` 不再把协议标题钉死为 v0.1，并把当前
+  SQLite schema 文档从过期的 v7 更新为 v9；`CONTRIBUTING.md` 不再硬编码
   `schema_version=6` 示例。
 
 ### 新增（agent platform 稳定性，2026-05-20，issues #81/#82/#83/#84/#86/#88/#89）

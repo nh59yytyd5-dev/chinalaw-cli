@@ -74,7 +74,9 @@
 
 ## 5. Schema 规则
 
-当前 schema 是 v7。
+当前 schema 以 `src/chinalaw/schema.py` 中的 `SCHEMA_VERSION` 为准；截至
+2026-05-25 为 v9。`docs/CONTRACT.md` 只记录外部可依赖的当前协议，不负责保留
+每次 migration 的历史细节。
 
 新增表、改字段、改约束前必须：
 
@@ -84,7 +86,9 @@
 4. 保证旧库可自动迁移。
 5. 写测试覆盖旧库升级。
 
-计划中的 `law_relations`、`applicability_rules`、`alias_records`、`call_log` 不得无 ADR 直接落库。
+`law_relations`、`applicability_rules` 已进入 alpha 协议；继续扩展它们仍需同步
+contract、migration 和测试。`alias_records`、`call_log` 等未落库方向不得无 ADR
+直接实现。
 
 ## 6. 测试要求
 

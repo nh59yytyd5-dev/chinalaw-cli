@@ -48,6 +48,22 @@ class SecuritiesRuleCleaningTests(unittest.TestCase):
         self.assertIn("1.6 条规定", articles[0]["text"])
         self.assertIn("4.5.3 条", articles[0]["text"])
 
+    def test_decimal_parser_does_not_promote_amount_ranges_to_clauses(self) -> None:
+        articles = cleaning.parse_articles_from_text(
+            "\n".join(
+                [
+                    "第一条 海事赔偿责任限额如下：",
+                    "（一）关于人身伤亡的赔偿请求",
+                    "1.300总吨至500总吨的船舶，赔偿责任限额为500000计算单位；",
+                    "2.超过500总吨的船舶，每总吨增加1000计算单位。",
+                    "第二条 本规则另有规定的，从其规定。",
+                ]
+            )
+        )
+
+        self.assertEqual([item["number"] for item in articles], ["1", "2"])
+        self.assertIn("1.300总吨至500总吨", articles[0]["text"])
+
     def test_generic_pdf_cleanup_keeps_cross_law_article_reference_inline(self) -> None:
         raw = "\n".join(
             [

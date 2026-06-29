@@ -55,7 +55,8 @@
       "public_v2": "include",
       "urls": [
         "https://www.gov.cn/zhengce/xzfgk/",
-        "https://xzfg.moj.gov.cn/search2.html"
+        "https://xzfg.moj.gov.cn/search2.html",
+        "https://www.gov.cn/zhengce/"
       ],
       "commands": {
         "probe": "supported",
@@ -67,10 +68,12 @@
       },
       "content_scope": [
         "行政法规",
-        "行政法规历史版本链线索"
+        "行政法规历史版本链线索",
+        "少量已核验的 gov.cn 国家规章库部门规章静态页面"
       ],
       "limitations": [
         "公开 v0.2 仅纳入 fetch/discover 预览路径，尚未承诺 batch sync。",
+        "gov.cn 部门规章页面目前只覆盖已核验静态线索，不能视为国家规章库全量 adapter。",
         "2026-05-24 已通过直连 verify-source smoke：行政法规制定程序条例，48 条，第一条定位成功。"
       ]
     },
@@ -190,6 +193,35 @@
       ],
       "limitations": [
         "证券监管文件类型复杂，公开 v0.2 前需要更强的 level/source_type 标注。"
+      ]
+    },
+    {
+      "id": "nfra_gov_cn",
+      "name": "国家金融监督管理总局",
+      "coverage_class": "industry",
+      "authority_layer": "financial_regulation",
+      "adapter_status": "implemented",
+      "maturity": "candidate",
+      "public_v2": "develop_only",
+      "urls": [
+        "https://www.nfra.gov.cn/"
+      ],
+      "commands": {
+        "probe": "supported",
+        "verify_source": "supported",
+        "fetch": "supported",
+        "discover": "supported",
+        "sync": "unsupported",
+        "status_filter": "current_only"
+      },
+      "content_scope": [
+        "国家金融监督管理总局公开规则",
+        "原银保监会公开规则",
+        "有稳定 docId 的金融监管部门规章和准则"
+      ],
+      "limitations": [
+        "当前仅暴露有稳定 docId 或已核验线索的 bounded fetch/discover，不承诺全站搜索。",
+        "银保监历史文件与国家规章库、国务院政策库可能重复，入库时必须保留 source_url/source_name。"
       ]
     },
     {

@@ -21,6 +21,8 @@ DOCUMENT_NUMBER_INLINE_RE = re.compile(r"([一-鿿]{1,12}〔\d{4}〕\s*\d+\s*号
 COURT_DETAIL_RE = re.compile(r"/Details/([0-9A-Fa-f]{20,40})\.html")
 COURT_MAIN_DETAIL_RE = re.compile(r"/([a-z]+/xiangqing/\d+)\.html", re.IGNORECASE)
 GOV_XZFGK_DETAIL_RE = re.compile(r"[?&]LawID=(\d+)", re.IGNORECASE)
+GOV_CN_CONTENT_RE = re.compile(r"content_(\d+)\.htm", re.IGNORECASE)
+NFRA_DOC_ID_RE = re.compile(r"[?&]docId=(\d+)", re.IGNORECASE)
 FLK_BBBS_RE = re.compile(r"^[0-9A-Fa-f]{24,80}$")
 # spp.gov.cn detail_id 是路径片段，不带前导 ``/`` 与 ``.shtml``，例：
 # ``xwfbh/wsfbt/202501/t20250116_679579``。
@@ -131,8 +133,14 @@ def infer_source(payload: dict) -> str | None:
         return "court_gongbao"
     if "www.court.gov.cn" in marker or "court.gov.cn" in marker:
         return "court_main"
-    if "xzfg.moj.gov.cn" in marker or "www.gov.cn/zhengce/xzfgk" in marker:
+    if (
+        "xzfg.moj.gov.cn" in marker
+        or "www.gov.cn/zhengce/xzfgk" in marker
+        or "www.gov.cn/zhengce/" in marker
+    ):
         return "gov_xzfgk"
+    if "nfra.gov.cn" in marker:
+        return "nfra_gov_cn"
     if "spp.gov.cn" in marker:
         return "spp_gov_cn"
     if "csrc.gov.cn" in marker:
@@ -150,7 +158,9 @@ def infer_source(payload: dict) -> str | None:
     return None
 
 
-def infer_source_id(payload: dict, source: str | None = None) -> str | None:
+# C901: 已知复杂（McCabe 38），三源文号主键推断集中于此；列为待拆分技术债，见
+# docs/decisions/ADR-0009-module-boundaries.md。
+def infer_source_id(payload: dict, source: str | None = None) -> str | None:  # noqa: C901
     """Infer the upstream id needed for document-number lookup."""
 
     source_key = _normalize_source(source) or infer_source(payload)
@@ -190,7 +200,20 @@ def infer_source_id(payload: dict, source: str | None = None) -> str | None:
         match = GOV_XZFGK_DETAIL_RE.search(source_url)
         if match:
             return match.group(1)
+        match = GOV_CN_CONTENT_RE.search(source_url)
+        if match:
+            return f"gov_cn:content_{match.group(1)}"
         if law_id.startswith("gov_xzfgk:"):
+            candidate = law_id.split(":", 1)[1]
+            if candidate.isdigit() or candidate.startswith("gov_cn:content_"):
+                return candidate
+        return None
+
+    if source_key == "nfra_gov_cn":
+        match = NFRA_DOC_ID_RE.search(source_url)
+        if match:
+            return match.group(1)
+        if law_id.startswith("nfra_gov_cn:"):
             candidate = law_id.split(":", 1)[1]
             if candidate.isdigit():
                 return candidate

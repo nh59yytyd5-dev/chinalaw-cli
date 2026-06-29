@@ -57,6 +57,7 @@ FETCH_SOURCES = (
     "court_gongbao",
     "court_main",
     "gov_xzfgk",
+    "nfra_gov_cn",
     "spp_gov_cn",
     "csrc_gov_cn",
     "bse_cn",
@@ -84,6 +85,7 @@ SOURCE_NAME_MARKERS: dict[str, str] = {
     "court_gongbao": "gongbao.court.gov.cn",
     "court_main": "www.court.gov.cn",
     "gov_xzfgk": "xzfg.moj.gov.cn",
+    "nfra_gov_cn": "www.nfra.gov.cn",
     "spp_gov_cn": "spp.gov.cn",
     "csrc_gov_cn": "www.csrc.gov.cn",
     "bse_cn": "www.bse.cn",
@@ -91,6 +93,13 @@ SOURCE_NAME_MARKERS: dict[str, str] = {
     "szse_cn": "www.szse.cn",
     "chinaclear_cn": "www.chinaclear.cn",
     "sac_net_cn": "www.sac.net.cn",
+}
+
+# A small number of adapters intentionally consume multiple official hosts
+# under one source key. Keep the primary marker above stable for existing tests
+# and allow aliases only in the local-hint consistency check.
+SOURCE_NAME_MARKER_ALIASES: dict[str, tuple[str, ...]] = {
+    "gov_xzfgk": ("www.gov.cn",),
 }
 
 
@@ -134,7 +143,9 @@ class FetchActionConflictError(FetchError):
     exit_code = 2
 
 
-def fetch_law(
+# C901: 已知复杂（McCabe 27），fetch 主编排（候选→清洗→入库→文号索引）；列为待拆分
+# 技术债，见 docs/decisions/ADR-0009-module-boundaries.md。
+def fetch_law(  # noqa: C901
     db_path: Path | str,
     name: str,
     *,
@@ -232,6 +243,7 @@ def fetch_law(
             "court_gongbao",
             "court_main",
             "gov_xzfgk",
+            "nfra_gov_cn",
             "spp_gov_cn",
             "csrc_gov_cn",
             "bse_cn",
@@ -622,7 +634,11 @@ def _resolve_local_fetch_hint(
             if row is None:
                 return None
             actual_source_name = (row["source_name"] or "").strip()
-            if actual_source_name != SOURCE_NAME_MARKERS[source]:
+            expected_markers = (
+                SOURCE_NAME_MARKERS[source],
+                *SOURCE_NAME_MARKER_ALIASES.get(source, ()),
+            )
+            if actual_source_name not in expected_markers:
                 return None
             payload = {
                 "source_url": row["source_url"] or "",

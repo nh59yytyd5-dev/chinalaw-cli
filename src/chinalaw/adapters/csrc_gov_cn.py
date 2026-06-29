@@ -92,6 +92,16 @@ DOC_NUMBER_PATTERNS = (
     re.compile(r"证监会令[【〔\[]\s*第?\s*(?P<num>\d+)\s*号[】〕\]]"),
     re.compile(r"中国证券监督管理委员会令\s*(?:第)?\s*(?P<num>\d+)\s*号"),
 )
+ANNOUNCEMENT_NUMBER_PATTERNS = (
+    re.compile(
+        r"中国证券监督管理委员会公告\s*"
+        r"[〔\[](?P<year>(?:19|20)\d{2})[〕\]]\s*(?P<num>\d+)\s*号"
+    ),
+    re.compile(
+        r"证监会公告\s*"
+        r"[〔\[](?P<year>(?:19|20)\d{2})[〕\]]\s*(?P<num>\d+)\s*号"
+    ),
+)
 EFFECTIVE_DATE_RE = re.compile(
     r"自\s*(?P<year>(?:19|20)\d{2})\s*年\s*"
     r"(?P<month>\d{1,2})\s*月\s*(?P<day>\d{1,2})\s*日起施行"
@@ -113,6 +123,7 @@ TITLE_SUFFIXES = (
 ISSUER_PREFIXES = ("中国证券监督管理委员会 ", "中国证券监督管理委员会", "证监会 ")
 NORMATIVE_COLUMNS = {
     "证监会令",
+    "证监会公告",
     "规章",
     "行政规范性文件",
     "证券基金经营机构监管规则",
@@ -198,6 +209,7 @@ def _clean_text_fragment(raw: str | None) -> str:
 def _clean_title(raw: str | None) -> str:
     text = _clean_text_fragment(raw)
     text = re.sub(r"^【第\d+号令】", "", text).strip()
+    text = re.sub(r"^【第\d+号公告】", "", text).strip()
     return text.strip("《》 ")
 
 
@@ -502,7 +514,16 @@ def _infer_effective_at(text: str) -> str | None:
     )
 
 
+def _takes_effect_on_publication(text: str) -> bool:
+    return "自公布之日起施行" in (text or "")
+
+
 def _infer_document_number(text: str) -> str | None:
+    for pattern in ANNOUNCEMENT_NUMBER_PATTERNS:
+        matches = list(pattern.finditer(text or ""))
+        if matches:
+            match = matches[-1]
+            return f"中国证券监督管理委员会公告〔{match.group('year')}〕{int(match.group('num'))}号"
     for pattern in DOC_NUMBER_PATTERNS:
         matches = list(pattern.finditer(text or ""))
         if matches:
@@ -705,7 +726,9 @@ class CsrcGovCnAdapter:
             or (search_row or {}).get("released_at")
             or _date_part(detail.get("published_at"))
         )
-        effective_at = _infer_effective_at(raw_text)
+        effective_at = _infer_effective_at(raw_text) or (
+            released_at if _takes_effect_on_publication(metadata_text) else None
+        )
         document_number = _infer_document_number(metadata_text)
         payload = cleaning.canonicalize(
             raw_text,

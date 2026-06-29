@@ -10,9 +10,9 @@ status / keyword 过滤拉一批候选，再用 ``fetch --prefer-bbbs <id>`` 精
 - ``discover`` 不需要 ``name``，不抛 ambiguous，纯候选流。
 
 ``flk_npc`` 原生支持完整 ``status`` 过滤（``docs/CLI_STATUS_FLAG_SPEC.md``
-§1.1 多源对照矩阵）。国家行政法规库、证监会 / 交易所 / 中证登 / 协会公开页
-只有当前公开页语义，允许 ``--status current`` 作为 agent 友好过滤，其它
-status fail loud。
+§1.1 多源对照矩阵）。国家行政法规库、NFRA、证监会 / 交易所 / 中证登 /
+协会公开页只有当前公开页语义，允许 ``--status current`` 作为 agent 友好过滤，
+其它 status fail loud。
 
 设计参见 ``docs/CLI_STATUS_FLAG_SPEC.md`` §3.4。
 """
@@ -33,6 +33,7 @@ from chinalaw.sources import (
 DISCOVER_SOURCES: tuple[str, ...] = (
     "flk_npc",
     "gov_xzfgk",
+    "nfra_gov_cn",
     "csrc_gov_cn",
     "bse_cn",
     "sse_com_cn",
@@ -52,7 +53,8 @@ def discover_laws(
     """按 status / 关键词列出 source 候选。
 
     Args:
-        source: 数据源；目前支持 ``flk_npc``、``gov_xzfgk`` 与证券规则类公开源。
+        source: 数据源；目前支持 ``flk_npc``、``gov_xzfgk``、``nfra_gov_cn``
+            与证券规则类公开源。
         query: 标题子串过滤；空字符串 / None 表示返回当页全部条目（按 flk
             站点默认 gbrq DESC 顺序）。
         status: 状态过滤关键字。``flk_npc`` 支持完整枚举；``gov_xzfgk`` /

@@ -536,6 +536,110 @@ class LoaderAndServiceTests(unittest.TestCase):
             self.assertEqual(exact_seed["law"]["id"], "seed-criminal-law")
             self.assertIsNone(exact_seed["article"])
 
+    def test_same_alias_prefers_current_over_larger_amended_version(self):
+        """同名多版本解析应先保现行性，再比较条文数量。"""
+
+        def articles(count: int) -> list[dict]:
+            return [
+                {
+                    "number": str(i),
+                    "number_display": f"第{i}条",
+                    "text": f"第{i}条正文。",
+                }
+                for i in range(1, count + 1)
+            ]
+
+        title = "最高人民法院关于审理票据纠纷案件若干问题的规定"
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "versioned-alias.db"
+            amended_payload = {
+                "id": "ticket-rule-2000",
+                "title": title,
+                "short_title": None,
+                "aliases": [],
+                "level": "judicial_interpretation",
+                "status": "amended",
+                "source_url": "https://example.test/ticket-rule-2000",
+                "source_name": "example.test",
+                "source_checked_at": "2026-05-24T00:00:00+08:00",
+                "released_at": "2000-11-14",
+                "effective_at": "2000-11-21",
+                "articles": articles(76),
+            }
+            current_payload = {
+                **amended_payload,
+                "id": "ticket-rule-2020",
+                "status": "current",
+                "source_url": "https://example.test/ticket-rule-2020",
+                "released_at": "2020-12-29",
+                "effective_at": "2021-01-01",
+                "articles": articles(75),
+            }
+            with connect(db_path) as conn:
+                migrate(conn)
+                loader.load_law_from_dict(conn, amended_payload)
+                loader.load_law_from_dict(conn, current_payload)
+
+            resolved = service.resolve(db_path, "票据纠纷规定")
+            self.assertEqual(resolved["id"], "ticket-rule-2020")
+            article = service.get_article(db_path, "票据纠纷规定", "23")
+            self.assertIsNotNone(article)
+            self.assertEqual(article["law"]["id"], "ticket-rule-2020")
+
+    def test_same_current_title_prefers_newer_release_over_larger_old_page(self):
+        """#116：同名 current 记录并存时，旧页不能因条文更多压过较新整理页。"""
+
+        def articles(count: int, *, marker: str) -> list[dict]:
+            return [
+                {
+                    "number": str(i),
+                    "number_display": f"第{i}条",
+                    "text": f"{marker}第{i}条正文。",
+                }
+                for i in range(1, count + 1)
+            ]
+
+        title = "证券公司风险控制指标管理办法"
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "same-current-title.db"
+            old_payload = {
+                "id": "csrc_gov_cn:csrc/c101838/c1022079",
+                "title": title,
+                "short_title": title,
+                "aliases": [],
+                "level": "department_rule",
+                "issuing_body": "中国证券监督管理委员会",
+                "document_number": "证监会令第34号",
+                "released_at": "2006-07-05",
+                "effective_at": "2006-11-01",
+                "status": "current",
+                "source_url": "https://example.test/csrc/old",
+                "source_name": "csrc_gov_cn",
+                "source_checked_at": "2026-05-24T00:00:00+08:00",
+                "articles": articles(42, marker="旧页"),
+            }
+            current_payload = {
+                **old_payload,
+                "id": "csrc_gov_cn:csrc/c106256/c1653957",
+                "document_number": "证监会令第166号",
+                "released_at": "2020-03-20",
+                "effective_at": "2020-03-20",
+                "source_url": "https://example.test/csrc/current",
+                "articles": articles(37, marker="现行整理页"),
+            }
+            with connect(db_path) as conn:
+                migrate(conn)
+                loader.load_law_from_dict(conn, old_payload)
+                loader.load_law_from_dict(conn, current_payload)
+
+            resolved = service.resolve(db_path, title)
+            self.assertEqual(resolved["id"], "csrc_gov_cn:csrc/c106256/c1653957")
+            self.assertEqual(resolved["document_number"], "证监会令第166号")
+            article = service.get_article(db_path, title, "17")
+            self.assertIsNotNone(article)
+            self.assertEqual(article["law"]["id"], "csrc_gov_cn:csrc/c106256/c1653957")
+            self.assertIn("现行整理页第17条", article["article"]["text"])
+
     def test_article_miss_lists_same_alias_sibling_laws(self):
         """精确命中 seed id 但缺条文时，诊断应告诉 agent 还有同名候选。"""
 
@@ -3398,6 +3502,21 @@ class SppGovCnFetchTests(unittest.TestCase):
 </body></html>
 """
 
+    DETAIL_FIXTURE_UNDISCLOSED_INFO = """
+<html><head><title>最高人民法院 最高人民检察院关于办理利用未公开信息交易刑事案件适用法律若干问题的解释_中华人民共和国最高人民检察院</title></head>
+<body>
+<div id="fontzoom">
+  <h2>最高人民法院 最高人民检察院关于办理利用未公开信息交易刑事案件适用法律若干问题的解释</h2>
+  <div class="time">发布时间：2019年06月28日</div>
+  <p>《最高人民法院 最高人民检察院关于办理利用未公开信息交易刑事案件适用法律若干问题的解释》已通过，现予公布，自2019年7月1日起施行。</p>
+  <p>最高人民法院 最高人民检察院</p>
+  <p>2019年6月27日</p>
+  <p>第一条 示例正文一。</p>
+  <p>第二条 示例正文二。</p>
+</div>
+</body></html>
+"""
+
     def _fake_list_result(self, fixture=None):
         return spp_gov_cn.FetchResult(
             url="https://www.spp.gov.cn/spp/sfjs/index.shtml",
@@ -3626,6 +3745,12 @@ class SppGovCnFetchTests(unittest.TestCase):
         self.assertEqual(payload["issuing_body"], "最高人民法院 最高人民检察院")
         # 文号自动抽取并归一化
         self.assertEqual(payload["document_number"], "高检发释字〔2025〕1号")
+        self.assertEqual(payload["released_at"], "2025-01-15")
+        self.assertEqual(payload["effective_at"], "2025-01-18")
+        self.assertIn(
+            "最高人民法院、最高人民检察院关于办理袭警刑事案件适用法律若干问题的解释",
+            payload["aliases"],
+        )
         # source 字段（CONTRACT.md §2.x）
         self.assertEqual(payload["source_name"], "spp.gov.cn")
         self.assertTrue(payload["id"].startswith("spp_gov_cn:"))
@@ -3634,6 +3759,24 @@ class SppGovCnFetchTests(unittest.TestCase):
         self.assertEqual(len(payload["articles"]), 3)
         article_numbers = [a.get("number") for a in payload["articles"]]
         self.assertEqual(article_numbers, ["1", "2", "3"])
+
+    def test_build_law_payload_fills_known_undisclosed_info_metadata(self):
+        adapter = spp_gov_cn.SppGovCnAdapter()
+        detail_id = "spp/xwfbh/wsfbh/201906/t20190628_423377"
+        fake = self._fake_detail_result(
+            self.DETAIL_FIXTURE_UNDISCLOSED_INFO,
+            url=f"https://www.spp.gov.cn/{detail_id}.shtml",
+        )
+        with patch.object(spp_gov_cn, "_fetch_text", return_value=fake):
+            payload = adapter.build_law_payload(detail_id)
+
+        self.assertEqual(payload["document_number"], "法释〔2019〕10号")
+        self.assertEqual(payload["released_at"], "2019-06-27")
+        self.assertEqual(payload["effective_at"], "2019-07-01")
+        self.assertIn(
+            "最高人民法院、最高人民检察院关于办理利用未公开信息交易刑事案件适用法律若干问题的解释",
+            payload["aliases"],
+        )
 
     def test_build_law_payload_level_guiding_case_for_jczdal(self):
         adapter = spp_gov_cn.SppGovCnAdapter()
@@ -5008,6 +5151,31 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(citations[0]["number"], "143")
         self.assertIn("具备下列条件", citations[0]["quoted_text"])
 
+    def test_extract_citations_reads_project_short_forms(self):
+        text = "调查措施见证§170；董事义务见公§142；基本原则见民§4。"
+        citations = audit.extract_citations(text)
+
+        self.assertEqual([item["law_input"] for item in citations], ["证券法", "公司法", "民法典"])
+        self.assertEqual([item["number"] for item in citations], ["170", "142", "4"])
+
+    def test_extract_citations_reads_jiumin_short_form_before_min(self):
+        text = "实际出资人显名规则见九民§28。"
+        citations = audit.extract_citations(text)
+
+        self.assertEqual([item["raw"] for item in citations], ["九民§28"])
+        self.assertEqual([item["law_input"] for item in citations], ["九民纪要"])
+        self.assertEqual([item["number"] for item in citations], ["28"])
+
+    def test_extract_citations_ignores_scholarly_and_comparative_sources(self):
+        text = (
+            "参见《证券法苑》2013、《清华法学》2015、"
+            "《论公司出资债权不得抵销》一、"
+            "《股东为公司垫付资金，能否作为出资？》2024-07、"
+            "《公司条例》第2、《公司更生法》第222、《有限责任公司法》第19。"
+        )
+
+        self.assertEqual(audit.extract_citations(text), [])
+
     def test_audit_text_passes_exact_article_excerpt(self):
         with tempfile.TemporaryDirectory() as td:
             db_path = self._db(td)
@@ -5019,6 +5187,21 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(report["citation_count"], 1)
         self.assertEqual(report["citations"][0]["law"]["status"], "current")
         self.assertEqual(report["citations"][0]["text_match"]["kind"], "exact_excerpt")
+
+    def test_audit_text_resolves_project_short_forms(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = self._db(td)
+            report = audit.audit_text(
+                db_path,
+                "调查措施见证§170；董事义务见公§142；基本原则见民§4。",
+            )
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["citation_count"], 3)
+        self.assertEqual(
+            [item["law"]["short_title"] for item in report["citations"]],
+            ["证券法", "公司法", "民法典"],
+        )
 
     def test_audit_text_does_not_treat_paraphrase_as_quoted_text(self):
         with tempfile.TemporaryDirectory() as td:
@@ -5386,6 +5569,9 @@ class CliTests(unittest.TestCase):
         self.assertIsNone(payload["law_id"])
         self.assertIn("chinalaw fetch", payload["suggested_fetch"])
         self.assertIn("--source flk_npc", payload["suggested_fetch"])
+        self.assertIn("gov_xzfgk", payload["fallback_sources"])
+        self.assertIn("nfra_gov_cn", payload["fallback_sources"])
+        self.assertIn("csrc_gov_cn", payload["fallback_sources"])
         self.assertIn("court_gongbao", payload["fallback_sources"])
         self.assertIn("court_main", payload["fallback_sources"])
         self.assertIn("spp_gov_cn", payload["fallback_sources"])

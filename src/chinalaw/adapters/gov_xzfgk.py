@@ -75,6 +75,42 @@ EFFECTIVE_DATE_RE = re.compile(
 DOCUMENT_NUMBER_RE = re.compile(
     r"(?:中华人民共和国)?国务院令\s*(?:第)?\s*(?P<num>\d+)\s*号"
 )
+GOV_CN_CONTENT_ID_RE = re.compile(r"content_(?P<content_id>\d+)\.htm", re.IGNORECASE)
+GOV_CN_META_RE = re.compile(
+    r'<meta\s+name=["\'](?P<name>[^"\']+)["\']\s+content=(?P<quote>["\'])(?P<value>.*?)'
+    r"(?P=quote)",
+    re.IGNORECASE | re.DOTALL,
+)
+GOV_CN_CONTENT_OPEN_RE = re.compile(
+    r'<div[^>]*id=["\']UCAP-CONTENT["\'][^>]*>',
+    re.IGNORECASE,
+)
+DEPARTMENT_RULE_DOCUMENT_NUMBER_RE = re.compile(
+    r"(?P<number>(?:中国)?(?:银行保险监督管理委员会|保险监督管理委员会|银监会|保监会)"
+    r"令\s*\d{4}\s*年\s*第\s*\d+\s*号|"
+    r"银保监发\s*[\[〔]\s*\d{4}\s*[\]〕]\s*\d+\s*号)"
+)
+
+GOV_CN_STATIC_PAGES: tuple[dict[str, str], ...] = (
+    {
+        "detail_id": "gov_cn:content_5725824",
+        "title": "商业银行股权管理暂行办法",
+        "url": "https://www.gov.cn/zhengce/2018-01/09/content_5725824.htm",
+        "issuing_body": "中国银行业监督管理委员会",
+    },
+    {
+        "detail_id": "gov_cn:content_5725835",
+        "title": "保险公司股权管理办法",
+        "url": "https://www.gov.cn/zhengce/2018-03/02/content_5725835.htm",
+        "issuing_body": "中国保险监督管理委员会",
+    },
+    {
+        "detail_id": "gov_cn:content_5725862",
+        "title": "信托公司股权管理暂行办法",
+        "url": "https://www.gov.cn/zhengce/2020-02/06/content_5725862.htm",
+        "issuing_body": "中国银行保险监督管理委员会",
+    },
+)
 
 
 @dataclass
@@ -134,7 +170,13 @@ def _normalize_detail_id(raw: str | None) -> str | None:
         return None
     if text.isdigit():
         return text
+    if text.startswith("gov_cn:content_") and text.removeprefix("gov_cn:content_").isdigit():
+        return text
     parsed = urlparse(text)
+    if parsed.netloc.endswith("gov.cn"):
+        match = GOV_CN_CONTENT_ID_RE.search(parsed.path)
+        if match:
+            return f"gov_cn:content_{match.group('content_id')}"
     query = parse_qs(parsed.query)
     law_id = (query.get("LawID") or query.get("lawid") or [None])[0]
     if law_id and str(law_id).isdigit():
@@ -147,6 +189,12 @@ def _detail_url(base_url: str, detail_id: str) -> str:
     normalized = _normalize_detail_id(detail_id)
     if not normalized:
         raise ValueError(f"invalid gov_xzfgk detail_id: {detail_id!r}")
+    if normalized.startswith("gov_cn:content_"):
+        for item in GOV_CN_STATIC_PAGES:
+            if item["detail_id"] == normalized:
+                return item["url"]
+        content_id = normalized.removeprefix("gov_cn:content_")
+        return f"https://www.gov.cn/zhengce/content_{content_id}.htm"
     return urljoin(base_url.rstrip("/") + "/", f"front/law/detail?LawID={normalized}")
 
 
@@ -168,6 +216,12 @@ def _parse_date(raw: str | None) -> str | None:
         f"{int(match.group('month')):02d}-"
         f"{int(match.group('day')):02d}"
     )
+
+
+def _date_part(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    return _parse_date(str(raw))
 
 
 def _date_for_label(text: str, label: str) -> str | None:
@@ -202,6 +256,83 @@ def _infer_document_number(text: str) -> str | None:
     if not matches:
         return None
     return f"国务院令第{int(matches[-1].group('num'))}号"
+
+
+def _infer_department_rule_document_number(text: str) -> str | None:
+    match = DEPARTMENT_RULE_DOCUMENT_NUMBER_RE.search(text or "")
+    if not match:
+        return None
+    return (
+        match.group("number")
+        .replace("[", "〔")
+        .replace("]", "〕")
+        .replace(" ", "")
+    )
+
+
+def _infer_department_rule_issuer(text: str) -> str | None:
+    candidates = (
+        ("中国银行保险监督管理委员会", "中国银行保险监督管理委员会"),
+        ("中国保险监督管理委员会", "中国保险监督管理委员会"),
+        ("中国银行业监督管理委员会", "中国银行业监督管理委员会"),
+        ("中国银监会", "中国银行业监督管理委员会"),
+        ("银监会", "中国银行业监督管理委员会"),
+        ("中国保监会", "中国保险监督管理委员会"),
+        ("保监会", "中国保险监督管理委员会"),
+    )
+    for marker, issuer in candidates:
+        if marker in (text or ""):
+            return issuer
+    return None
+
+
+def _gov_cn_meta(html: str, name: str) -> str | None:
+    expected = name.lower()
+    for match in GOV_CN_META_RE.finditer(html or ""):
+        if match.group("name").strip().lower() == expected:
+            return _clean_text(match.group("value"))
+    return None
+
+
+def _extract_gov_cn_content_html(html: str) -> str:
+    match = GOV_CN_CONTENT_OPEN_RE.search(html or "")
+    if not match:
+        return ""
+    body = html[match.end():]
+    marker = re.search(
+        r'<div[^>]*class=["\'][^"\']*\bgjgzk_wz\b',
+        body,
+        flags=re.IGNORECASE,
+    )
+    if marker:
+        body = body[: marker.start()]
+    return body.strip()
+
+
+def _gov_cn_static_rows(query: str, *, page_size: int) -> list[dict]:
+    needle = re.sub(r"\s+", "", query or "")
+    rows: list[dict] = []
+    for item in GOV_CN_STATIC_PAGES:
+        title = item["title"]
+        title_compact = re.sub(r"\s+", "", title)
+        if needle and needle not in title_compact and title_compact not in needle:
+            continue
+        rows.append(
+            {
+                "detail_id": item["detail_id"],
+                "title": title,
+                "released_at": None,
+                "effective_at": None,
+                "url": item["url"],
+                "status": "current",
+                "related_versions": [],
+                "issuing_body": item.get("issuing_body"),
+                "source_name": "www.gov.cn",
+            }
+        )
+        if len(rows) >= page_size:
+            break
+    return rows
 
 
 def _extract_detail_title(html: str) -> str | None:
@@ -384,6 +515,8 @@ class GovXzfgkAdapter:
         self._throttle()
         result = _fetch_text(self.search_url(needle), timeout=self.timeout)
         rows = _parse_search_rows(result.text, base_url=self.base_url, page_size=page_size)
+        if not rows:
+            rows = _gov_cn_static_rows(needle, page_size=page_size)
         return {
             "source": "gov_xzfgk",
             "query": needle,
@@ -403,6 +536,41 @@ class GovXzfgkAdapter:
         url = self.detail_url(normalized)
         self._throttle()
         result = _fetch_text(url, timeout=self.timeout)
+        if normalized.startswith("gov_cn:content_"):
+            content_html = _extract_gov_cn_content_html(result.text)
+            content_text = _html_to_text(content_html)
+            row = next(
+                (item for item in GOV_CN_STATIC_PAGES if item["detail_id"] == normalized),
+                {},
+            )
+            title = (
+                _clean_text(content_text.splitlines()[0] if content_text else "")
+                or row.get("title")
+                or _strip_title_suffix(_extract_title(result.text) or "")
+                or normalized
+            )
+            return {
+                "source": "gov_xzfgk",
+                "detail_id": normalized,
+                "url": result.url,
+                "raw_title": _extract_title(result.text),
+                "title": title,
+                "content_html": content_html,
+                "content_text": content_text,
+                "related_versions": [],
+                "source_last_modified": result.headers.get("Last-Modified"),
+                "source_etag": result.headers.get("ETag"),
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+                "source_name": "www.gov.cn",
+                "level": (
+                    "departmental_rule"
+                    if _gov_cn_meta(result.text, "lanmu") == "部门规章"
+                    else "admin_regulation"
+                ),
+                "issuing_body": row.get("issuing_body")
+                or _infer_department_rule_issuer(content_text),
+                "published_at": _gov_cn_meta(result.text, "firstpublishedtime"),
+            }
         content_html = _extract_content_html(result.text)
         title = _extract_detail_title(result.text) or normalized
         return {
@@ -447,22 +615,33 @@ class GovXzfgkAdapter:
             else "amended"
         )
         preamble = "\n".join(raw_text.splitlines()[:8])
-        released_at = (search_row or {}).get("released_at") or _latest_chinese_date(preamble)
+        released_at = (
+            (search_row or {}).get("released_at")
+            or _date_part(detail.get("published_at"))
+            or _latest_chinese_date(preamble)
+        )
         effective_at = (search_row or {}).get("effective_at") or _infer_effective_at(raw_text)
+        level = detail.get("level") or "admin_regulation"
+        issuing_body = detail.get("issuing_body") or "国务院"
+        document_number = (
+            _infer_document_number(preamble)
+            if level == "admin_regulation"
+            else _infer_department_rule_document_number(preamble)
+        )
         payload = cleaning.canonicalize(
             raw_text,
             source_kind="markdown",
             id=f"gov_xzfgk:{detail['detail_id']}",
             title=title,
             short_title=_infer_short_title(title),
-            level="admin_regulation",
+            level=level,
             status=status,
-            issuing_body="国务院",
-            document_number=_infer_document_number(preamble),
+            issuing_body=issuing_body,
+            document_number=document_number,
             released_at=released_at,
             effective_at=effective_at,
             source_url=detail.get("url"),
-            source_name="xzfg.moj.gov.cn",
+            source_name=detail.get("source_name") or "xzfg.moj.gov.cn",
             source_checked_at=detail.get("checked_at"),
             source_hash=self._hash_text(raw_text),
         )

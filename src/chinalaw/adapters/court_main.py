@@ -547,6 +547,12 @@ def _single_body_article(text: str) -> list[dict]:
     return cleaning.single_body_article(text)
 
 
+def _policy_item_articles(level: str, text: str) -> list[dict]:
+    if level not in {"judicial_policy", "judicial_meeting_minutes"}:
+        return []
+    return cleaning.parse_numbered_items_from_text(text)
+
+
 @dataclass
 class CourtMainAdapter:
     """最高人民法院主站 adapter。"""
@@ -713,8 +719,31 @@ class CourtMainAdapter:
         effective_at = _infer_effective_at(raw_text)
         text = raw_text
         articles = cleaning.parse_articles_from_text(text)
+        item_articles = _policy_item_articles(level, text)
 
-        if _should_emit_single_body_article(
+        if item_articles:
+            payload = cleaning.canonicalize(
+                {
+                    "id": f"court_main:{detail['detail_id']}",
+                    "title": title,
+                    "short_title": _infer_short_title(title),
+                    "aliases": [],
+                    "level": level,
+                    "status": "current",
+                    "issuing_body": issuing_body,
+                    "document_number": document_number,
+                    "released_at": released_at,
+                    "effective_at": effective_at,
+                    "repealed_at": None,
+                    "source_url": detail.get("url"),
+                    "source_name": "www.court.gov.cn",
+                    "source_checked_at": detail.get("checked_at"),
+                    "source_hash": self._hash_text(text),
+                    "articles": item_articles,
+                },
+                source_kind="external_json",
+            )
+        elif _should_emit_single_body_article(
             title, text, articles
         ) or _should_emit_policy_body_article(level, articles):
             payload = cleaning.canonicalize(

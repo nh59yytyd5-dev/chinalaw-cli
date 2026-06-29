@@ -10,15 +10,41 @@ from pathlib import Path
 from chinalaw import normpacks, normsources, service, snapshots
 
 _CN_NUM = "一二三四五六七八九十百千万零〇两"
+_NUMBER_BASE_RE = rf"[{_CN_NUM}\d]+"
+_NUMBER_CORE_RE = rf"{_NUMBER_BASE_RE}(?:[-－—][{_CN_NUM}\d]+|之[{_CN_NUM}\d]+)?"
 _ARTICLE_NUMBER_RE = (
-    rf"第?\s*[{_CN_NUM}\d]+"
-    rf"(?:条(?:之[{_CN_NUM}\d]+)?|[-－—][{_CN_NUM}\d]+|之[{_CN_NUM}\d]+)?"
+    rf"(?:第?\s*{_NUMBER_BASE_RE}\s*条(?:之[{_CN_NUM}\d]+)?|"
+    rf"第?\s*{_NUMBER_BASE_RE}\s*[-－—]\s*{_NUMBER_BASE_RE}\s*条?|"
+    rf"第?\s*{_NUMBER_BASE_RE}\s*项)"
 )
 _CITATION_RE = re.compile(
     rf"《(?P<law>[^》]{{1,80}})》\s*(?P<number>{_ARTICLE_NUMBER_RE})"
 )
+_SHORT_CITATION_RE = re.compile(
+    rf"(?<![A-Za-z0-9_])"
+    rf"(?P<law>九民|[民公证])\s*§\s*(?P<number>{_NUMBER_CORE_RE})\s*(?:条|项)?"
+)
 _DATE_RE = re.compile(r"(?:19|20)\d{2}[年/-]\d{1,2}(?:[月/-]\d{1,2}日?)?")
 _PUNCT_RE = re.compile(r"[\s　，,。；;：:、（）()【】\[\]《》“”\"'‘’`]+")
+_SHORT_LAW_ALIASES = {
+    "九民": "九民纪要",
+    "民": "民法典",
+    "公": "公司法",
+    "证": "证券法",
+}
+_SCHOLARLY_SOURCE_TITLES = {
+    "证券法苑",
+    "清华法学",
+    "法律科学",
+    "交大法学",
+    "法学评论",
+    "法律适用",
+}
+_COMPARATIVE_LAW_TITLES = {
+    "公司条例",
+    "公司更生法",
+    "有限责任公司法",
+}
 
 
 def extract_citations(text: str) -> list[dict]:
@@ -34,10 +60,13 @@ def extract_citations(text: str) -> list[dict]:
         start = match.start()
         end = match.end()
         number_input = match.group("number").strip()
+        law_input = match.group("law").strip()
+        if _should_ignore_book_title_citation(law_input, number_input):
+            continue
         citations.append(
             {
                 "raw": raw,
-                "law_input": match.group("law").strip(),
+                "law_input": law_input,
                 "number_input": number_input,
                 "number": service.normalize_article_number(number_input),
                 "position": {
@@ -49,7 +78,49 @@ def extract_citations(text: str) -> list[dict]:
                 "quoted_text": _extract_quoted_text(text, end),
             }
         )
+    for match in _SHORT_CITATION_RE.finditer(text or ""):
+        raw = match.group(0)
+        start = match.start()
+        end = match.end()
+        law_input = _SHORT_LAW_ALIASES[match.group("law")]
+        number_input = match.group("number").strip()
+        citations.append(
+            {
+                "raw": raw,
+                "law_input": law_input,
+                "number_input": number_input,
+                "number": service.normalize_article_number(number_input),
+                "position": {
+                    "start": start,
+                    "end": end,
+                    "line": (text or "").count("\n", 0, start) + 1,
+                },
+                "context": _context(text, start, end),
+                "quoted_text": _extract_quoted_text(text, end),
+            }
+        )
+    citations.sort(key=lambda item: item.get("position", {}).get("start", 0))
     return citations
+
+
+def _should_ignore_book_title_citation(law_input: str, number_input: str) -> bool:
+    title = (law_input or "").strip()
+    number = (number_input or "").strip()
+    if not title:
+        return True
+    if title in _SCHOLARLY_SOURCE_TITLES or title in _COMPARATIVE_LAW_TITLES:
+        return True
+    if title.startswith("论") and len(title) >= 8:
+        return True
+    if any(mark in title for mark in ("？", "?", "，", ",", "：", ":")):
+        return True
+    return _looks_like_source_year(number)
+
+
+def _looks_like_source_year(number_input: str) -> bool:
+    compact = re.sub(r"\s+", "", number_input or "")
+    compact = compact.removeprefix("第").removesuffix("条").removesuffix("项")
+    return bool(re.fullmatch(r"(?:19|20)\d{2}(?:[-/]\d{1,2})?", compact))
 
 
 def audit_file(

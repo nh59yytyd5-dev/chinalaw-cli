@@ -80,300 +80,6 @@ def _add_snapshot_out_arg(p: argparse.ArgumentParser) -> None:
     )
 
 
-def _fetch_to_markdown(payload: dict) -> str:
-    if payload.get("kind") == "law_fetch_candidates":
-        lines = [f"# fetch 候选：{payload.get('name', '')}", ""]
-        for cand in payload.get("candidates") or []:
-            lines.append(
-                f"- {cand.get('title', '')} — id={cand.get('id') or cand.get('bbbs', '')}"
-                f" / released={cand.get('released_at', '')}"
-                f" / status={cand.get('status', '')}"
-            )
-        return "\n".join(lines) + "\n"
-
-    matched = payload.get("matched_title") or payload.get("name", "")
-    matched_id = payload.get("matched_id") or payload.get("matched_bbbs", "")
-    actions = []
-    if payload.get("loaded"):
-        actions.append("loaded")
-    if payload.get("skipped"):
-        actions.append("skipped (same source_hash)")
-    if payload.get("dry_run"):
-        actions.append("dry-run")
-    if payload.get("wrote_fixture"):
-        actions.append(f"wrote_fixture={payload['wrote_fixture']}")
-    action_text = ", ".join(actions) or "no-op"
-
-    lines = [
-        f"# fetch:{payload.get('name', '')} → {matched}",
-        f"- id: `{matched_id}`",
-        f"- 动作: {action_text}",
-        f"- 条文数: {payload.get('article_count', 0)}",
-    ]
-    article = payload.get("article")
-    if article:
-        text = (article.get("text") or "").strip().replace("\n", " ")
-        if len(text) > 200:
-            text = text[:200] + "…"
-        lines.append("")
-        lines.append(f"## {article.get('number_display', '')}")
-        if article.get("part"):
-            lines.append(f"_位置：{article['part']}_")
-        lines.append("")
-        lines.append(f"> {text}")
-    return "\n".join(lines) + "\n"
-
-
-def _sync_to_markdown(payload: dict) -> str:
-    if payload.get("kind") == "applicability_import":
-        return (
-            f"时间效力规则同步完成：{payload.get('relations_loaded', 0)} 条关系 / "
-            f"{payload.get('rules_loaded', 0)} 条规则\n"
-            + "\n".join(f"- {topic}" for topic in payload.get("topics", []))
-            + "\n"
-        )
-    return (
-        f"同步完成：{payload['laws_loaded']} 部法规 / "
-        f"{payload['articles_loaded']} 条条文\n"
-        + "\n".join(f"- {t}" for t in payload.get("titles", []))
-        + "\n"
-    )
-
-
-def _init_to_markdown(payload: dict) -> str:
-    status = "通过" if payload.get("ok") else "需要处理"
-    sync = payload.get("fixture_sync") or {}
-    doctor_report = payload.get("doctor") or {}
-    lines = [
-        "# chinalaw init",
-        "",
-        f"- 状态：{status}",
-        f"- 数据库：`{payload.get('db_path')}`",
-        f"- 加载法规：{sync.get('laws_loaded', 0)} 部",
-        f"- 加载条文：{sync.get('articles_loaded', 0)} 条",
-        f"- doctor errors：{doctor_report.get('error_count', 0)}",
-        f"- doctor warnings：{doctor_report.get('warning_count', 0)}",
-    ]
-    next_commands = payload.get("next_commands") or []
-    if next_commands:
-        lines.extend(["", "## Next"])
-        lines.extend(f"- `{command}`" for command in next_commands)
-    return "\n".join(lines) + "\n"
-
-
-def _corpus_to_markdown(payload: dict) -> str:
-    kind = payload.get("kind")
-    if kind == "recommended_corpus_profiles":
-        lines = [
-            "# recommended corpus profiles",
-            "",
-            f"- schema_version: {payload.get('schema_version')}",
-            f"- as_of: {payload.get('as_of')}",
-            f"- path: `{payload.get('path')}`",
-            f"- profiles: {payload.get('profile_count', 0)}",
-            "",
-            "## Profiles",
-        ]
-        for profile in payload.get("profiles") or []:
-            deps = ", ".join(profile.get("dependencies") or []) or "none"
-            aliases = ", ".join(profile.get("aliases") or []) or "none"
-            lines.append(
-                f"- `{profile.get('name')}` ({profile.get('priority')}) — "
-                f"{profile.get('entry_count', 0)} entries / "
-                f"{profile.get('installable_count', 0)} installable / "
-                f"deps: {deps} / aliases: {aliases}"
-            )
-        return "\n".join(lines).rstrip() + "\n"
-
-    lines = [
-        "# recommended corpus profile",
-        "",
-        f"- requested: {', '.join(payload.get('requested_profiles') or [])}",
-        f"- included: {', '.join(payload.get('included_profiles') or [])}",
-        f"- dependencies: {'yes' if payload.get('include_dependencies') else 'no'}",
-        f"- entries: {payload.get('entry_count', 0)}",
-        "",
-        "## Entries",
-    ]
-    for entry in payload.get("entries") or []:
-        installable = (
-            entry.get("installable", True)
-            and entry.get("source_status", "supported") == "supported"
-        )
-        status = "installable" if installable else entry.get("source_status", "unsupported")
-        lines.append(
-            f"- `{entry.get('profile')}` {entry.get('title')}（{entry.get('short_title') or ''}）"
-            f" — {entry.get('priority')} / {entry.get('primary_source')} / {status}"
-        )
-        if entry.get("needs_verification"):
-            lines.append("  needs_verification: true")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _sources_to_markdown(payload: dict) -> str:
-    if payload.get("kind") == "source_coverage_source":
-        source = payload.get("source") or {}
-        commands = source.get("commands") or {}
-        lines = [
-            f"# source: {source.get('id')}",
-            "",
-            f"- name: {source.get('name')}",
-            f"- class: {source.get('coverage_class')}",
-            f"- authority_layer: {source.get('authority_layer')}",
-            f"- adapter_status: {source.get('adapter_status')}",
-            f"- maturity: {source.get('maturity')}",
-            f"- public_v2: {source.get('public_v2')}",
-            "",
-            "## Commands",
-        ]
-        for name, status in commands.items():
-            lines.append(f"- `{name}`: {status}")
-        urls = source.get("urls") or []
-        if urls:
-            lines.extend(["", "## URLs"])
-            lines.extend(f"- {url}" for url in urls)
-        scope = source.get("content_scope") or []
-        if scope:
-            lines.extend(["", "## Scope"])
-            lines.extend(f"- {item}" for item in scope)
-        limitations = source.get("limitations") or []
-        if limitations:
-            lines.extend(["", "## Limitations"])
-            lines.extend(f"- {item}" for item in limitations)
-        return "\n".join(lines).rstrip() + "\n"
-
-    lines = [
-        "# source coverage",
-        "",
-        f"- schema_version: {payload.get('schema_version')}",
-        f"- as_of: {payload.get('as_of')}",
-        f"- sources: {payload.get('source_count', 0)}",
-        "",
-        "## Sources",
-    ]
-    for source in payload.get("sources") or []:
-        commands = source.get("commands") or {}
-        supported = [
-            name
-            for name in ("fetch", "discover", "sync", "verify_source")
-            if commands.get(name) == "supported"
-        ]
-        supported_text = ", ".join(supported) if supported else "none"
-        lines.append(
-            f"- `{source.get('id')}` — {source.get('coverage_class')} / "
-            f"{source.get('maturity')} / public_v2={source.get('public_v2')} / "
-            f"{supported_text}"
-        )
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _schema_to_markdown(payload: dict) -> str:
-    kind = payload.get("kind")
-    if kind == "cli_schema_index":
-        lines = [
-            "# chinalaw schema",
-            "",
-            f"- schema_version: {payload.get('schema_version')}",
-            f"- commands: {payload.get('command_count', 0)}",
-            "",
-            "## Global Flags",
-        ]
-        for flag in payload.get("global_flags") or []:
-            lines.append(f"- `{flag.get('name')}` — {flag.get('description') or ''}")
-        lines.extend(
-            [
-                "",
-                "## Commands",
-            ]
-        )
-        for command in payload.get("commands") or []:
-            lines.append(
-                f"- `{command.get('path')}` — {command.get('risk')} / {command.get('summary')}"
-            )
-        return "\n".join(lines).rstrip() + "\n"
-
-    if kind == "mcp_schema":
-        budget = (payload.get("context_budget") or {}).get("target_tools_list_chars")
-        lines = [
-            "# chinalaw MCP schema",
-            "",
-            f"- tools: {payload.get('tool_count', 0)}",
-            f"- context budget: {budget} chars",
-            "",
-            "## Tools",
-        ]
-        for tool in payload.get("tools") or []:
-            lines.append(
-                f"- `{tool.get('name')}` — {tool.get('risk')} / {tool.get('cli_equivalent')}"
-            )
-        return "\n".join(lines).rstrip() + "\n"
-
-    command = payload.get("command") or {}
-    lines = [
-        f"# schema: {command.get('path') or payload.get('target') or ''}",
-        "",
-        f"- summary: {command.get('summary')}",
-        f"- risk: {command.get('risk')}",
-        f"- side_effect: {command.get('side_effect')}",
-        f"- network: {command.get('network')}",
-        f"- authority_boundary: {command.get('authority_boundary')}",
-        f"- output: {command.get('json_output', {}).get('kind')}",
-        "",
-        "## Arguments",
-    ]
-    positionals = command.get("positional") or []
-    flags = command.get("flags") or []
-    if positionals:
-        for arg in positionals:
-            required = "required" if arg.get("required") else "optional"
-            lines.append(f"- `{arg.get('name')}` ({required}) — {arg.get('description') or ''}")
-    if flags:
-        for arg in flags:
-            required = "required" if arg.get("required") else "optional"
-            lines.append(f"- `{arg.get('name')}` ({required}) — {arg.get('description') or ''}")
-    if not positionals and not flags:
-        lines.append("- 无")
-    exit_codes = command.get("exit_codes") or {}
-    if exit_codes:
-        lines.extend(["", "## Exit Codes"])
-        for code, meaning in exit_codes.items():
-            lines.append(f"- `{code}`: {meaning}")
-    misuse = command.get("common_misuse") or []
-    if misuse:
-        lines.extend(["", "## Common Misuse"])
-        for item in misuse:
-            lines.append(f"- {item}")
-    follow_ups = command.get("suggested_follow_ups") or []
-    if follow_ups:
-        lines.extend(["", "## Suggested Follow-ups"])
-        for item in follow_ups:
-            lines.append(f"- `{item}`")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _doctor_to_markdown(payload: dict) -> str:
-    status = "通过" if payload.get("ok") else "失败"
-    lines = [
-        "# chinalaw doctor",
-        "",
-        f"- 状态：{status}",
-        f"- strict：{payload.get('strict')}",
-        f"- 数据库：`{payload.get('db_path')}`",
-        f"- errors：{payload.get('error_count', 0)}",
-        f"- warnings：{payload.get('warning_count', 0)}",
-        "",
-        "## Checks",
-    ]
-    for check in payload.get("checks") or []:
-        lines.append(
-            f"- [{str(check.get('status') or '').upper()}] "
-            f"{check.get('name')}: {check.get('message')}"
-        )
-        if check.get("hint"):
-            lines.append(f"  hint: {check['hint']}")
-    return "\n".join(lines).rstrip() + "\n"
-
-
 def _add_search_parser(sub) -> None:
     p_search = sub.add_parser("search", help="关键词 / 全文检索（FTS5）")
     p_search.add_argument(
@@ -1470,34 +1176,6 @@ def _emit(payload, fmt: str, md_fn) -> None:
         sys.stdout.write("\n")
 
 
-def _snapshot_to_markdown(payload: dict) -> str:
-    lines = [
-        "# chinalaw snapshot",
-        f"- 项目：{payload.get('project_path') or '无'}",
-        f"- 快照：{payload.get('snapshot_path') or '无'}",
-        f"- 已启用：{'是' if payload.get('exists') else '否'}",
-        f"- 记录数：{payload.get('record_count', 0)}",
-        f"- 写入模式：{payload.get('write_mode') or '无'}",
-    ]
-    if payload.get("first_timestamp"):
-        lines.append(f"- 首条：{payload.get('first_timestamp')}")
-    if payload.get("last_timestamp"):
-        lines.append(f"- 末条：{payload.get('last_timestamp')}")
-    commands = payload.get("commands") or {}
-    if commands:
-        lines.append("")
-        lines.append("## Commands")
-        for command, count in sorted(commands.items()):
-            lines.append(f"- {command}: {count}")
-    evidence_levels = payload.get("evidence_levels") or {}
-    if evidence_levels:
-        lines.append("")
-        lines.append("## Evidence Levels")
-        for level, count in sorted(evidence_levels.items()):
-            lines.append(f"- {level}: {count}")
-    return "\n".join(lines) + "\n"
-
-
 def _record_snapshot(args, db_path: Path, command: str, payload: dict) -> None:
     snapshot_path = snapshots.resolve_snapshot_out(
         getattr(args, "snapshot_out", None),
@@ -1583,52 +1261,9 @@ def _handle_get(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) 
     return 0
 
 
-_LEVEL_LABELS = {
-    "law": "法律",
-    "judicial_interpretation": "司法解释",
-    "judicial_meeting_minutes": "司法会议纪要",
-    "administrative_regulation": "行政法规",
-    "departmental_rule": "部门规章",
-    "local_regulation": "地方性法规",
-    "constitution": "宪法",
-}
-
-_VIA_LABELS = {
-    "id_match": "id 精确",
-    "title_match": "全名精确",
-    "short_title_match": "短称精确",
-    "alias_exact": "alias 列表精确",
-    "alias_derived": "规则派生 alias",
-    "like_fallback": "模糊匹配（最后兜底）",
-}
-
-
-def _resolve_to_markdown(payload: dict) -> str:
-    if not payload.get("matched"):
-        lines = [
-            f"- 输入：{payload.get('input') or '—'}",
-            "- 命中：未找到",
-            "- 提示：试 `chinalaw fetch <俗称> --list-matches` 列候选",
-        ]
-        return "\n".join(lines) + "\n"
-
-    level = payload.get("level") or "?"
-    via = payload.get("via") or "?"
-    issuer = payload.get("issuing_body") or "?"
-    lines = [
-        f"- 输入：{payload.get('input')}",
-        f"- 正式：{payload.get('official_title')}",
-        f"- 短称：{payload.get('short_title') or '—'}",
-        f"- 效力层级：{_LEVEL_LABELS.get(level, level)}（{issuer}发布）",
-        f"- 状态：{payload.get('status') or '?'}",
-        f"- 命中路径：{via}（{_VIA_LABELS.get(via, '?')}）",
-    ]
-    return "\n".join(lines) + "\n"
-
-
 def _handle_resolve(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
     payload = service.resolve(db_path, args.name)
-    _emit(payload, fmt, _resolve_to_markdown)
+    _emit(payload, fmt, formatters.resolve_to_markdown)
     return 0 if payload.get("matched") else 1
 
 
@@ -1905,7 +1540,7 @@ def _handle_init(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
             "chinalaw doctor --format md",
         ],
     }
-    _emit(result, fmt, _init_to_markdown)
+    _emit(result, fmt, formatters.init_to_markdown)
     return 0 if result["ok"] else 1
 
 
@@ -1949,7 +1584,7 @@ def _handle_sync(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
         }
         _emit(msg, fmt, lambda m: f"> {m['message']}\n")
         return 2
-    _emit(result, fmt, _sync_to_markdown)
+    _emit(result, fmt, formatters.sync_to_markdown)
     return 0
 
 
@@ -1998,25 +1633,8 @@ def _handle_fetch(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser
         )
         return 2
     _record_snapshot(args, db_path, "fetch", result)
-    _emit(result, fmt, _fetch_to_markdown)
+    _emit(result, fmt, formatters.fetch_to_markdown)
     return 0
-
-
-def _discover_to_markdown(payload: dict) -> str:
-    lines = [
-        f"# discover：{payload.get('source', '')}",
-        f"- 查询：{payload.get('query') or '(空)'}",
-        f"- 状态：{payload.get('status') or '(全部)'}",
-        f"- 候选数：{len(payload.get('candidates') or [])}",
-        "",
-    ]
-    for cand in payload.get("candidates") or []:
-        lines.append(
-            f"- {cand.get('title', '')} — id=`{cand.get('id') or cand.get('bbbs', '')}`"
-            f" / released={cand.get('released_at', '')}"
-            f" / status={cand.get('status', '')}"
-        )
-    return "\n".join(lines) + "\n"
 
 
 def _handle_discover(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
@@ -2049,7 +1667,7 @@ def _handle_discover(args, db_path: Path, fmt: str, parser: argparse.ArgumentPar
             lambda m: f"! {m['error']}: {m['message']}\n",
         )
         return 2
-    _emit(result, fmt, _discover_to_markdown)
+    _emit(result, fmt, formatters.discover_to_markdown)
     return 0
 
 
@@ -2120,7 +1738,7 @@ def _handle_corpus(args, db_path: Path, fmt: str, parser: argparse.ArgumentParse
             lambda m: f"! {m['error']}: {m['message']}\n",
         )
         return 2
-    _emit(result, fmt, _corpus_to_markdown)
+    _emit(result, fmt, formatters.corpus_to_markdown)
     return 0
 
 
@@ -2150,7 +1768,7 @@ def _handle_sources(args, db_path: Path, fmt: str, parser: argparse.ArgumentPars
             lambda payload: f"source coverage error: {payload['message']}\n",
         )
         return 1
-    _emit(result, fmt, _sources_to_markdown)
+    _emit(result, fmt, formatters.sources_to_markdown)
     return 0
 
 
@@ -2174,7 +1792,7 @@ def _handle_schema(args, db_path: Path, fmt: str, parser: argparse.ArgumentParse
                 lambda m: f"! {m['error']}: {m['message']}\n",
             )
             return 1
-    _emit(payload, fmt, _schema_to_markdown)
+    _emit(payload, fmt, formatters.schema_to_markdown)
     return 0
 
 
@@ -2184,7 +1802,7 @@ def _handle_doctor(args, db_path: Path, fmt: str, parser: argparse.ArgumentParse
         strict=args.strict,
         source_smoke=args.source_smoke,
     )
-    _emit(report, fmt, _doctor_to_markdown)
+    _emit(report, fmt, formatters.doctor_to_markdown)
     return 0 if report.get("ok") else 1
 
 
@@ -2666,7 +2284,7 @@ def _handle_snapshot(args, db_path: Path, fmt: str, parser: argparse.ArgumentPar
     else:
         parser.print_help()
         return 0
-    _emit(report, fmt, _snapshot_to_markdown)
+    _emit(report, fmt, formatters.snapshot_to_markdown)
     return 0
 
 
@@ -2708,6 +2326,7 @@ _COMMAND_HANDLERS = {
 
 
 def app(argv: list[str] | None = None) -> int:
+    _configure_text_stdio()
     parser = build_parser()
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
     args = parser.parse_args(raw_argv)
@@ -2751,7 +2370,6 @@ def _suppress_broken_pipe() -> None:
 
 
 def main() -> None:
-    _configure_text_stdio()
     raise SystemExit(app())
 
 
