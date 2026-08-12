@@ -1,0 +1,572 @@
+{
+  "schema_version": 1,
+  "description": "Release gate for bundled public-law fixtures. Counts and integer ranges are explicit so missing clauses cannot pass by merely remaining non-empty.",
+  "fixtures": {
+    "administrative_litigation_interpretation.json": {
+      "expected_article_count": 163,
+      "integer_sequence": {
+        "first": 1,
+        "last": 163
+      }
+    },
+    "administrative_litigation_law.json": {
+      "expected_article_count": 103,
+      "integer_sequence": {
+        "first": 1,
+        "last": 103
+      }
+    },
+    "administrative_penalty_law.json": {
+      "expected_article_count": 86,
+      "integer_sequence": {
+        "first": 1,
+        "last": 86
+      }
+    },
+    "administrative_reconsideration_law.json": {
+      "expected_article_count": 90,
+      "integer_sequence": {
+        "first": 1,
+        "last": 90
+      }
+    },
+    "arbitration_law.json": {
+      "expected_article_count": 96,
+      "integer_sequence": {
+        "first": 1,
+        "last": 96
+      }
+    },
+    "civil_code.json": {
+      "expected_article_count": 1260,
+      "integer_sequence": {
+        "first": 1,
+        "last": 1260
+      }
+    },
+    "civil_code_general_part_interpretation.json": {
+      "expected_article_count": 39,
+      "integer_sequence": {
+        "first": 1,
+        "last": 39
+      }
+    },
+    "civil_code_inheritance_interpretation_1.json": {
+      "expected_article_count": 45,
+      "integer_sequence": {
+        "first": 1,
+        "last": 45
+      }
+    },
+    "civil_code_marriage_family_interpretation_1.json": {
+      "expected_article_count": 91,
+      "integer_sequence": {
+        "first": 1,
+        "last": 91
+      }
+    },
+    "civil_code_marriage_family_interpretation_2.json": {
+      "expected_article_count": 23,
+      "integer_sequence": {
+        "first": 1,
+        "last": 23
+      }
+    },
+    "civil_code_property_part_interpretation_1.json": {
+      "expected_article_count": 21,
+      "integer_sequence": {
+        "first": 1,
+        "last": 21
+      }
+    },
+    "civil_code_security_interpretation.json": {
+      "expected_article_count": 71,
+      "integer_sequence": {
+        "first": 1,
+        "last": 71
+      }
+    },
+    "civil_code_time_effect_rules.json": {
+      "expected_article_count": 28,
+      "integer_sequence": {
+        "first": 1,
+        "last": 28
+      }
+    },
+    "civil_code_tort_interpretation_1.json": {
+      "expected_article_count": 26,
+      "integer_sequence": {
+        "first": 1,
+        "last": 26
+      }
+    },
+    "civil_evidence_provisions.json": {
+      "expected_article_count": 100,
+      "integer_sequence": {
+        "first": 1,
+        "last": 100
+      }
+    },
+    "civil_procedure_interpretation.json": {
+      "expected_article_count": 550,
+      "integer_sequence": {
+        "first": 1,
+        "last": 550
+      }
+    },
+    "civil_procedure_law.json": {
+      "expected_article_count": 306,
+      "integer_sequence": {
+        "first": 1,
+        "last": 306
+      }
+    },
+    "civil_procedure_law_2017.json": {
+      "expected_article_count": 284,
+      "integer_sequence": {
+        "first": 1,
+        "last": 284
+      }
+    },
+    "civil_procedure_law_2021.json": {
+      "expected_article_count": 291,
+      "integer_sequence": {
+        "first": 1,
+        "last": 291
+      }
+    },
+    "commercial_housing_sale_interpretation.json": {
+      "expected_article_count": 24,
+      "integer_sequence": {
+        "first": 1,
+        "last": 24
+      }
+    },
+    "company_law_2024.json": {
+      "expected_article_count": 266,
+      "integer_sequence": {
+        "first": 1,
+        "last": 266
+      }
+    },
+    "constitution_1954.json": {
+      "expected_article_count": 107,
+      "integer_sequence": {
+        "first": 1,
+        "last": 106
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_1975.json": {
+      "expected_article_count": 31,
+      "integer_sequence": {
+        "first": 1,
+        "last": 30
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_1978.json": {
+      "expected_article_count": 61,
+      "integer_sequence": {
+        "first": 1,
+        "last": 60
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_1979.json": {
+      "expected_article_count": 61,
+      "integer_sequence": {
+        "first": 1,
+        "last": 60
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_1980.json": {
+      "expected_article_count": 61,
+      "integer_sequence": {
+        "first": 1,
+        "last": 60
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_1982.json": {
+      "expected_article_count": 139,
+      "integer_sequence": {
+        "first": 1,
+        "last": 138
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_1988.json": {
+      "expected_article_count": 139,
+      "integer_sequence": {
+        "first": 1,
+        "last": 138
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_1993.json": {
+      "expected_article_count": 139,
+      "integer_sequence": {
+        "first": 1,
+        "last": 138
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_1999.json": {
+      "expected_article_count": 139,
+      "integer_sequence": {
+        "first": 1,
+        "last": 138
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_2004.json": {
+      "expected_article_count": 139,
+      "integer_sequence": {
+        "first": 1,
+        "last": 138
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "constitution_2018.json": {
+      "expected_article_count": 144,
+      "integer_sequence": {
+        "first": 1,
+        "last": 143
+      },
+      "allowed_symbolic_numbers": [
+        "序言"
+      ]
+    },
+    "construction_contract_interpretation_1.json": {
+      "expected_article_count": 45,
+      "integer_sequence": {
+        "first": 1,
+        "last": 45
+      }
+    },
+    "consumer_rights_protection_law.json": {
+      "expected_article_count": 63,
+      "integer_sequence": {
+        "first": 1,
+        "last": 63
+      }
+    },
+    "contract_chapter_interpretation_2023.json": {
+      "expected_article_count": 69,
+      "integer_sequence": {
+        "first": 1,
+        "last": 69
+      }
+    },
+    "criminal_law_1979.json": {
+      "expected_article_count": 192,
+      "integer_sequence": {
+        "first": 1,
+        "last": 192
+      }
+    },
+    "criminal_law_1997.json": {
+      "expected_article_count": 452,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      }
+    },
+    "criminal_law_1998.json": {
+      "expected_article_count": 452,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      }
+    },
+    "criminal_law_1999.json": {
+      "expected_article_count": 453,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2001_08.json": {
+      "expected_article_count": 453,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2001_12.json": {
+      "expected_article_count": 455,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2002.json": {
+      "expected_article_count": 456,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2005.json": {
+      "expected_article_count": 457,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2006.json": {
+      "expected_article_count": 465,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2009_02.json": {
+      "expected_article_count": 469,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2009_08.json": {
+      "expected_article_count": 469,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2011.json": {
+      "expected_article_count": 473,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2015.json": {
+      "expected_article_count": 491,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2017.json": {
+      "expected_article_count": 491,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2020.json": {
+      "expected_article_count": 505,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_law_2023.json": {
+      "expected_article_count": 505,
+      "integer_sequence": {
+        "first": 1,
+        "last": 452
+      },
+      "allow_inserted_articles": true
+    },
+    "criminal_procedure_interpretation.json": {
+      "expected_article_count": 655,
+      "integer_sequence": {
+        "first": 1,
+        "last": 655
+      }
+    },
+    "criminal_procedure_law.json": {
+      "expected_article_count": 308,
+      "integer_sequence": {
+        "first": 1,
+        "last": 308
+      }
+    },
+    "cybersecurity_law.json": {
+      "expected_article_count": 81,
+      "integer_sequence": {
+        "first": 1,
+        "last": 81
+      }
+    },
+    "data_security_law.json": {
+      "expected_article_count": 55,
+      "integer_sequence": {
+        "first": 1,
+        "last": 55
+      }
+    },
+    "e_commerce_law.json": {
+      "expected_article_count": 89,
+      "integer_sequence": {
+        "first": 1,
+        "last": 89
+      }
+    },
+    "enterprise_bankruptcy_law.json": {
+      "expected_article_count": 136,
+      "integer_sequence": {
+        "first": 1,
+        "last": 136
+      }
+    },
+    "financial_leasing_interpretation.json": {
+      "expected_article_count": 15,
+      "integer_sequence": {
+        "first": 1,
+        "last": 15
+      }
+    },
+    "foreign_investment_law.json": {
+      "expected_article_count": 42,
+      "integer_sequence": {
+        "first": 1,
+        "last": 42
+      }
+    },
+    "independent_guarantee_interpretation.json": {
+      "expected_article_count": 26,
+      "integer_sequence": {
+        "first": 1,
+        "last": 26
+      }
+    },
+    "insurance_law.json": {
+      "expected_article_count": 185,
+      "integer_sequence": {
+        "first": 1,
+        "last": 185
+      }
+    },
+    "labor_contract_law.json": {
+      "expected_article_count": 98,
+      "integer_sequence": {
+        "first": 1,
+        "last": 98
+      }
+    },
+    "labor_dispute_interpretation_1.json": {
+      "expected_article_count": 54,
+      "integer_sequence": {
+        "first": 1,
+        "last": 54
+      }
+    },
+    "labor_dispute_mediation_arbitration_law.json": {
+      "expected_article_count": 54,
+      "integer_sequence": {
+        "first": 1,
+        "last": 54
+      }
+    },
+    "labor_law.json": {
+      "expected_article_count": 107,
+      "integer_sequence": {
+        "first": 1,
+        "last": 107
+      }
+    },
+    "litigation_fee_payment_measures.json": {
+      "expected_article_count": 56,
+      "integer_sequence": {
+        "first": 1,
+        "last": 56
+      }
+    },
+    "negotiable_instruments_law.json": {
+      "expected_article_count": 110,
+      "integer_sequence": {
+        "first": 1,
+        "last": 110
+      }
+    },
+    "partnership_enterprise_law.json": {
+      "expected_article_count": 109,
+      "integer_sequence": {
+        "first": 1,
+        "last": 109
+      }
+    },
+    "personal_information_protection_law.json": {
+      "expected_article_count": 74,
+      "integer_sequence": {
+        "first": 1,
+        "last": 74
+      }
+    },
+    "private_lending_interpretation.json": {
+      "expected_article_count": 31,
+      "integer_sequence": {
+        "first": 1,
+        "last": 31
+      }
+    },
+    "public_security_administration_punishments_law.json": {
+      "expected_article_count": 144,
+      "integer_sequence": {
+        "first": 1,
+        "last": 144
+      }
+    },
+    "sale_contract_interpretation.json": {
+      "expected_article_count": 33,
+      "integer_sequence": {
+        "first": 1,
+        "last": 33
+      }
+    },
+    "securities_law.json": {
+      "expected_article_count": 226,
+      "integer_sequence": {
+        "first": 1,
+        "last": 226
+      }
+    },
+    "state_compensation_law.json": {
+      "expected_article_count": 42,
+      "integer_sequence": {
+        "first": 1,
+        "last": 42
+      }
+    }
+  }
+}
+
+

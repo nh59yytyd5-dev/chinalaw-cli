@@ -236,8 +236,8 @@
           "priority": "P1",
           "reason": "合同争议、商事争议通用程序法。",
           "needs_verification": false,
-          "fixture_id": "flk-arbitration-law-1994-2017",
-          "notes": "现有 fixture 已含全文（96 条）。"
+          "fixture_id": "flk-arbitration-law-2025",
+          "notes": "现有 fixture 为 2025 修订、2026-03-01 施行全文（96 条）。"
         },
         {
           "id": "p1-personal-information-protection-law",
@@ -266,7 +266,7 @@
           "reason": "数据合规基础。",
           "needs_verification": false,
           "fixture_id": "ff80818179f5e0800179f885c7e70392",
-          "notes": "现有 fixture 已含全文（53 条）。"
+          "notes": "现有 fixture 已含全文（55 条）。"
         },
         {
           "id": "p1-cybersecurity-law",
@@ -279,7 +279,7 @@
           "reason": "网络安全、平台合规、个人信息与数据规则的上位基础。",
           "needs_verification": false,
           "fixture_id": "021e7d7684474107b8f3febbb1c4f8b5",
-          "notes": "现有 fixture 已含全文（80 条）。"
+          "notes": "现有 fixture 已含全文（81 条）。"
         },
         {
           "id": "p1-consumer-rights-law",
@@ -716,7 +716,7 @@
           "priority": "P2",
           "reason": "股权转让出资责任争议高频。",
           "needs_verification": true,
-          "notes": "现有 fixture 已含全文（1 条）。 暂不随包内置：当前 court_main 清洗会把标题中的“第八十八条”误作批复条号，待无条号批复解析修复后再纳入 fixture。"
+          "notes": "暂不随包内置：当前 court_main 清洗会把标题中的“第八十八条”误作批复条号，待无条号批复解析修复后再纳入 fixture。"
         },
         {
           "id": "p2-company-interpretation-2",
