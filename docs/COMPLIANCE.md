@@ -1,7 +1,7 @@
 # 合规与数据使用边界
 
-> 本项目是面向 AI agent 的本地法律规范检索内核。它会从公开政府站点
-> （`flk.npc.gov.cn` / `gongbao.court.gov.cn` / `spp.gov.cn` 等）按需读取
+> 本项目是面向 AI agent 的本地法律规范检索内核。它会从国家法律法规数据库、
+> 国家行政法规库、两高官网、金融监管与证券自律组织官方站点等按需读取
 > 法规与司法文件文本，并落到本机 SQLite。本文界定了哪些抓取行为在
 > 项目范围内、哪些被明确排除，以及使用者应当遵守的红线。
 
@@ -42,12 +42,14 @@
 
 ## 3. 节流策略
 
-所有公开站点 adapter（`flk_npc` / `court_gongbao` / `court_main` /
-`spp_gov_cn`）实现
-共享语义：
+当前 12 个已实现 adapter（`flk_npc`、`gov_xzfgk`、`court_gongbao`、
+`court_main`、`spp_gov_cn`、`csrc_gov_cn`、`nfra_gov_cn`、`bse_cn`、
+`sse_com_cn`、`szse_cn`、`chinaclear_cn`、`sac_net_cn`）实现共享语义。
+完整来源、能力与成熟度以 [`data/source_coverage.json`](../data/source_coverage.json)
+为单一清单：
 
-- `request_interval` 默认值见各 adapter 模块（`flk_npc` 0.2s，
-  `court_gongbao` / `court_main` / `spp_gov_cn` 0.5s）
+- `request_interval` 默认值由各 adapter 定义；`CHINALAW_FETCH_THROTTLE_MS`
+  只能把间隔提高到 `max(adapter 默认值, 环境配置值)`，不能降低默认节流
 - 调用方传入 `<= 0` 或低于 100ms 的值会被 clamp 到 **100ms 硬下限**
   （`MIN_REQUEST_INTERVAL = 0.1`），确保任何调用方都无法关闭节流
 - 单进程串行：本项目不在 adapter 层引入并发请求；同一 adapter 实例
@@ -62,7 +64,7 @@
 基础形态：
 
 ```
-chinalaw-cli/<version> (+https://github.com/chinalaw-cli/chinalaw-cli)
+chinalaw-cli/<version> (+https://github.com/nh59yytyd5-dev/chinalaw-cli)
 ```
 
 部分 adapter（`court_gongbao` / `court_main` / `spp_gov_cn`）在前置带 `Mozilla/5.0
@@ -72,16 +74,11 @@ chinalaw-cli/<version> (+https://github.com/chinalaw-cli/chinalaw-cli)
 
 ## 5. 上游站点联系方式
 
-如果你是 `flk.npc.gov.cn` / `gongbao.court.gov.cn` / `www.court.gov.cn` /
-`spp.gov.cn`
-等被抓取站点的运营方，希望本项目调整抓取行为或停止访问，请通过
-以下任一渠道联系：
+如果你是上述被抓取站点的运营方，希望本项目调整抓取行为或停止访问，请通过
+项目的 [GitHub Issues](https://github.com/nh59yytyd5-dev/chinalaw-cli/issues)
+联系，并提供站点、请求路径、时间范围和希望采取的措施。
 
-- 在 GitHub 仓库提 issue（待项目正式发布后填入仓库地址）
-- 通过 README 中维护者邮箱
-
-我们会在收到反馈后**24 小时内**调整默认节流、暂停 default adapter 或
-彻底移除对应 adapter 模块。
+维护者会尽快核查；必要时调整默认节流、暂停相应 adapter 或移除相关能力。
 
 ## 6. 使用者责任
 
@@ -103,5 +100,5 @@ chinalaw-cli/<version> (+https://github.com/chinalaw-cli/chinalaw-cli)
 争议优先**保守解决**：能不抓就不抓，能更慢就更慢，能更明确标识自己
 就更明确标识。
 
-—— 本文件随 v0.2 系列首次落地。后续 adapter 接入时同步在 §1 / §3 / §5
-更新覆盖范围与联系方式。
+—— 本文件随 v0.2 系列首次落地。后续 adapter 接入时同步更新
+`data/source_coverage.json`，并由文档门禁核对本节的已实现来源清单。

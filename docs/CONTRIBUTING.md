@@ -98,7 +98,8 @@ PR 描述里说明：
 
 - 必须有 `source_url`、`source_name`、`source_checked_at`、`source_hash`（可省，loader 会派生）。
 - 优先来源：`flk.npc.gov.cn`（国家法律法规数据库）。
-- 不收录任何商业数据库的"附加性内容"（裁判要旨综述、专家点评等），见 [ADR-0004](./decisions/ADR-0004-license-and-data-rights.md)。
+- 不收录任何商业数据库的"附加性内容"（裁判要旨综述、专家点评等）；完整边界见
+  本文 §6。
 - 条款号必须能被 `normalize_article_number` 处理：阿拉伯（`"71"` / `"14-1"`）或中文（`"第七十一条"`）。
 - 加完后跑：
 
@@ -135,13 +136,11 @@ PYTHONPATH=src python3 -m chinalaw pack validate <pack-name>
 接受协议改动的流程：
 
 1. issue 标 `protocol-change`。
-2. 维护者评估是否需要 ADR：
-   - 影响 JSON 输出 schema → 必须 ADR；
-   - 影响 SQL 表 → 必须 ADR；
-   - 仅改实现细节（如 FTS tokenizer）→ 通常不需要 ADR。
-3. 起 ADR 草稿（`docs/decisions/ADR-XXXX-<slug>.md`）：固定 Context / Decision /
-   Consequences / Alternatives / Follow-ups 五段。
-4. ADR 合并即视为决议，再起实现 PR。
+2. 维护者评估是否需要正式设计记录：影响 JSON 输出 schema 或 SQL 表时必须写；
+   仅改内部实现细节时通常不需要。
+3. 在 issue 或设计 PR 中固定写 Context / Decision / Consequences / Alternatives /
+   Follow-ups 五段，并保持公开可访问。
+4. 方案确认后再起实现 PR。
 5. 实现 PR 同时更新 CONTRACT.md，并加测试。
 
 ## 5. Commit / PR 风格细节
@@ -153,7 +152,7 @@ PYTHONPATH=src python3 -m chinalaw pack validate <pack-name>
 
 ## 6. 数据贡献的版权与边界
 
-详见 [ADR-0004](./decisions/ADR-0004-license-and-data-rights.md)。要点：
+数据贡献边界：
 
 - 法律法规、司法解释本身在公有领域，可自由收录。
 - 商业数据库的"汇编 / 综述 / 评注"**不要**贡献，会被拒。

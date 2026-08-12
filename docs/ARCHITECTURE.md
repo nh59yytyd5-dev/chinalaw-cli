@@ -1,6 +1,8 @@
 # 架构设计
 
-> 本文档只描述当前实现和近期演进边界。产品定位见 [`PROJECT_CHARTER.md`](./PROJECT_CHARTER.md)，当前计划见 [`MVP_PLAN.md`](./MVP_PLAN.md)。
+> 本文档只描述当前实现和近期演进边界。产品定位见
+> [`PROJECT_CHARTER.md`](./PROJECT_CHARTER.md)，当前重构计划见
+> [`REFACTOR_PLAN_20260806.md`](./REFACTOR_PLAN_20260806.md)。
 
 ## 1. 当前形态
 
@@ -43,8 +45,9 @@ SQLite + FTS5
 | `src/chinalaw/sync.py` | 维护者同步入口，支持 fixture、目录、flk_npc query / bbbs / batch / incremental |
 | `src/chinalaw/applicability.py` | 时间效力 / 规范关系 seed 数据导入 |
 | `src/chinalaw/loader.py` | JSON payload 幂等入库，维护 FTS |
+| `src/chinalaw/search_indexes.py` | 精确别名索引、FTS rowid 映射与重建 |
 | `src/chinalaw/db.py` | SQLite 连接、migration、meta |
-| `src/chinalaw/schema.py` | 当前 schema v9 DDL |
+| `src/chinalaw/schema.py` | 当前 schema v11 DDL |
 | `src/chinalaw/adapters/flk_npc.py` | 国家法律法规数据库 adapter |
 | `src/chinalaw/normsources.py` | 私域规范导入、导出、切条、检索 |
 | `src/chinalaw/normpacks.py` | 本地规范包导入、导出、展示、校验 |
@@ -52,7 +55,7 @@ SQLite + FTS5
 
 ## 3. 当前数据模型
 
-当前 schema 版本是 v9。
+当前 schema 版本是 v11。
 
 核心表：
 
@@ -67,7 +70,7 @@ SQLite + FTS5
 - `applicability_rules`
 - `document_number_index`
 - `commentary_books`
-- `commentary_items`
+- `article_commentaries`
 - `categories`
 - `law_categories`
 - `meta`
@@ -75,8 +78,12 @@ SQLite + FTS5
 - `articles_fts`
 - `norm_sources_fts`
 - `norm_clauses_fts`
+- `law_alias_index`
+- `laws_fts_rows` / `articles_fts_rows`
+- `norm_sources_fts_rows` / `norm_clauses_fts_rows`
 
-当前没有 `alias_records` / `call_log`。这些属于 active plan 的后续方向，进入实现前必须先写 ADR 并同步 CONTRACT。
+当前没有 `alias_records` / `call_log`。新增公开数据模型前必须先留下公开设计记录并同步
+CONTRACT。
 
 ## 4. 检索
 

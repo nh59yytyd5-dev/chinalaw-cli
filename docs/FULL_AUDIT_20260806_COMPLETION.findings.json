@@ -1,0 +1,232 @@
+{
+  "audit_date": "2026-08-06",
+  "remediation_date": "2026-08-06",
+  "base_head": "925a8991ef2cb84cabe6a0f9f7488472415e25ce",
+  "status": "remediated",
+  "statistics": {
+    "high": 16,
+    "medium": 38,
+    "low": 31,
+    "total": 85,
+    "original_confirmed": 43,
+    "former_low_candidates_confirmed": 26,
+    "new_findings": 16
+  },
+  "numbering_note": "补审 finding 固定为 N1-N16；早期草稿的 N17 fixture gate 内容已分别并入 N4/N5/N16，不单独计数。",
+  "candidate_disposition": {
+    "confirmed_low": 25,
+    "confirmed_medium": 1,
+    "rejected": 0,
+    "severity_upgrades": [
+      {
+        "title": "pip install --user shared-data 定位失效",
+        "from": "low",
+        "to": "medium"
+      }
+    ]
+  },
+  "new_findings": [
+    {
+      "id": "N1",
+      "severity": "high",
+      "area": "security",
+      "file": "src/chinalaw/adapters/securities_rules.py",
+      "title": "direct-id 允许 SSRF 与 file:// 本地文件读取",
+      "remediation_phase": 3,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/netio.py", "tests/test_network_policy.py"]
+    },
+    {
+      "id": "N2",
+      "severity": "medium",
+      "area": "security",
+      "file": "src/chinalaw/adapters/court_gongbao.py",
+      "title": "法院公报 adapter 使用明文 HTTP 且 catalog 登记不一致",
+      "remediation_phase": 3,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/adapters/court_gongbao.py", "data/source_coverage.json", "NOTICES.md"]
+    },
+    {
+      "id": "N3",
+      "severity": "medium",
+      "area": "resource",
+      "file": "src/chinalaw/adapters",
+      "title": "网络、附件、DOCX/PDF 无统一大小上限，外部进程无 timeout",
+      "remediation_phase": 3,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/resource_limits.py", "src/chinalaw/netio.py", "tests/test_network_policy.py"]
+    },
+    {
+      "id": "N4",
+      "severity": "high",
+      "area": "textproc",
+      "file": "src/chinalaw/cleaning.py",
+      "title": "TOC marker 删除正文中含目录的整条条文",
+      "remediation_phase": 2,
+      "status": "remediated",
+      "evidence": ["tests/test_contracts.py", "tests/test_fixture_quality.py", "data/public_fixture_manifest.json"]
+    },
+    {
+      "id": "N5",
+      "severity": "high",
+      "area": "contract",
+      "file": "src/chinalaw/cleaning.py",
+      "title": "canonical payload 缺类型、枚举、日期、唯一性与位置校验",
+      "remediation_phase": 1,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/contracts.py", "tests/test_contracts.py"]
+    },
+    {
+      "id": "N6",
+      "severity": "medium",
+      "area": "textproc",
+      "file": "src/chinalaw/adapters/_html.py",
+      "title": "HTML 清洗保留 script/style 并粘连 br/td 文本",
+      "remediation_phase": 2,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/adapters/_html.py", "tests/test_adapter_html_helpers.py"]
+    },
+    {
+      "id": "N7",
+      "severity": "high",
+      "area": "fetch",
+      "file": "src/chinalaw/fetch.py",
+      "title": "canonical ID 的 LIMIT 1 漏掉正确修订版",
+      "remediation_phase": 5,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/fetch.py", "tests/test_fetch.py"]
+    },
+    {
+      "id": "N8",
+      "severity": "high",
+      "area": "fetch",
+      "file": "src/chinalaw/fetch.py",
+      "title": "相同 source_hash 冻结状态、废止日与核查时间",
+      "remediation_phase": 4,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/loader.py", "src/chinalaw/sync.py", "tests/test_fetch.py"]
+    },
+    {
+      "id": "N9",
+      "severity": "medium",
+      "area": "fetch",
+      "file": "src/chinalaw/fetch.py",
+      "title": "失败和 dry-run/to-fixture 动作会提前写 fixture/DB 或迁移数据库",
+      "remediation_phase": 5,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/fetch.py", "tests/test_fetch.py", "tests/test_phase8.py"]
+    },
+    {
+      "id": "N10",
+      "severity": "high",
+      "area": "fetch",
+      "file": "src/chinalaw/fetch.py",
+      "title": "唯一但无关候选和无序字符匹配可抓取错误法规",
+      "remediation_phase": 5,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/fetch.py", "src/chinalaw/identity.py", "tests/test_fetch.py"]
+    },
+    {
+      "id": "N11",
+      "severity": "high",
+      "area": "adapters",
+      "file": "src/chinalaw/adapters",
+      "title": "未知状态被硬编码 current，部分来源允许零条文 payload",
+      "remediation_phase": 1,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/contracts.py", "tests/test_contracts.py", "tests/test_court_main.py", "tests/test_nfra_gov_cn.py"]
+    },
+    {
+      "id": "N12",
+      "severity": "high",
+      "area": "mcp",
+      "file": "src/chinalaw/mcp.py",
+      "title": "MCP 缺 JSON-RPC、framing、类型、资源和异常隔离边界",
+      "remediation_phase": 7,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/mcp.py", "tests/test_mcp_stdio.py"]
+    },
+    {
+      "id": "N13",
+      "severity": "medium",
+      "area": "alias_agent",
+      "file": "src/chinalaw/alias_agent.py",
+      "title": "畸形配置和 provider 响应抛裸异常",
+      "remediation_phase": 3,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/alias_agent.py", "tests/test_alias_agent.py"]
+    },
+    {
+      "id": "N14",
+      "severity": "medium",
+      "area": "packaging",
+      "file": "src/chinalaw/cli.py",
+      "title": "user-site 数据缺失后 init 仍可返回 ok:true",
+      "remediation_phase": 8,
+      "status": "remediated",
+      "evidence": ["src/chinalaw/datapaths.py", "src/chinalaw/cli.py", "tests/test_phase8.py"]
+    },
+    {
+      "id": "N15",
+      "severity": "medium",
+      "area": "scripts",
+      "file": "scripts",
+      "title": "Bash 3.2 空数组与 Windows Unicode/% 路径损坏",
+      "remediation_phase": 8,
+      "status": "remediated",
+      "evidence": ["scripts/update-local", "scripts/install-local.ps1", "tests/test_agent_platform.py", "tests/test_phase8.py"]
+    },
+    {
+      "id": "N16",
+      "severity": "medium",
+      "area": "ci",
+      "file": ".github/workflows/test.yml",
+      "title": "发布安装矩阵和 fixture/MCP/script 门禁不完整，sdist 可携带未跟踪文档",
+      "remediation_phase": 8,
+      "status": "remediated",
+      "evidence": [".github/workflows/test.yml", "pyproject.toml", "tests/test_fixture_quality.py", "tests/test_mcp_stdio.py", "tests/test_phase9.py"]
+    }
+  ],
+  "remediation": {
+    "status": "complete",
+    "phases": [
+      {"phase": 0, "status": "complete", "finding_ids": ["M14", "C11"]},
+      {"phase": 1, "status": "complete", "finding_ids": ["H1", "H4", "M25", "M28", "L2", "L3", "L4", "C14", "C26", "N5", "N11"]},
+      {"phase": 2, "status": "complete", "finding_ids": ["H5", "H6", "M24", "M26", "C19", "C20", "C21", "N4", "N6"]},
+      {"phase": 3, "status": "complete", "finding_ids": ["M13", "N1", "N2", "N3", "N13"]},
+      {"phase": 4, "status": "complete", "finding_ids": ["H2", "H3", "M3", "M5", "M9", "M11", "C4", "C6", "N8"]},
+      {"phase": 5, "status": "complete", "finding_ids": ["N7", "N9", "N10"]},
+      {"phase": 6, "status": "complete", "finding_ids": ["H7", "H8", "M1", "M2", "M10", "M27", "L1", "L6", "C1", "C2", "C22", "C23"]},
+      {"phase": 7, "status": "complete", "finding_ids": ["L5", "N12"]},
+      {"phase": 8, "status": "complete", "finding_ids": ["M4", "M6", "M7", "M8", "M19", "M29", "C7", "C8", "C9", "C10", "C24", "C25", "N14", "N15", "N16"]},
+      {"phase": 9, "status": "complete", "finding_ids": ["M12", "M15", "M16", "M17", "M18", "M20", "M21", "M22", "M23", "C3", "C5", "C12", "C13", "C15", "C16", "C17", "C18"]}
+    ],
+    "release_gates": {
+      "pytest": "750 passed, 32 skipped, 1695 subtests passed",
+      "pytest_skip_budget": "32/32",
+      "unittest": "782 tests, OK, skipped=32",
+      "ruff": "passed",
+      "public_fixtures": "74 fixtures, 15268 articles",
+      "build": "wheel and sdist passed",
+      "install_matrix": ["wheel", "sdist", "user-site"],
+      "platform_and_mcp": "50 targeted tests passed",
+      "concurrent_empty_db_migrations": "50 consecutive repetitions passed"
+    },
+    "remaining_skips": {
+      "count": 32,
+      "scope": "optional eval/export/demo assets not shipped in the public repository",
+      "policy": "CI fails if the skip count exceeds 32"
+    }
+  },
+  "superseded_positive_conclusions": [
+    "所有网络默认 TLS"
+  ],
+  "evidence_commands": [
+    ".venv/bin/python -m pytest -q --junitxml=<path>",
+    ".venv/bin/python -m unittest discover -q",
+    ".venv/bin/ruff check src tests",
+    "scripts/check-public-fixtures",
+    ".venv/bin/python -m build",
+    "git diff --check"
+  ]
+}

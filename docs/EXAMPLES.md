@@ -119,7 +119,7 @@ PYTHONPATH=src python3 -m chinalaw fetch 公司法 --list-matches --format md
 指定候选：
 
 ```bash
-PYTHONPATH=src python3 -m chinalaw fetch 公司法 --prefer-bbbs <bbbs-id> --format json
+PYTHONPATH=src python3 -m chinalaw fetch 公司法 --prefer-id <source-id> --format json
 ```
 
 写 fixture，供 maintainer 审查后提交：

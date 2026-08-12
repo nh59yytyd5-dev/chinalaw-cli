@@ -6,9 +6,9 @@
 
 一般顺序：
 
-1. 读 `README.md`、`PROJECT_CHARTER.md`、`MVP_PLAN.md`、`CONTRACT.md`。
+1. 读 `README.md`、`PROJECT_CHARTER.md`、当前计划和 `CONTRACT.md`。
 2. 确认当前实现，不按旧文档猜。
-3. 新功能先写最小设计说明或 ADR。
+3. 新功能先在公开 issue / PR 中写最小设计说明。
 4. 改代码。
 5. 补测试。
 6. 同步 CONTRACT / EXAMPLES / README。
@@ -19,15 +19,16 @@
 | 文档 | 职责 |
 |------|------|
 | `PROJECT_CHARTER.md` | 项目定位，不写实现细节 |
-| `MVP_PLAN.md` | 当前实施计划 |
+| `REFACTOR_PLAN_20260806.md` | 当前审计重构计划 |
 | `CONTRACT.md` | 外部可依赖协议 |
 | `ARCHITECTURE.md` | 当前代码结构 |
 | `EXAMPLES.md` | 可执行调用示例 |
 | `CLEANING.md` | 清洗规则、alias、重建路径 |
 | `DATA_INDEX.md` | 数据覆盖和补全路径 |
-| `decisions/ADR-*.md` | 重要决策记录 |
+| issue / PR 设计记录 | 重要决策的 Context / Decision / Consequences |
 
-不要在多个文档重复长篇战略论证。方向冲突时，以 `PROJECT_CHARTER.md` 和 `MVP_PLAN.md` 为准。
+不要在多个文档重复长篇战略论证。方向冲突时，以 `PROJECT_CHARTER.md`、当前公开
+计划和 `CONTRACT.md` 为准。
 
 ## 3. 代码边界
 
@@ -75,20 +76,20 @@
 ## 5. Schema 规则
 
 当前 schema 以 `src/chinalaw/schema.py` 中的 `SCHEMA_VERSION` 为准；截至
-2026-05-25 为 v9。`docs/CONTRACT.md` 只记录外部可依赖的当前协议，不负责保留
+2026-08-06 为 v11。`docs/CONTRACT.md` 只记录外部可依赖的当前协议，不负责保留
 每次 migration 的历史细节。
 
 新增表、改字段、改约束前必须：
 
-1. 写 ADR。
+1. 在公开 issue / PR 中写设计记录。
 2. 更新 `CONTRACT.md`。
 3. 写 migration。
 4. 保证旧库可自动迁移。
 5. 写测试覆盖旧库升级。
 
 `law_relations`、`applicability_rules` 已进入 alpha 协议；继续扩展它们仍需同步
-contract、migration 和测试。`alias_records`、`call_log` 等未落库方向不得无 ADR
-直接实现。
+contract、migration 和测试。`alias_records`、`call_log` 等未落库方向不得绕过
+公开设计审查直接实现。
 
 ## 6. 测试要求
 

@@ -61,7 +61,8 @@ agent 和外部脚本不应直接调用 `_split_trailing_structural_headings()`�
 - `担保制度解释` / `担保解释`
 - `民诉法解释`
 
-读取阶段会用同一套规则兼容旧数据，所以旧库即使未持久化新 alias，也可以被 `get/article/search --in/fetch` 的本地解析路径识别。
+读取阶段会用同一套规则兼容旧数据；当前 schema v11 将 exact / derived alias
+写入 `law_alias_index`，旧库在只读路径无法迁移时仍保留兼容回退。
 
 ## 5. Cleaning 版本与重建
 

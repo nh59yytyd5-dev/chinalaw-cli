@@ -1,6 +1,8 @@
 # 项目宪章
 
-> 本文档是 `chinalaw-cli` 的最高层产品定位文档。实现计划见 [`MVP_PLAN.md`](./MVP_PLAN.md)，协议契约见 [`CONTRACT.md`](./CONTRACT.md)。
+> 本文档是 `chinalaw-cli` 的最高层产品定位文档。当前重构计划见
+> [`REFACTOR_PLAN_20260806.md`](./REFACTOR_PLAN_20260806.md)，协议契约见
+> [`CONTRACT.md`](./CONTRACT.md)。
 
 ## 1. 一句话
 

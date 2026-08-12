@@ -35,7 +35,8 @@
 ## 1. 版本承诺（SemVer）
 
 - 本协议从 **v0.1.0** 起进入语义化版本。
-- v0.x.y 阶段：可能有 breaking change，但必须先在 [`docs/decisions/`](./decisions/) 写 ADR。
+- v0.x.y 阶段：可能有 breaking change，但必须先开 `protocol-change` issue，并在
+  issue / PR 中记录 Context、Decision、Consequences、Alternatives 与 Follow-ups。
 - v1.x.y 起承诺向后兼容，仅在 v2 主版本中破坏 v1 字段。
 - 协议版本与 CLI 二进制版本同步：`chinalaw --version`。
 - 数据库 schema 单独有版本号（`meta.schema_version`），见 §2.8。schema 升级一律由 `migrate()` 自动处理，不需要手工迁移。
@@ -46,7 +47,8 @@
 
 ## 2. 数据模型（SQLite DDL）
 
-> 所有表 schema 由 `chinalaw.schema` 模块在 `migrate()` 时创建。当前 schema 版本 = **9**。
+> 所有表 schema 由 `chinalaw.schema` 模块在显式写入流程调用 `migrate()` 时创建。
+> 当前 schema 版本 = **11**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
 >
 > `law_relations` / `applicability_rules` 已进入 alpha 协议，用于时间效力检索线索。`alias_records` / `call_log` 仍属后续方向。
 
@@ -77,7 +79,7 @@ CREATE TABLE laws (
 **字段语义**：
 
 - `id`：稳定 ID，跨数据源应保持一致。推荐 `<source-prefix>-<slug>-<year>`（如 `flk-company-law-2024`）。
-- `aliases`：JSON 数组（不是逗号分隔串）。清洗阶段会为常用法律简称 / 司法解释简称派生 alias；读取阶段也会用同一规则兼容旧数据。检索时 `LIKE` 模糊匹配。
+- `aliases`：JSON 数组（不是逗号分隔串）。清洗阶段会为常用法律简称 / 司法解释简称派生 alias；schema v11 同时维护 `law_alias_index` 供 exact / derived 解析，无法走索引的旧只读库才回退到兼容扫描；模糊匹配仍可使用 `LIKE`。
 - `level` / `status`：见 §2.9。
 - `source_*`：见 §3。
 
@@ -339,8 +341,15 @@ CREATE TABLE meta (
 >
 > - 除命令级另有说明外，命令支持 `--format json|md`（默认 `json`）。
 > - 所有命令支持 `--db <path>`（默认 `~/.chinalaw/chinalaw.db`）。
+> - 未传 `--db` 时读取 `CHINALAW_DB`；命令行参数优先于环境变量。
 > - JSON 输出为 UTF-8、`indent=2`、`ensure_ascii=False`。
 > - **退出码**：`0` 成功；`1` 业务级 not found；`2` 参数错误 / 调用前置不满足。
+
+命令未定义更具体错误 envelope 时，预期的文件、编码、网络、SQLite 和值错误统一输出：
+
+```json
+{"kind":"cli_command_error","command":"<command>","error":"<ExceptionClass>","message":"..."}
+```
 
 ### 4.0 Agent Platform Commands
 
@@ -492,8 +501,14 @@ JSON 输出：
 }
 ```
 
-退出码：`ok=true` 返回 `0`；`doctor` 失败返回 `1`；参数错误返回 `2`。
-缺少某部法规或条文时，后续由 `ensure <law>` / `fetch <law>` 按任务补全。
+退出码：`ok=true` 返回 `0`；`doctor` 失败或内置数据未实际加载出至少一部法规和
+一条条文时返回 `1`；参数错误返回 `2`。内置数据不可用时额外返回：
+
+```json
+{"error":{"code":"bundled_data_unavailable","message":"..."}}
+```
+
+个别未内置法规或条文仍由 `ensure <law>` / `fetch <law>` 按任务补全。
 
 ### 4.1 `search <query>`
 
@@ -600,7 +615,11 @@ JSON 输出 schema：
 
 输出：完整 `Law` 对象（含 `articles`、`revisions`、`current_revision`、`selected_revision`、`categories`、`freshness_days`）。
 
-未命中：exit 1，输出 `{"found": false, "name": "..."}`。
+未命中：exit 1，输出 `{"found": false, "name": "..."}`。`--as-of` 非法、版本
+缺失或快照不可回放时同样 exit 1，但返回可区分的 `error` / `message` /
+`revision_diagnostic`，其中 `error` 包括 `invalid_as_of`、
+`version_not_found_as_of`、`revision_snapshot_missing`、
+`revision_snapshot_corrupt`；不得把这些情况伪装成普通法规未命中。
 
 ### 4.2.1 `search <query...>`
 
@@ -819,6 +838,9 @@ Markdown 输出选项：
 `--source flk_npc` / `--query` / `--bbbs` / `--batch` / `--incremental` 等真实数据源模式**不属于本期协议承诺**，可能在 v0.x 内部调整。
 
 ### 4.6 `status`
+
+`status` 默认只读：数据库不存在时不创建，旧 schema 不自动迁移；调用方应先备份，
+再通过 `init`、`sync`、`fetch` 等明确写入流程完成迁移。
 
 输出：
 
@@ -1251,7 +1273,7 @@ chinalaw trace 民事诉讼法 --text "终结执行" --from-as-of 2021-01-01 --t
 
 必须始终包含 `not_legal_conclusion` warning；无规则命中不是程序错误，返回 `ok=true` + `no_applicability_rule` warning。
 
-### 4.11 `fetch <name>` (alpha · 协议级，参 [ADR-0006](./decisions/ADR-0006-fetch-command.md))
+### 4.11 `fetch <name>` (alpha · 协议级)
 
 按法律名一条龙完成"取条文 + 清洗 + 入库"，是 sync 之上的薄高层接口。
 v0.2.x 标记 alpha；1 个外部用户走通后于 v0.3.0 起去 alpha 标记。
@@ -1308,8 +1330,8 @@ JSON 输出 schema（成功 / 主流程）：
 
 `law.warnings`（可选）：opt-in alias_agent 路径上遇到可恢复错误时附加，结构为
 `[{"severity": "warning", "code": "alias_agent_skipped", "reason": "missing_api_key|network|invalid_response", "message": "string"}]`。
-未启用 `CHINALAW_USE_ALIAS_AGENT` 时不会出现该字段。详见
-[`docs/FETCH_LAYER_SPEC.md`](./FETCH_LAYER_SPEC.md) §3。
+未启用 `CHINALAW_USE_ALIAS_AGENT` 时不会出现该字段。可恢复错误不得中断主 fetch，
+其它编程错误必须向上抛出。
 
 JSON 输出 schema（list-matches 模式）：
 
@@ -1322,7 +1344,7 @@ JSON 输出 schema（list-matches 模式）：
 }
 ```
 
-错误模式（exit code 0 / 1 / 2 与 ADR-0002 §6 一致）：
+错误模式（遵循本文件 §4 的 exit code 0 / 1 / 2 约定）：
 
 | code | error.error 字段值 | 触发场景 |
 |------|---------------------|---------|
@@ -2011,16 +2033,17 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db
 ## 9. 协议变更流程
 
 1. 提 issue，标 `protocol-change`。
-2. 作者写 ADR（`docs/decisions/ADR-XXXX-...md`），含 Context / Decision / Consequences。
-3. ADR 合并即视为决议。
-4. 实现 PR 必须同时更新本文件 + ADR 链接 + 测试。
+2. 作者在 issue 或设计 PR 中写明 Context / Decision / Consequences / Alternatives /
+   Follow-ups；该记录必须公开可访问。
+3. 维护者确认方案后再进入实现。
+4. 实现 PR 必须同时更新本文件、设计记录和测试。
 5. 任何 breaking change 必须先发 alpha tag（如 `v0.2.0a1`），等至少 1 个早期用户跑通后再发正式 tag。
 
 ---
 
 ## 10. 协议自检清单
 
-发布前回答这些问题。任何答 No 都需要在 ADR 中说明。
+发布前回答这些问题。任何答 No 都需要在公开 issue / PR 设计记录中说明。
 
 - [ ] 数据库 schema 与本文档一致？
 - [ ] 每个 CLI 命令的 JSON 输出 schema 都被测试覆盖？
