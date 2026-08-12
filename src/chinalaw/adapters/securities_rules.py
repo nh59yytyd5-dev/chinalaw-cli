@@ -16,17 +16,18 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from html import unescape
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.request import HTTPCookieProcessor, Request
 
-from chinalaw import USER_AGENT_TOKEN, cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning, netio
 from chinalaw.adapters import _html as _adapter_html
 from chinalaw.document_numbers import extract_document_number
+from chinalaw.resource_limits import MAX_BINARY_BYTES, run_limited
 
 DEFAULT_TIMEOUT = 15
 DEFAULT_REQUEST_INTERVAL = 0.5
@@ -138,17 +139,24 @@ def _fetch_text(
     timeout: int = DEFAULT_TIMEOUT,
     data: bytes | None = None,
     referer: str | None = None,
+    policy: netio.SourcePolicy,
 ) -> FetchResult:
     req = _build_request(url, data=data, referer=referer)
-    with _open_with_cookies(req, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        body = resp.read().decode(charset, errors="replace")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=replace(policy, timeout=timeout),
+        max_bytes=policy.max_text_bytes,
+        opener=_cookie_opener(policy),
+    )
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode(
+            netio.response_charset(response.headers),
+            errors="replace",
+        ),
+    )
 
 
 def _fetch_bytes(
@@ -156,14 +164,20 @@ def _fetch_bytes(
     *,
     timeout: int = DEFAULT_TIMEOUT,
     referer: str | None = None,
+    policy: netio.SourcePolicy,
 ) -> tuple[str, Mapping[str, str], bytes]:
     req = _build_request(url, referer=referer)
-    with _open_with_cookies(req, timeout=timeout) as resp:
-        return resp.geturl(), dict(resp.headers.items()), resp.read()
+    response = netio.request_bytes(
+        req,
+        policy=replace(policy, timeout=timeout),
+        max_bytes=policy.max_binary_bytes,
+        opener=_cookie_opener(policy),
+    )
+    return response.url, response.headers, response.content
 
 
-def _open_with_cookies(req: Request, *, timeout: int):
-    """Open one request with an ephemeral cookie jar.
+def _cookie_opener(policy: netio.SourcePolicy):
+    """Build an opener with an ephemeral cookie jar and redirect policy.
 
     BSE currently responds to first-time GETs with a same-URL 302 and a short
     cookie. Plain ``urlopen`` follows the redirect without persisting the
@@ -171,8 +185,10 @@ def _open_with_cookies(req: Request, *, timeout: int):
     challenge cookie for this request while preserving adapter statelessness.
     """
 
-    opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    return opener.open(req, timeout=timeout)
+    return netio.build_policy_opener(
+        policy,
+        HTTPCookieProcessor(http.cookiejar.CookieJar()),
+    )
 
 
 def _html_to_text(content_html: str) -> str:
@@ -358,13 +374,17 @@ def _paginated_index_path(page: int) -> str:
 
 
 def _matches_query(title: str, query: str | None) -> bool:
-    needle = _compact(query)
+    needle = _compact(query).casefold()
     if not needle:
         return True
-    haystack = _compact(title)
+    haystack = _compact(title).casefold()
     if needle in haystack:
         return True
-    return all(char in haystack for char in needle if "\u4e00" <= char <= "\u9fff")
+    significant = [char for char in needle if "\u4e00" <= char <= "\u9fff"]
+    if len(significant) < 4:
+        return False
+    cursor = iter(haystack)
+    return all(any(candidate == char for candidate in cursor) for char in significant)
 
 
 def _is_precise_query(query: str | None) -> bool:
@@ -417,19 +437,19 @@ def _choose_attachment(attachments: list[dict], *, detail_title: str) -> dict | 
 
 
 def _pdf_bytes_to_text(pdf_bytes: bytes) -> str:
+    if len(pdf_bytes) > MAX_BINARY_BYTES:
+        raise ValueError(
+            f"PDF attachment exceeds limit: {len(pdf_bytes)} > {MAX_BINARY_BYTES}"
+        )
     pdftotext = shutil.which("pdftotext")
     if not pdftotext:
         raise ValueError("PDF attachment extraction requires pdftotext")
     with tempfile.TemporaryDirectory() as td:
         pdf_path = Path(td) / "source.pdf"
         pdf_path.write_bytes(pdf_bytes)
-        result = subprocess.run(
+        result = run_limited(
             [pdftotext, "-raw", str(pdf_path), "-"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
+            runner=subprocess.run,
         )
     if result.returncode != 0:
         message = (result.stderr or "").strip() or "pdftotext failed"
@@ -475,6 +495,14 @@ class SecuritiesRulesAdapter:
     request_interval: float = DEFAULT_REQUEST_INTERVAL
     _last_request_at: float = field(default=0.0, repr=False)
 
+    def _network_policy(self) -> netio.SourcePolicy:
+        host = urlsplit(self.config.base_url).hostname or ""
+        return netio.source_policy(
+            self.config.source,
+            timeout=self.timeout,
+            fallback_hosts=(host,),
+        )
+
     def _throttle(self) -> None:
         interval = max(float(self.request_interval or 0), MIN_REQUEST_INTERVAL)
         now = time.monotonic()
@@ -491,7 +519,11 @@ class SecuritiesRulesAdapter:
         checked_at = datetime.now(timezone.utc).isoformat()
         self._throttle()
         try:
-            result = _fetch_text(homepage_url, timeout=self.timeout)
+            result = _fetch_text(
+                homepage_url,
+                timeout=self.timeout,
+                policy=self._network_policy(),
+            )
         except HTTPError as exc:
             return self._probe_error(
                 homepage_url,
@@ -501,7 +533,7 @@ class SecuritiesRulesAdapter:
             )
         except URLError as exc:
             return self._probe_error(homepage_url, checked_at, f"URLError: {exc.reason}", None)
-        except (OSError, TimeoutError) as exc:
+        except (OSError, TimeoutError, ValueError) as exc:
             return self._probe_error(homepage_url, checked_at, str(exc), None)
         title = _title_from_html(result.text, self.config.title_suffixes)
         return {
@@ -641,8 +673,12 @@ class SecuritiesRulesAdapter:
                 return None
             timeout = min(timeout, max(1, int(remaining)))
         try:
-            return _fetch_text(page_url, timeout=timeout)
-        except (HTTPError, URLError, OSError, TimeoutError) as exc:
+            return _fetch_text(
+                page_url,
+                timeout=timeout,
+                policy=self._network_policy(),
+            )
+        except (HTTPError, URLError, OSError, TimeoutError, ValueError) as exc:
             warnings.append(
                 {
                     "code": "search_page_unavailable",
@@ -712,7 +748,13 @@ class SecuritiesRulesAdapter:
         url = urljoin(self.config.base_url.rstrip("/") + "/", "api/search/content")
         referer = urljoin(self.config.base_url.rstrip("/") + "/", "lawrules/rule/new/index.html")
         self._throttle()
-        result = _fetch_text(url, timeout=self.timeout, data=data, referer=referer)
+        result = _fetch_text(
+            url,
+            timeout=self.timeout,
+            data=data,
+            referer=referer,
+            policy=self._network_policy(),
+        )
         payload = json.loads(result.text)
         rows: list[dict] = []
         for item in payload.get("data") or []:
@@ -810,18 +852,30 @@ class SecuritiesRulesAdapter:
     ) -> FetchResult:
         """Fetch BSE JSONP with the same cookie jar used for the referer page."""
 
-        opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
-        opener.open(_build_request(referer), timeout=self.timeout).close()
+        policy = self._network_policy()
+        opener = _cookie_opener(policy)
+        netio.request_bytes(
+            _build_request(referer),
+            policy=policy,
+            max_bytes=policy.max_text_bytes,
+            opener=opener,
+        )
         req = _build_request(url, data=data, referer=referer)
-        with opener.open(req, timeout=self.timeout) as resp:
-            charset = resp.headers.get_content_charset() or "utf-8"
-            body = resp.read().decode(charset, errors="replace")
-            return FetchResult(
-                url=resp.geturl(),
-                status_code=resp.getcode(),
-                headers=dict(resp.headers.items()),
-                text=body,
-            )
+        response = netio.request_bytes(
+            req,
+            policy=policy,
+            max_bytes=policy.max_text_bytes,
+            opener=opener,
+        )
+        return FetchResult(
+            url=response.url,
+            status_code=response.status_code,
+            headers=response.headers,
+            text=response.content.decode(
+                netio.response_charset(response.headers),
+                errors="replace",
+            ),
+        )
 
     def _bse_rows_from_payload(
         self,
@@ -887,7 +941,12 @@ class SecuritiesRulesAdapter:
         return out
 
     def detail_url(self, detail_id: str) -> str:
-        return _detail_url(self.config.base_url, detail_id)
+        url = _detail_url(self.config.base_url, detail_id)
+        netio.validate_url(
+            url,
+            replace(self._network_policy(), resolve_hosts=False),
+        )
+        return url
 
     def fetch_detail(self, detail_id: str) -> dict:
         url = self.detail_url(detail_id)
@@ -897,6 +956,7 @@ class SecuritiesRulesAdapter:
                 url,
                 timeout=self.timeout,
                 referer=self.config.base_url,
+                policy=self._network_policy(),
             )
             title = _clean_title(Path(urlparse(final_url).path).name)
             attachment = {
@@ -920,7 +980,11 @@ class SecuritiesRulesAdapter:
                 "checked_at": datetime.now(timezone.utc).isoformat(),
             }
 
-        result = _fetch_text(url, timeout=self.timeout)
+        result = _fetch_text(
+            url,
+            timeout=self.timeout,
+            policy=self._network_policy(),
+        )
         title = _title_from_html(result.text, self.config.title_suffixes) or detail_id
         content_html = _extract_content_html(result.text, self.config.content_markers)
         if not content_html:
@@ -972,6 +1036,7 @@ class SecuritiesRulesAdapter:
                         str(selected["url"]),
                         timeout=self.timeout,
                         referer=str(detail.get("url") or self.config.base_url),
+                        policy=self._network_policy(),
                     )
                     source_url = final_url
                 raw_text = self._attachment_text(str(source_url), source_bytes)
@@ -994,7 +1059,7 @@ class SecuritiesRulesAdapter:
             "title": title,
             "short_title": cleaning.infer_short_title(title),
             "level": "self_regulatory_rule",
-            "status": "current",
+            "status": _adapter_html.status_from_current_listing(search_row),
             "issuing_body": self.config.issuing_body,
             "document_number": extract_document_number(
                 "\n".join(
@@ -1078,6 +1143,7 @@ class SecuritiesRulesAdapter:
                 str(selected["url"]),
                 timeout=self.timeout,
                 referer=str(detail.get("url") or ""),
+                policy=self._network_policy(),
             )
             return self._hash_bytes(content)
         return self._hash_bytes((detail.get("content_text") or "").encode("utf-8"))

@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import unittest
 
-from chinalaw.adapters import _html, court_gongbao, spp_gov_cn
+from chinalaw import cleaning
+from chinalaw.adapters import _html, court_gongbao, gov_xzfgk, spp_gov_cn
 
 
 class HtmlToTextTests(unittest.TestCase):
@@ -42,6 +43,24 @@ class HtmlToTextTests(unittest.TestCase):
         self.assertIn("第四条", result)
         # 段落之间应有换行
         self.assertGreaterEqual(result.count("\n"), 3)
+
+    def test_html_to_text_drops_non_content_elements(self) -> None:
+        html = (
+            "<p>正文</p>"
+            "<script>第一条 伪造脚本正文</script>"
+            "<style>.x::after{content:'第二条';}</style>"
+            "<noscript>第三条</noscript>"
+            "<template>第四条</template>"
+        )
+        self.assertEqual(_html.html_to_text(html), "正文")
+
+    def test_html_to_text_handles_br_attributes_and_table_cells(self) -> None:
+        html = (
+            "<p>第一条<br class='page-break'>第一款</p>"
+            "<table><tr><td>甲</td><td>乙</td></tr></table>"
+        )
+        result = _html.html_to_text(html)
+        self.assertEqual(result.splitlines(), ["第一条", "第一款", "甲", "乙"])
 
 
 class HtmlExtractTitleTests(unittest.TestCase):
@@ -107,6 +126,51 @@ class InferShortTitleAliasFirstTests(unittest.TestCase):
             site_prefixes=("最高人民法院 ", "最高人民法院"),
         )
         self.assertEqual(result, "合同编通则解释")
+
+
+class PublicDocumentFallbackTests(unittest.TestCase):
+    def test_numbered_policy_items_are_searchable_articles(self) -> None:
+        articles = cleaning.parse_public_document_articles(
+            "会议说明。\n1. 第一项审理要求。\n第一项续行。\n2. 第二项审理要求。"
+        )
+        self.assertEqual([item["number"] for item in articles], ["1", "2"])
+        self.assertIn("续行", articles[0]["text"])
+
+    def test_court_gongbao_unnumbered_minutes_use_numbered_items(self) -> None:
+        adapter = court_gongbao.CourtGongbaoAdapter()
+        payload = adapter.build_law_payload(
+            "a" * 30,
+            search_row={"serial_no": "sfwj"},
+            detail={
+                "detail_id": "a" * 30,
+                "title": "全国法院示例工作会议纪要",
+                "content_html": (
+                    "<p>会议说明。</p><p>1. 第一项审理要求。</p>"
+                    "<p>2. 第二项审理要求。</p>"
+                ),
+                "url": "https://gongbao.court.gov.cn/Details/example.html",
+                "checked_at": "2026-08-06T00:00:00+00:00",
+            },
+        )
+        self.assertEqual(payload["level"], "judicial_meeting_minutes")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["1", "2"])
+
+    def test_gov_unnumbered_document_uses_body_item(self) -> None:
+        adapter = gov_xzfgk.GovXzfgkAdapter()
+        payload = adapter.build_law_payload(
+            "gov_cn:unnumbered",
+            detail={
+                "detail_id": "gov_cn:unnumbered",
+                "title": "国务院关于示例事项的决定",
+                "content_text": "国务院决定开展示例事项。\n本决定自公布之日起施行。",
+                "url": "https://www.gov.cn/zhengce/example.htm",
+                "source_name": "www.gov.cn",
+                "checked_at": "2026-08-06T00:00:00+00:00",
+                "related_versions": [],
+            },
+        )
+        self.assertEqual(len(payload["articles"]), 1)
+        self.assertEqual(payload["articles"][0]["number"], "正文")
 
 
 if __name__ == "__main__":  # pragma: no cover

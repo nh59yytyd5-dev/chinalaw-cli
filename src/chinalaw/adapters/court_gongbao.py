@@ -13,8 +13,7 @@ Level 启发式见 ``SERIAL_NO_TO_LEVEL_HINT``：``sfjs`` 默认司法解释；`
 按标题包含「纪要」/「批复」/「复函」分流到会议纪要 / 司法解释；``al`` 视为
 公报案例并归到 ``guiding_case``；其余落 ``other``。
 
-候选源详情见 ``docs/decisions/ADR-0008-multi-source-adapters.md`` §1.1
-与 ``docs/research/2026-05-source-coverage-survey.md`` §4.1。
+候选源覆盖与命令边界以 ``data/source_coverage.json`` 和 ``docs/CONTRACT.md`` 为准。
 """
 
 from __future__ import annotations
@@ -28,17 +27,17 @@ from datetime import datetime, timezone
 from html import unescape
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
-from chinalaw import USER_AGENT_TOKEN, cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning, netio
 from chinalaw.adapters import _html as _adapter_html
 from chinalaw.document_numbers import extract_document_number
 
 _extract_document_number = extract_document_number
 
-DEFAULT_BASE_URL = "http://gongbao.court.gov.cn"
+DEFAULT_BASE_URL = "https://gongbao.court.gov.cn"
 DEFAULT_TIMEOUT = 10
-DEFAULT_REQUEST_INTERVAL = 0.5  # ADR-0008 §3.3：默认节流提到 500ms
+DEFAULT_REQUEST_INTERVAL = 0.5  # 默认节流 500ms；更慢节流可由环境变量覆盖
 # 节流硬下限。任何调用方传入 ``<= 0`` 或低于此值的间隔都会被 clamp 到
 # ``MIN_REQUEST_INTERVAL``，无法在 adapter 层关闭节流。详见 docs/COMPLIANCE.md §3。
 MIN_REQUEST_INTERVAL = 0.1
@@ -89,8 +88,8 @@ SERIAL_NO_TO_LEVEL_HINT = {
 DETAIL_ID_RE = re.compile(rf"{re.escape(DETAIL_PATH_PREFIX)}([0-9a-fA-F]{{20,40}})\.html")
 DETAIL_ID_FULLMATCH_RE = re.compile(r"^[0-9a-fA-F]{20,40}$")
 # 文号识别已上提到 ``chinalaw.document_numbers.extract_document_number``，
-# adapter 不再维护本地正则；详见
-# ``docs/UNIFY_DOCUMENT_NUMBER_REGEX_SPEC.md``。Module-level alias
+# adapter 不再维护本地正则；``chinalaw.document_numbers`` 是共享规则来源。
+# Module-level alias
 # ``_extract_document_number`` 保留作为 adapter API（见上方 import 行 + 测试
 # ``tests/test_core.py`` 的 ``court_gongbao._extract_document_number`` 断言）。
 LIST_ITEM_RE = re.compile(
@@ -148,15 +147,20 @@ def _fetch_text(
     timeout: int = DEFAULT_TIMEOUT,
 ) -> FetchResult:
     req = _build_request(url, data=data)
-    with urlopen(req, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        body = resp.read().decode(charset, errors="replace")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("court_gongbao", timeout=timeout),
+        max_bytes=netio.MAX_TEXT_BYTES,
+    )
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode(
+            netio.response_charset(response.headers),
+            errors="replace",
+        ),
+    )
 
 
 def _detect_known_sections(html: str) -> list[str]:
@@ -201,7 +205,7 @@ def _parse_list_rows(
                 "title": title,
                 "issue": (issue or "").strip() or None,
                 "url": urljoin(base_url, href),
-                "status": "current",
+                "status": "unknown",
             }
         )
     return rows
@@ -262,8 +266,7 @@ def _extract_content_html(html: str) -> str:
 
 
 # 公报站 ``<title>`` 后缀清单（adapter 私有数据）。共用 strip 算法在
-# ``chinalaw.adapters._html.strip_known_title_suffix``，详见
-# docs/ADAPTER_HTML_HELPERS_SPEC.md。
+# ``chinalaw.adapters._html.strip_known_title_suffix``。
 _TITLE_SUFFIXES: tuple[str, ...] = (
     " - 中华人民共和国最高人民法院公报",
     "- 中华人民共和国最高人民法院公报",
@@ -289,8 +292,8 @@ def _strip_title_suffix(raw_title: str) -> str:
 def _html_to_text(content_html: str) -> str:
     """把抽出的内容 HTML 转成纯文本，保留段落分隔。
 
-    实装委托至 ``chinalaw.adapters._html.html_to_text``——adapter 公共能力，
-    详见 docs/ADAPTER_HTML_HELPERS_SPEC.md。Module-level 名字保留供既有测试
+    实装委托至 ``chinalaw.adapters._html.html_to_text``——adapter 公共能力。
+    Module-level 名字保留供既有测试
     与 adapter 内部 build_law_payload 调用。
     """
 
@@ -337,7 +340,7 @@ class CourtGongbaoAdapter:
     """最高人民法院公报站 adapter。
 
     覆盖文件类别：会议纪要（如九民纪要）/ 最高法批复 / 复函 / 司法解释 /
-    公报案例 / 工作报告。详见 ADR-0008 §1.1。
+    公报案例 / 工作报告，覆盖边界见 docs/CONTRACT.md §4.11.1。
     """
 
     base_url: str = DEFAULT_BASE_URL
@@ -700,19 +703,25 @@ class CourtGongbaoAdapter:
         document_number = cleaning.extract_document_number_from_preamble(text)
 
         return cleaning.canonicalize(
-            text,
-            source_kind="markdown",
-            id=f"court_gongbao:{detail_id}",
-            title=title,
-            short_title=short_title,
-            level=level,
-            status="current",
-            issuing_body="最高人民法院",
-            document_number=document_number,
-            source_url=detail.get("url"),
-            source_name="gongbao.court.gov.cn",
-            source_checked_at=detail.get("checked_at"),
-            source_hash=self._hash_text(text),
+            {
+                "id": f"court_gongbao:{detail_id}",
+                "title": title,
+                "short_title": short_title,
+                "aliases": [],
+                "level": level,
+                "status": "unknown",
+                "issuing_body": "最高人民法院",
+                "document_number": document_number,
+                "released_at": None,
+                "effective_at": None,
+                "repealed_at": None,
+                "source_url": detail.get("url"),
+                "source_name": "gongbao.court.gov.cn",
+                "source_checked_at": detail.get("checked_at"),
+                "source_hash": self._hash_text(text),
+                "articles": cleaning.parse_public_document_articles(text),
+            },
+            source_kind="external_json",
         )
 
     @staticmethod

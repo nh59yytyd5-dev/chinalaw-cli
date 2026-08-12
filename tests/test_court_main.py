@@ -193,7 +193,7 @@ class CourtMainAdapterTests(unittest.TestCase):
         first = result["rows"][0]
         self.assertEqual(first["detail_id"], "zixun/xiangqing/499051")
         self.assertEqual(first["released_at"], "2026-05-06")
-        self.assertEqual(first["status"], "current")
+        self.assertEqual(first["status"], "unknown")
         self.assertEqual(
             first["url"],
             "https://www.court.gov.cn/zixun/xiangqing/499051.html",

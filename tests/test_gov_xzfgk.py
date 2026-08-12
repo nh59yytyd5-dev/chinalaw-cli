@@ -185,7 +185,7 @@ class GovXzfgkAdapterTests(unittest.TestCase):
 
         self.assertEqual(payload["id"], "gov_xzfgk:gov_cn:content_5725824")
         self.assertEqual(payload["title"], "商业银行股权管理暂行办法")
-        self.assertEqual(payload["level"], "departmental_rule")
+        self.assertEqual(payload["level"], "department_rule")
         self.assertEqual(payload["issuing_body"], "中国银行业监督管理委员会")
         self.assertEqual(payload["document_number"], "中国银监会令2018年第1号")
         self.assertEqual(payload["released_at"], "2018-01-09")

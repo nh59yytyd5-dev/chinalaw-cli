@@ -15,9 +15,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
-from chinalaw import USER_AGENT_TOKEN, cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning, netio
 from chinalaw.adapters import _html as _adapter_html
 
 DEFAULT_BASE_URL = "https://www.nfra.gov.cn"
@@ -79,15 +79,20 @@ def _fetch_text(
     accept: str = "application/json",
 ) -> FetchResult:
     req = _build_request(url, accept=accept)
-    with urlopen(req, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        body = resp.read().decode(charset, errors="replace")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("nfra_gov_cn", timeout=timeout),
+        max_bytes=netio.MAX_TEXT_BYTES,
+    )
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode(
+            netio.response_charset(response.headers),
+            errors="replace",
+        ),
+    )
 
 
 def _normalize_detail_id(raw: str | None) -> str | None:
@@ -315,8 +320,8 @@ class NfraGovCnAdapter:
             id=f"nfra_gov_cn:{detail['detail_id']}",
             title=title,
             short_title=_infer_short_title(title),
-            level="departmental_rule",
-            status="current",
+            level="department_rule",
+            status=_adapter_html.status_from_current_listing(search_row),
             issuing_body=detail.get("issuing_body"),
             document_number=detail.get("document_number")
             or (search_row or {}).get("document_number"),

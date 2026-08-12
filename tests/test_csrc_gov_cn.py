@@ -212,8 +212,8 @@ class CsrcGovCnAdapterTests(unittest.TestCase):
 
         self.assertEqual(payload["id"], "csrc_gov_cn:csrc/c106256/c1653948")
         self.assertEqual(payload["title"], "上市公司信息披露管理办法")
-        self.assertEqual(payload["level"], "departmental_rule")
-        self.assertEqual(payload["status"], "current")
+        self.assertEqual(payload["level"], "department_rule")
+        self.assertEqual(payload["status"], "unknown")
         self.assertEqual(payload["issuing_body"], "中国证券监督管理委员会")
         self.assertEqual(payload["source_name"], "www.csrc.gov.cn")
         self.assertEqual(payload["document_number"], "证监会令第182号")

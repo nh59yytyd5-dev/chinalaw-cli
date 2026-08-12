@@ -31,17 +31,22 @@ enabled at the fetch layer):
 - ``CHINALAW_ALIAS_AGENT_TIMEOUT``   — seconds (float), default ``20``
 - ``CHINALAW_ALIAS_AGENT_MAX``       — max aliases returned (default 12)
 
-详见 ``docs/FETCH_LAYER_SPEC.md`` §3。
+运行时边界见 ``docs/CONTRACT.md`` §4.11。
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from dataclasses import replace
+
+from chinalaw import netio
+from chinalaw.resource_limits import MAX_ALIAS_RESPONSE_BYTES
 
 # Module-level seam used by tests so the network is never hit during the
 # unit suite. Swap to a stub like ``alias_agent._http_post = _fake_post``
@@ -58,6 +63,7 @@ class AliasAgentRecoverableError(Exception):
     ``reason`` 取值：
         ``missing_api_key``    — 缺 base_url / api_key / model 配置
         ``network``            — OSError / urllib HTTPError / 超时
+        ``invalid_config``     — timeout / max / URL 配置非法
         ``invalid_response``   — provider 返回非 JSON 数组 / 内容不可解析
     """
 
@@ -72,8 +78,20 @@ def _http_post(url: str, headers: dict, body: dict, timeout: float) -> str:
     req = urllib.request.Request(
         url, data=data, headers={**headers, "Content-Type": "application/json"}
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read().decode("utf-8")
+    response = netio.request_bytes(
+        req,
+        policy=netio.policy_for_endpoint(
+            "alias_agent",
+            url,
+            timeout=timeout,
+            max_text_bytes=MAX_ALIAS_RESPONSE_BYTES,
+        ),
+        max_bytes=MAX_ALIAS_RESPONSE_BYTES,
+    )
+    return response.content.decode(
+        netio.response_charset(response.headers),
+        errors="replace",
+    )
 
 
 _PROMPT_TEMPLATE = """\
@@ -157,15 +175,43 @@ def derive_aliases(
             "三项环境变量都配齐才能调用。",
         )
 
-    cap = max_aliases if max_aliases is not None else int(
-        os.environ.get("CHINALAW_ALIAS_AGENT_MAX", "12") or 12
-    )
+    try:
+        cap = int(
+            max_aliases
+            if max_aliases is not None
+            else (os.environ.get("CHINALAW_ALIAS_AGENT_MAX", "12") or 12)
+        )
+    except (TypeError, ValueError) as exc:
+        raise AliasAgentRecoverableError(
+            "invalid_config", "CHINALAW_ALIAS_AGENT_MAX 必须是整数"
+        ) from exc
     cap = max(1, min(cap, 30))
-    timeout_s = (
-        timeout
-        if timeout is not None
-        else float(os.environ.get("CHINALAW_ALIAS_AGENT_TIMEOUT", "20") or 20)
-    )
+    try:
+        timeout_s = float(
+            timeout
+            if timeout is not None
+            else (os.environ.get("CHINALAW_ALIAS_AGENT_TIMEOUT", "20") or 20)
+        )
+    except (TypeError, ValueError) as exc:
+        raise AliasAgentRecoverableError(
+            "invalid_config", "CHINALAW_ALIAS_AGENT_TIMEOUT 必须是正数"
+        ) from exc
+    if not math.isfinite(timeout_s) or timeout_s <= 0:
+        raise AliasAgentRecoverableError(
+            "invalid_config", "CHINALAW_ALIAS_AGENT_TIMEOUT 必须是有限正数"
+        )
+
+    endpoint = f"{base}/chat/completions"
+    try:
+        policy = netio.policy_for_endpoint(
+            "alias_agent",
+            endpoint,
+            timeout=timeout_s,
+            max_text_bytes=MAX_ALIAS_RESPONSE_BYTES,
+        )
+        netio.validate_url(endpoint, replace(policy, resolve_hosts=False))
+    except (ValueError, OSError) as exc:
+        raise AliasAgentRecoverableError("invalid_config", str(exc)) from exc
 
     body = {
         "model": mdl,
@@ -181,23 +227,36 @@ def derive_aliases(
     headers = {"Authorization": f"Bearer {key}"}
 
     try:
-        raw_body = http_post(f"{base}/chat/completions", headers, body, timeout_s)
+        raw_body = http_post(endpoint, headers, body, timeout_s)
     except (urllib.error.HTTPError, urllib.error.URLError, OSError, TimeoutError) as exc:
         raise AliasAgentRecoverableError("network", str(exc)) from exc
 
     try:
         envelope = json.loads(raw_body)
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, TypeError) as exc:
         raise AliasAgentRecoverableError(
             "invalid_response", f"provider 返回非 JSON: {exc}"
         ) from exc
 
-    choices = envelope.get("choices") or []
-    if not choices:
+    if not isinstance(envelope, dict):
         raise AliasAgentRecoverableError(
-            "invalid_response", "provider 返回 choices 为空"
+            "invalid_response", "provider JSON 根必须是对象"
         )
-    msg = (choices[0] or {}).get("message") or {}
+    choices = envelope.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise AliasAgentRecoverableError(
+            "invalid_response", "provider choices 必须是非空数组"
+        )
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise AliasAgentRecoverableError(
+            "invalid_response", "provider choices 元素必须是对象"
+        )
+    msg = first.get("message")
+    if not isinstance(msg, dict):
+        raise AliasAgentRecoverableError(
+            "invalid_response", "provider message 必须是对象"
+        )
     text = msg.get("content") or ""
     if not isinstance(text, str):
         raise AliasAgentRecoverableError(

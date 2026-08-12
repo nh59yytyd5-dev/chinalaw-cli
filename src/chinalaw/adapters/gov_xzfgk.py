@@ -16,9 +16,9 @@ from datetime import datetime, timezone
 from html import unescape
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
-from chinalaw import USER_AGENT_TOKEN, cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning, netio
 from chinalaw.adapters import _html as _adapter_html
 
 GOV_WRAPPER_URL = "https://www.gov.cn/zhengce/xzfgk/"
@@ -135,15 +135,20 @@ def _build_request(url: str) -> Request:
 
 def _fetch_text(url: str, timeout: int = DEFAULT_TIMEOUT) -> FetchResult:
     req = _build_request(url)
-    with urlopen(req, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        body = resp.read().decode(charset, errors="replace")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("gov_xzfgk", timeout=timeout),
+        max_bytes=netio.MAX_TEXT_BYTES,
+    )
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode(
+            netio.response_charset(response.headers),
+            errors="replace",
+        ),
+    )
 
 
 def _html_to_text(content_html: str) -> str:
@@ -563,7 +568,7 @@ class GovXzfgkAdapter:
                 "checked_at": datetime.now(timezone.utc).isoformat(),
                 "source_name": "www.gov.cn",
                 "level": (
-                    "departmental_rule"
+                    "department_rule"
                     if _gov_cn_meta(result.text, "lanmu") == "部门规章"
                     else "admin_regulation"
                 ),
@@ -609,11 +614,10 @@ class GovXzfgkAdapter:
             (item for item in versions if item.get("detail_id") == detail.get("detail_id")),
             None,
         )
-        status = (
-            "current"
-            if current_version is None or current_version.get("current")
-            else "amended"
-        )
+        if current_version is None:
+            status = _adapter_html.status_from_current_listing(search_row)
+        else:
+            status = "current" if current_version.get("current") else "amended"
         preamble = "\n".join(raw_text.splitlines()[:8])
         released_at = (
             (search_row or {}).get("released_at")
@@ -629,21 +633,25 @@ class GovXzfgkAdapter:
             else _infer_department_rule_document_number(preamble)
         )
         payload = cleaning.canonicalize(
-            raw_text,
-            source_kind="markdown",
-            id=f"gov_xzfgk:{detail['detail_id']}",
-            title=title,
-            short_title=_infer_short_title(title),
-            level=level,
-            status=status,
-            issuing_body=issuing_body,
-            document_number=document_number,
-            released_at=released_at,
-            effective_at=effective_at,
-            source_url=detail.get("url"),
-            source_name=detail.get("source_name") or "xzfg.moj.gov.cn",
-            source_checked_at=detail.get("checked_at"),
-            source_hash=self._hash_text(raw_text),
+            {
+                "id": f"gov_xzfgk:{detail['detail_id']}",
+                "title": title,
+                "short_title": _infer_short_title(title),
+                "aliases": [],
+                "level": level,
+                "status": status,
+                "issuing_body": issuing_body,
+                "document_number": document_number,
+                "released_at": released_at,
+                "effective_at": effective_at,
+                "repealed_at": None,
+                "source_url": detail.get("url"),
+                "source_name": detail.get("source_name") or "xzfg.moj.gov.cn",
+                "source_checked_at": detail.get("checked_at"),
+                "source_hash": self._hash_text(raw_text),
+                "articles": cleaning.parse_public_document_articles(raw_text),
+            },
+            source_kind="external_json",
         )
         payload["related_versions"] = versions
         return payload

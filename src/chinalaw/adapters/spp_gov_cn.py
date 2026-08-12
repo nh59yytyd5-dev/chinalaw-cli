@@ -17,8 +17,7 @@ Channel 启发式见 ``CHANNEL_TO_LEVEL_HINT``：``sfjs`` 默认司法解释；`
 启发式（含「指导意见」/「意见」 → ``judicial_policy``；含「指导性案例」 →
 ``guiding_case``）。
 
-候选源详情见 ``docs/decisions/ADR-0008-multi-source-adapters.md`` §1.2
-与 ``docs/research/2026-05-source-coverage-survey.md`` §4.2。
+候选源覆盖与命令边界以 ``data/source_coverage.json`` 和 ``docs/CONTRACT.md`` 为准。
 """
 
 from __future__ import annotations
@@ -32,9 +31,9 @@ from datetime import datetime, timezone
 from html import unescape
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
-from chinalaw import USER_AGENT_TOKEN, cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning, netio
 from chinalaw.adapters import _html as _adapter_html
 from chinalaw.document_numbers import extract_document_number
 
@@ -42,7 +41,7 @@ _extract_document_number = extract_document_number
 
 DEFAULT_BASE_URL = "https://www.spp.gov.cn"
 DEFAULT_TIMEOUT = 10
-DEFAULT_REQUEST_INTERVAL = 0.5  # ADR-0008 §3.3：默认节流提到 500ms
+DEFAULT_REQUEST_INTERVAL = 0.5  # 默认节流 500ms；更慢节流可由环境变量覆盖
 # 节流硬下限。任何调用方传入 ``<= 0`` 或低于此值的间隔都会被 clamp 到
 # ``MIN_REQUEST_INTERVAL``，无法在 adapter 层关闭节流。详见 docs/COMPLIANCE.md §3。
 MIN_REQUEST_INTERVAL = 0.1
@@ -70,7 +69,7 @@ KNOWN_SECTIONS = (
 # - gfwj（规范文件）：最高检规范性文件、意见、通知
 # - nbgz（内部规章）：检察机关内部规章
 # - jczdal（检察典型案例）：每"批"指导性案例公告页（注：详情非条文化结构，
-#   articles 通常为空，按 ADR-0008 §1.2 与 user 指示，本期"顺带兼容"——能跑
+#   articles 通常为空；本期保留 metadata/stub 兼容路径——能跑
 #   通 fetch 但不为它专门做 norm_source 切分）
 CHANNEL_TO_LABEL = {
     "sfjs": "司法解释",
@@ -115,8 +114,8 @@ EFFECTIVE_DATE_RE = re.compile(
 )
 
 # 文号识别已上提到 ``chinalaw.document_numbers.extract_document_number``，
-# adapter 不再维护本地正则；详见
-# ``docs/UNIFY_DOCUMENT_NUMBER_REGEX_SPEC.md``。Module-level alias
+# adapter 不再维护本地正则；``chinalaw.document_numbers`` 是共享规则来源。
+# Module-level alias
 # ``_extract_document_number`` 保留作为 adapter API（见上方 import 行）。
 # 该 helper 覆盖最高检常见前缀 ``高检发释字〔YYYY〕N号`` / ``高检发〔YYYY〕N号``，
 # 以及联合解释的 ``法释〔YYYY〕N号`` / ``法发〔YYYY〕N号`` / ``中办发〔...〕`` 等。
@@ -156,20 +155,24 @@ def _build_request(url: str) -> Request:
 
 def _fetch_text(url: str, timeout: int = DEFAULT_TIMEOUT) -> FetchResult:
     req = _build_request(url)
-    with urlopen(req, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        body = resp.read().decode(charset, errors="replace")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("spp_gov_cn", timeout=timeout),
+        max_bytes=netio.MAX_TEXT_BYTES,
+    )
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode(
+            netio.response_charset(response.headers),
+            errors="replace",
+        ),
+    )
 
 
 # 最高检站 ``<title>`` 后缀清单（adapter 私有数据）。共用 strip 算法在
-# ``chinalaw.adapters._html.strip_known_title_suffix``。详见
-# docs/ADAPTER_HTML_HELPERS_SPEC.md。
+# ``chinalaw.adapters._html.strip_known_title_suffix``。
 _TITLE_SUFFIXES: tuple[str, ...] = (
     "_中华人民共和国最高人民检察院",
     "-中华人民共和国最高人民检察院",
@@ -271,7 +274,7 @@ def _parse_list_rows(
                 "title": title,
                 "released_at": date,
                 "url": clean_url,
-                "status": "current",
+                "status": "unknown",
             }
         )
     return rows
@@ -365,8 +368,8 @@ def _title_aliases(title: str) -> list[str]:
 def _html_to_text(content_html: str) -> str:
     """把抽出的内容 HTML 转成纯文本，保留段落分隔。
 
-    实装委托至 ``chinalaw.adapters._html.html_to_text``——adapter 公共能力，
-    详见 docs/ADAPTER_HTML_HELPERS_SPEC.md。Module-level 名字保留供既有测试
+    实装委托至 ``chinalaw.adapters._html.html_to_text``——adapter 公共能力。
+    Module-level 名字保留供既有测试
     与 adapter 内部 build_law_payload 调用。
     """
 
@@ -452,7 +455,7 @@ class SppGovCnAdapter:
     """最高人民检察院 adapter。
 
     覆盖文件类别：两高 / 两高一部联合刑事司法解释、最高检规范文件 / 意见 /
-    指导意见、最高检指导性案例。详见 ADR-0008 §1.2。
+    指导意见、最高检指导性案例，覆盖边界见 docs/CONTRACT.md §4.11.1。
     """
 
     base_url: str = DEFAULT_BASE_URL
@@ -773,7 +776,7 @@ class SppGovCnAdapter:
         aliases = _title_aliases(title)
         articles = cleaning.parse_articles_from_text(text)
 
-        if not articles and level != "guiding_case":
+        if not articles:
             return cleaning.canonicalize(
                 {
                     "id": f"spp_gov_cn:{normalized}",
@@ -781,7 +784,7 @@ class SppGovCnAdapter:
                     "short_title": short_title,
                     "aliases": aliases,
                     "level": level,
-                    "status": "current",
+                    "status": "unknown",
                     "issuing_body": issuing_body,
                     "document_number": document_number,
                     "released_at": released_at,
@@ -791,7 +794,7 @@ class SppGovCnAdapter:
                     "source_name": "spp.gov.cn",
                     "source_checked_at": detail.get("checked_at"),
                     "source_hash": self._hash_text(text),
-                    "articles": cleaning.single_body_article(text),
+                    "articles": cleaning.parse_public_document_articles(text),
                 },
                 source_kind="external_json",
             )
@@ -803,7 +806,7 @@ class SppGovCnAdapter:
             title=title,
             short_title=short_title,
             level=level,
-            status="current",
+            status="unknown",
             issuing_body=issuing_body,
             document_number=document_number,
             released_at=released_at,

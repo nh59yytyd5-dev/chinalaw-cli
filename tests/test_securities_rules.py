@@ -9,10 +9,16 @@ from unittest.mock import patch
 from chinalaw import cleaning, fetch, sources
 from chinalaw.adapters import bse_cn, sac_net_cn, securities_rules, sse_com_cn, szse_cn
 from chinalaw.document_numbers import infer_source, infer_source_id
+from chinalaw.netio import NetworkPolicyError
 from chinalaw.service import normalize_article_number
 
 
 class SecuritiesRuleCleaningTests(unittest.TestCase):
+    def test_query_matcher_requires_order_and_rejects_ascii_vacuous_match(self) -> None:
+        self.assertTrue(securities_rules._matches_query("证券交易所股票上市规则", "股票上市规则"))
+        self.assertFalse(securities_rules._matches_query("管理办法", "办法管理"))
+        self.assertFalse(securities_rules._matches_query("证券交易所业务规则", "ASCII"))
+
     def test_decimal_article_numbers_are_preserved(self) -> None:
         self.assertEqual(normalize_article_number("2.2.7"), "2.2.7")
         self.assertEqual(normalize_article_number("第2.2.7条"), "2.2.7")
@@ -337,6 +343,19 @@ class GenericAttachmentTitleTests(unittest.TestCase):
 
 
 class SecuritiesSourceRegistryTests(unittest.TestCase):
+    def test_direct_id_rejects_file_private_and_cross_source_urls(self) -> None:
+        adapter = bse_cn.SecuritiesRulesAdapter(bse_cn.CONFIG)
+        for detail_id in (
+            "file:///etc/hosts",
+            "http://127.0.0.1/private/rule.shtml",
+            "https://127.0.0.1/private/rule.shtml",
+            "https://www.sse.com.cn/private/rule.shtml",
+        ):
+            with self.subTest(detail_id=detail_id), self.assertRaises(
+                NetworkPolicyError
+            ):
+                adapter.detail_url(detail_id)
+
     def test_new_sources_are_registered_for_fetch_and_verify(self) -> None:
         for name in ("bse_cn", "sse_com_cn", "szse_cn", "chinaclear_cn", "sac_net_cn"):
             self.assertIn(name, sources.ADAPTER_REGISTRY)

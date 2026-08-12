@@ -5,7 +5,7 @@
 些公共能力收敛到一处，让站点 adapter 只提供站点专有数据（标题后缀清单、
 issuer 前缀清单），共用算法保持单一权威。
 
-详见 `docs/ADAPTER_HTML_HELPERS_SPEC.md`。
+这些 helper 是 HTML adapter 的单一共享实现，调用边界见模块内 docstring 与测试。
 """
 
 from __future__ import annotations
@@ -17,8 +17,15 @@ from chinalaw import cleaning
 from chinalaw.aliases import preferred_short_title
 
 _TITLE_RE = re.compile(r"<title>(.*?)</title>", re.IGNORECASE | re.DOTALL)
-_BR_RE = re.compile(r"<\s*(br|BR)\s*/?\s*>")
-_BLOCK_CLOSE_RE = re.compile(r"</\s*(p|li|tr|div|h[1-6])\s*>", re.IGNORECASE)
+_DROP_CONTENT_RE = re.compile(
+    r"<\s*(script|style|noscript|template)\b[^>]*>.*?</\s*\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_BR_RE = re.compile(r"<\s*br\b[^>]*?/?>", re.IGNORECASE)
+_BLOCK_TAG_RE = re.compile(
+    r"</\s*(p|li|tr|div|h[1-6]|td|th)\b[^>]*>",
+    re.IGNORECASE,
+)
 _TAG_RE = re.compile(r"<[^>]+>")
 _INNER_WS_RE = re.compile(r"[ \t]+")
 _TITLE_SUFFIX_TRIM = " -—_"
@@ -61,9 +68,9 @@ def html_to_text(content_html: str) -> str:
 
     if not content_html:
         return ""
-    text = content_html
+    text = _DROP_CONTENT_RE.sub("", content_html)
     text = _BR_RE.sub("\n", text)
-    text = _BLOCK_CLOSE_RE.sub("\n", text)
+    text = _BLOCK_TAG_RE.sub("\n", text)
     text = _TAG_RE.sub("", text)
     text = unescape(text)
     text = (
@@ -129,3 +136,16 @@ def infer_short_title(title: str, *, site_prefixes: tuple[str, ...]) -> str | No
             if 2 <= len(stripped) <= 30:
                 return stripped
     return cleaning.infer_short_title(cleaned)
+
+
+def status_from_current_listing(search_row: dict | None) -> str:
+    """Use ``current`` only when a current-only listing supplied the evidence.
+
+    A direct detail URL carries no effect-status semantics.  Adapters whose
+    search entry point is explicitly documented as a current-only listing may
+    pass that row here; direct-id fetches conservatively remain ``unknown``.
+    """
+
+    if isinstance(search_row, dict) and search_row.get("status") == "current":
+        return "current"
+    return "unknown"

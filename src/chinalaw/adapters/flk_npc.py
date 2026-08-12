@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import unescape
 from urllib.parse import urlencode, urljoin
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
-from chinalaw import USER_AGENT_TOKEN, cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning, netio
 
 DEFAULT_TIMEOUT = 10
 DEFAULT_REQUEST_INTERVAL = 0.2
@@ -108,26 +108,33 @@ def _build_request(
 
 def _fetch_text(url: str, timeout: int = DEFAULT_TIMEOUT) -> FetchResult:
     req = _build_request(url, accept="text/html,application/javascript;q=0.9,*/*;q=0.8")
-    with urlopen(req, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        body = resp.read().decode(charset, errors="replace")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("flk_npc", timeout=timeout),
+        max_bytes=netio.MAX_TEXT_BYTES,
+    )
+    charset = netio.response_charset(response.headers)
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode(charset, errors="replace"),
+    )
 
 
 def _fetch_bytes(url: str, timeout: int = DEFAULT_TIMEOUT) -> BinaryFetchResult:
     req = _build_request(url, accept="application/octet-stream,*/*;q=0.8")
-    with urlopen(req, timeout=timeout) as resp:
-        return BinaryFetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            content=resp.read(),
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("flk_npc", timeout=timeout),
+        max_bytes=netio.MAX_BINARY_BYTES,
+    )
+    return BinaryFetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        content=response.content,
+    )
 
 
 def _looks_like_waf_challenge(text: str) -> bool:
@@ -501,24 +508,30 @@ class FlkNpcAdapter:
             data=data,
         )
         self._throttle()
-        with urlopen(req, timeout=self.timeout) as resp:
-            charset = resp.headers.get_content_charset() or "utf-8"
-            text = resp.read().decode(charset, errors="replace")
-            try:
-                payload = json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise ValueError(
-                    _unexpected_text_response_message(
-                        url=resp.geturl(),
-                        status_code=resp.getcode(),
-                        content_type=resp.headers.get("Content-Type"),
-                        text=text,
-                        expected="JSON object",
-                    )
-                ) from exc
-            if not isinstance(payload, dict):
-                raise ValueError("expected JSON object response")
-            return payload
+        response = netio.request_bytes(
+            req,
+            policy=netio.source_policy("flk_npc", timeout=self.timeout),
+            max_bytes=netio.MAX_TEXT_BYTES,
+        )
+        text = response.content.decode(
+            netio.response_charset(response.headers),
+            errors="replace",
+        )
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                _unexpected_text_response_message(
+                    url=response.url,
+                    status_code=response.status_code,
+                    content_type=response.headers.get("Content-Type"),
+                    text=text,
+                    expected="JSON object",
+                )
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ValueError("expected JSON object response")
+        return payload
 
 
 default_adapter = FlkNpcAdapter()

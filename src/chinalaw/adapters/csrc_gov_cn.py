@@ -30,10 +30,11 @@ from html import unescape
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
-from chinalaw import USER_AGENT_TOKEN, cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning, netio
 from chinalaw.adapters import _html as _adapter_html
+from chinalaw.resource_limits import run_limited
 
 DEFAULT_BASE_URL = "https://www.csrc.gov.cn"
 DEFAULT_TIMEOUT = 15
@@ -168,27 +169,35 @@ def _fetch_text(
     url: str, *, timeout: int = DEFAULT_TIMEOUT, data: bytes | None = None
 ) -> FetchResult:
     req = _build_request(_quote_url(url), data=data)
-    with urlopen(req, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        body = resp.read().decode(charset, errors="replace")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("csrc_gov_cn", timeout=timeout),
+        max_bytes=netio.MAX_TEXT_BYTES,
+    )
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode(
+            netio.response_charset(response.headers),
+            errors="replace",
+        ),
+    )
 
 
 def _fetch_bytes(url: str, *, timeout: int = DEFAULT_TIMEOUT) -> FetchResult:
     req = _build_request(_quote_url(url))
-    with urlopen(req, timeout=timeout) as resp:
-        body = resp.read().decode("latin1")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("csrc_gov_cn", timeout=timeout),
+        max_bytes=netio.MAX_BINARY_BYTES,
+    )
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode("latin1"),
+    )
 
 
 _extract_title = _adapter_html.html_extract_title
@@ -432,13 +441,9 @@ def _pdf_bytes_to_text(pdf_bytes: bytes) -> str:
     with tempfile.TemporaryDirectory() as td:
         pdf_path = Path(td) / "source.pdf"
         pdf_path.write_bytes(pdf_bytes)
-        result = subprocess.run(
+        result = run_limited(
             [pdftotext, "-raw", str(pdf_path), "-"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
+            runner=subprocess.run,
         )
     if result.returncode != 0:
         message = (result.stderr or "").strip() or "pdftotext failed"
@@ -736,8 +741,8 @@ class CsrcGovCnAdapter:
             id=f"csrc_gov_cn:{detail['detail_id']}",
             title=title,
             short_title=_infer_short_title(title),
-            level="departmental_rule",
-            status="current",
+            level="department_rule",
+            status=_adapter_html.status_from_current_listing(search_row),
             issuing_body="中国证券监督管理委员会",
             document_number=document_number,
             released_at=released_at,

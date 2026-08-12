@@ -27,9 +27,9 @@ from datetime import datetime, timezone
 from html import unescape
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
-from chinalaw import USER_AGENT_TOKEN, cleaning
+from chinalaw import USER_AGENT_TOKEN, cleaning, netio
 from chinalaw.adapters import _html as _adapter_html
 
 DEFAULT_BASE_URL = "https://www.court.gov.cn"
@@ -163,15 +163,20 @@ def _build_request(url: str) -> Request:
 
 def _fetch_text(url: str, timeout: int = DEFAULT_TIMEOUT) -> FetchResult:
     req = _build_request(url)
-    with urlopen(req, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        body = resp.read().decode(charset, errors="replace")
-        return FetchResult(
-            url=resp.geturl(),
-            status_code=resp.getcode(),
-            headers=dict(resp.headers.items()),
-            text=body,
-        )
+    response = netio.request_bytes(
+        req,
+        policy=netio.source_policy("court_main", timeout=timeout),
+        max_bytes=netio.MAX_TEXT_BYTES,
+    )
+    return FetchResult(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        text=response.content.decode(
+            netio.response_charset(response.headers),
+            errors="replace",
+        ),
+    )
 
 
 _extract_title = _adapter_html.html_extract_title
@@ -280,7 +285,7 @@ def _parse_rows(html: str, *, base_url: str, query: str | None = None) -> list[d
                 "released_at": _date_part(date_text),
                 "published_at": date_text or None,
                 "url": urljoin(base_url, f"/{detail_id}.html"),
-                "status": "current",
+                "status": "unknown",
             }
         )
         seen.add(detail_id)
@@ -729,7 +734,7 @@ class CourtMainAdapter:
                     "short_title": _infer_short_title(title),
                     "aliases": [],
                     "level": level,
-                    "status": "current",
+                    "status": "unknown",
                     "issuing_body": issuing_body,
                     "document_number": document_number,
                     "released_at": released_at,
@@ -753,7 +758,7 @@ class CourtMainAdapter:
                     "short_title": _infer_short_title(title),
                     "aliases": [],
                     "level": level,
-                    "status": "current",
+                    "status": "unknown",
                     "issuing_body": issuing_body,
                     "document_number": document_number,
                     "released_at": released_at,
@@ -775,7 +780,7 @@ class CourtMainAdapter:
                 title=title,
                 short_title=_infer_short_title(title),
                 level=level,
-                status="current",
+                status="unknown",
                 issuing_body=issuing_body,
                 document_number=document_number,
                 released_at=released_at,
