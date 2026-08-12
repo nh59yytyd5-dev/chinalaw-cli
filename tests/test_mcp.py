@@ -2,29 +2,16 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 import tempfile
 import unittest
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from unittest import mock
 
 from chinalaw import loader, mcp
 
 FIXTURES = Path(__file__).resolve().parents[1] / "data" / "fixtures"
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _load_mcp_footprint_module():
-    path = REPO_ROOT / "scripts" / "eval" / "mcp-footprint.py"
-    spec = importlib.util.spec_from_file_location("mcp_footprint", path)
-    assert spec is not None
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
 
 
 class McpTests(unittest.TestCase):
@@ -91,12 +78,56 @@ class McpTests(unittest.TestCase):
 
         self.assertEqual(-32602, response["error"]["code"])
 
-    def test_unexpected_tool_errors_are_not_hidden_as_protocol_errors(self) -> None:
-        with (
-            mock.patch("chinalaw.mcp.service.search", side_effect=RuntimeError("bug")),
-            self.assertRaises(RuntimeError),
-        ):
-            mcp.handle_request(
+    def test_request_validation_distinguishes_null_id_from_notification(self) -> None:
+        response = mcp.handle_request({"jsonrpc": "2.0", "id": None, "method": "ping"})
+        notification = mcp.handle_request({"jsonrpc": "2.0", "method": "missing"})
+
+        self.assertIsNone(response["id"])
+        self.assertEqual({}, response["result"])
+        self.assertIsNone(notification)
+
+    def test_request_validation_rejects_invalid_envelopes(self) -> None:
+        cases = [
+            ([], -32600),
+            ({"jsonrpc": "1.0", "id": 1, "method": "ping"}, -32600),
+            ({"jsonrpc": "2.0", "id": True, "method": "ping"}, -32600),
+            ({"jsonrpc": "2.0", "id": [], "method": "ping"}, -32600),
+            ({"jsonrpc": "2.0", "id": 1, "method": []}, -32600),
+            ({"jsonrpc": "2.0", "id": 1, "method": "missing"}, -32601),
+        ]
+        for request, code in cases:
+            with self.subTest(request=request):
+                response = mcp.handle_request(request)
+                self.assertEqual(code, response["error"]["code"])
+
+    def test_tool_arguments_are_validated_without_coercion(self) -> None:
+        cases = [
+            ({"query": ["合同"]}, "must be a string"),
+            ({"query": "合同", "limit": "1"}, "must be an integer"),
+            ({"query": "合同", "limit": True}, "must be an integer"),
+            ({"query": "合同", "limit": 0}, "at least 1"),
+            ({"query": "合同", "limit": 51}, "at most 50"),
+            ({"query": "合同", "kind": "invalid"}, "must be one of"),
+            ({"query": "合同", "extra": "value"}, "unexpected argument"),
+            ({}, "missing required argument"),
+        ]
+        for arguments, message in cases:
+            with self.subTest(arguments=arguments):
+                response = mcp.handle_request(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 4,
+                        "method": "tools/call",
+                        "params": {"name": "chinalaw_search", "arguments": arguments},
+                    }
+                )
+                self.assertEqual(-32602, response["error"]["code"])
+                self.assertIn(message, response["error"]["message"])
+
+    def test_unexpected_tool_errors_are_isolated_as_tool_results(self) -> None:
+        error_stream = StringIO()
+        with mock.patch("chinalaw.mcp.service.search", side_effect=RuntimeError("bug")):
+            response = mcp.handle_request(
                 {
                     "jsonrpc": "2.0",
                     "id": 4,
@@ -105,23 +136,22 @@ class McpTests(unittest.TestCase):
                         "name": "chinalaw_search",
                         "arguments": {"query": "合同", "limit": 1},
                     },
-                }
+                },
+                error_stream=error_stream,
             )
 
-    def test_mcp_footprint_script_measures_real_stdio_server(self) -> None:
-        if not (REPO_ROOT / "scripts" / "eval" / "mcp-footprint.py").exists():
-            self.skipTest("optional MCP footprint script is not included")
-        module = _load_mcp_footprint_module()
-
-        result = module.measure(
-            command=[sys.executable, "-m", "chinalaw.mcp"],
-            timeout=5,
-            target_budget_chars=6000,
+        self.assertTrue(response["result"]["isError"])
+        self.assertEqual(
+            "chinalaw_mcp_internal_error",
+            response["result"]["structuredContent"]["kind"],
         )
+        self.assertIn("RuntimeError: bug", error_stream.getvalue())
 
-        self.assertEqual("mcp_tools_footprint", result["kind"])
-        self.assertEqual(6, result["tool_count"])
-        self.assertTrue(result["within_budget"])
+    def test_tools_list_remains_within_context_budget(self) -> None:
+        serialized = json.dumps({"tools": mcp.TOOLS}, ensure_ascii=False, separators=(",", ":"))
+
+        self.assertEqual(6, len(mcp.TOOLS))
+        self.assertLessEqual(len(serialized), 6000)
 
 
 if __name__ == "__main__":

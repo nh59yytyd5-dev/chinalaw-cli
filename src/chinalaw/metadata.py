@@ -685,7 +685,7 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "risk": "read",
         "inputSchema": {
             "type": "object",
-            "properties": {"name": {"type": "string"}},
+            "properties": {"name": {"type": "string", "minLength": 1}},
             "required": ["name"],
             "additionalProperties": False,
         },
@@ -702,8 +702,8 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "law": {"type": "string"},
-                "number": {"type": "string"},
+                "law": {"type": "string", "minLength": 1},
+                "number": {"type": "string", "minLength": 1},
                 "as_of": {"type": "string"},
             },
             "required": ["law", "number"],
@@ -722,8 +722,8 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "law": {"type": "string"},
-                "numbers": {"type": "string"},
+                "law": {"type": "string", "minLength": 1},
+                "numbers": {"type": "string", "minLength": 1},
                 "as_of": {"type": "string"},
             },
             "required": ["law", "numbers"],
@@ -742,7 +742,7 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string"},
+                "query": {"type": "string", "minLength": 1},
                 "kind": {"type": "string", "enum": ["article", "law", "norm", "all"]},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                 "in_laws": {"type": "string"},
@@ -763,7 +763,7 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "date": {"type": "string"},
+                "date": {"type": "string", "minLength": 1},
                 "topic": {"type": "string"},
                 "law": {"type": "string"},
                 "domain": {"type": "string"},
@@ -784,7 +784,7 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string"},
+                "name": {"type": "string", "minLength": 1},
                 "source": {"type": "string"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 10},
             },
