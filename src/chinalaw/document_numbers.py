@@ -14,8 +14,7 @@ DOCUMENT_NUMBER_RE = re.compile(r"^[一-鿿]{1,12}〔\d{4}〕\d+号$")
 # 与 ``document_number_index`` key 校验等需要严格 fullmatch 的场景（已 ``^...$``
 # 锚定）。``DOCUMENT_NUMBER_INLINE_RE`` 不锚定 + ``\s*`` 容忍内部空白，用于从
 # 正文中抽出第一个文号子串。两个常量是 adapter 共享的权威定义；court_gongbao /
-# spp_gov_cn 不应再各自写本地正则，详见
-# ``docs/UNIFY_DOCUMENT_NUMBER_REGEX_SPEC.md``。
+# spp_gov_cn 不应再各自写本地正则。
 DOCUMENT_NUMBER_FULLMATCH_RE = DOCUMENT_NUMBER_RE
 DOCUMENT_NUMBER_INLINE_RE = re.compile(r"([一-鿿]{1,12}〔\d{4}〕\s*\d+\s*号)")
 COURT_DETAIL_RE = re.compile(r"/Details/([0-9A-Fa-f]{20,40})\.html")
@@ -56,9 +55,7 @@ def extract_document_number(text: str | None) -> str | None:
       第一个文号样式子串，命中后用 ``normalize_document_number`` 折叠空白。
       用于 adapter 的 ``build_law_payload`` 从正文抽取 ``document_number``。
 
-    为什么不要每个 adapter 各写一份：见
-    ``docs/UNIFY_DOCUMENT_NUMBER_REGEX_SPEC.md`` §1（修前 court_gongbao 强制
-    ``法`` 前缀漏召高检 / 中办联合发文）。
+    为什么不要每个 adapter 各写一份：统一规则避免不同来源的文号 grammar 分叉。
     """
 
     if not text:
@@ -158,8 +155,7 @@ def infer_source(payload: dict) -> str | None:
     return None
 
 
-# C901: 已知复杂（McCabe 38），三源文号主键推断集中于此；列为待拆分技术债，见
-# docs/decisions/ADR-0009-module-boundaries.md。
+# C901: 三源文号主键推断集中于此；后续拆分应保持本模块为唯一入口。
 def infer_source_id(payload: dict, source: str | None = None) -> str | None:  # noqa: C901
     """Infer the upstream id needed for document-number lookup."""
 

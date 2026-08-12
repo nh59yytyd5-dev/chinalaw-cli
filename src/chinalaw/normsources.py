@@ -14,6 +14,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from chinalaw.db import connect, migrate
+from chinalaw.resource_limits import (
+    ensure_file_size,
+    read_zip_member_limited,
+    run_limited,
+    validate_zip_archive,
+)
+from chinalaw.search_indexes import (
+    delete_norm_clause_search_indexes,
+    insert_norm_clause_search_index,
+    replace_norm_source_search_index,
+)
 from chinalaw.service import normalize_article_number
 
 
@@ -96,8 +107,10 @@ def _merge_metadata(base: dict, extra: dict | None) -> dict:
 
 
 def _read_docx_text(path: Path) -> str:
+    ensure_file_size(path, label="DOCX norm source")
     with zipfile.ZipFile(path) as zf:
-        xml = zf.read("word/document.xml")
+        validate_zip_archive(zf)
+        xml = read_zip_member_limited(zf, "word/document.xml")
     root = ET.fromstring(xml)
     ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
     paragraphs: list[str] = []
@@ -110,20 +123,18 @@ def _read_docx_text(path: Path) -> str:
 
 
 def _read_plain_text(path: Path) -> str:
+    ensure_file_size(path, label="text norm source")
     return path.read_text(encoding="utf-8")
 
 
 def _read_pdf_text(path: Path) -> str:
+    ensure_file_size(path, label="PDF norm source")
     pdftotext = shutil.which("pdftotext")
     if not pdftotext:
         raise ValueError("pdf norm source ingestion requires pdftotext")
-    result = subprocess.run(
+    result = run_limited(
         [pdftotext, "-layout", str(path), "-"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
+        runner=subprocess.run,
     )
     if result.returncode != 0:
         message = (result.stderr or "").strip() or "pdftotext failed"
@@ -517,22 +528,16 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
         ),
     )
 
-    conn.execute("DELETE FROM norm_sources_fts WHERE norm_source_id = ?", (source_id,))
-    conn.execute(
-        """
-        INSERT INTO norm_sources_fts(norm_source_id, name, short_name, aliases)
-        VALUES (?, ?, ?, ?)
-        """,
-        (
-            source_id,
-            name,
-            _clean_text(payload.get("short_name")) or "",
-            " ".join(aliases),
-        ),
+    replace_norm_source_search_index(
+        conn,
+        source_id=source_id,
+        name=name,
+        short_name=_clean_text(payload.get("short_name")),
+        aliases=aliases,
     )
 
+    delete_norm_clause_search_indexes(conn, source_id)
     conn.execute("DELETE FROM norm_clauses WHERE norm_source_id = ?", (source_id,))
-    conn.execute("DELETE FROM norm_clauses_fts WHERE norm_source_id = ?", (source_id,))
     for clause in normalized_clauses:
         conn.execute(
             """
@@ -550,18 +555,13 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
                 clause["position"],
             ),
         )
-        conn.execute(
-            """
-            INSERT INTO norm_clauses_fts(clause_id, norm_source_id, norm_source_name, number_display, text)
-            VALUES (?, ?, ?, ?, ?)
-            """,  # noqa: E501  (SQL 列清单在一行更可读)
-            (
-                clause["id"],
-                source_id,
-                name,
-                clause["number_display"] or clause["number"] or "",
-                clause["text"],
-            ),
+        insert_norm_clause_search_index(
+            conn,
+            clause_id=clause["id"],
+            source_id=source_id,
+            source_name=name,
+            number_display=clause["number_display"] or clause["number"] or "",
+            text=clause["text"],
         )
 
     return {

@@ -11,23 +11,84 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from chinalaw.schema import SCHEMA_V9_SQL, SCHEMA_VERSION
+from chinalaw.schema import SCHEMA_V11_DELTA_SQL, SCHEMA_V11_SQL, SCHEMA_VERSION
 
 DEFAULT_DB_PATH = Path.home() / ".chinalaw" / "chinalaw.db"
+SQLITE_BUSY_TIMEOUT_MS = 30_000
+_SQLITE_LOCK_RETRY_INITIAL_SECONDS = 0.005
+_SQLITE_LOCK_RETRY_MAX_SECONDS = 0.1
 
 
 def open_connection(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+        conn.execute("PRAGMA foreign_keys = ON")
+        _enable_wal_with_lock_retry(conn)
+    except Exception:
+        conn.close()
+        raise
+    return conn
+
+
+def _enable_wal_with_lock_retry(conn: sqlite3.Connection) -> None:
+    """Enable WAL despite the transient lock race on a brand-new database.
+
+    Two processes or threads can open the same empty file concurrently before
+    :func:`migrate` acquires its ``BEGIN IMMEDIATE`` lock. SQLite may reject one
+    of their simultaneous ``journal_mode`` changes immediately, even when the
+    connection has a busy timeout. Retry only SQLITE_BUSY / SQLITE_LOCKED; all
+    other initialization errors still fail loudly.
+    """
+
+    deadline = time.monotonic() + (SQLITE_BUSY_TIMEOUT_MS / 1000)
+    delay = _SQLITE_LOCK_RETRY_INITIAL_SECONDS
+    while True:
+        try:
+            conn.execute("PRAGMA journal_mode = WAL").fetchone()
+            return
+        except sqlite3.OperationalError as exc:
+            if not _is_sqlite_lock_error(exc) or time.monotonic() >= deadline:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, _SQLITE_LOCK_RETRY_MAX_SECONDS)
+
+
+def _is_sqlite_lock_error(exc: sqlite3.OperationalError) -> bool:
+    """Recognize base and extended BUSY / LOCKED codes across Python 3.10+."""
+
+    error_code = getattr(exc, "sqlite_errorcode", None)
+    if error_code is not None:
+        return error_code & 0xFF in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+    message = str(exc).lower()
+    return "database is locked" in message or "database table is locked" in message
+
+
+def open_readonly_connection(db_path: Path | str) -> sqlite3.Connection:
+    """Open an existing SQLite database without creating or migrating it."""
+
+    path = Path(db_path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    uri = f"{path.resolve().as_uri()}?mode=ro"
+    conn = sqlite3.connect(
+        uri,
+        uri=True,
+        timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
+    )
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA query_only = ON")
+        conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
     except Exception:
         conn.close()
         raise
@@ -43,6 +104,15 @@ def connect(db_path: Path | str = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connectio
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+@contextmanager
+def connect_readonly(db_path: Path | str) -> Iterator[sqlite3.Connection]:
+    conn = open_readonly_connection(db_path)
+    try:
+        yield conn
     finally:
         conn.close()
 
@@ -73,27 +143,37 @@ def migrate(conn: sqlite3.Connection) -> int:
     从 ``v`` 升到 ``v+1``；空 DB（``current=0``）走 ``_migrate_v0_to_v1`` 中
     一次性 ``executescript(SCHEMA_V8_SQL)`` 的快路径，后续 ALTER migrator 都
     依赖 ``IF NOT EXISTS`` / ``PRAGMA table_info`` 的 idempotent 守护，重复跑
-    无副作用。详见 ``docs/DB_MIGRATOR_REGISTRY_SPEC.md``。
+    无副作用。维护纪律见 ``docs/DEVELOPMENT_GUIDE.md`` §5。
     """
     current = current_version(conn)
     if current >= SCHEMA_VERSION:
         return current
 
-    while current < SCHEMA_VERSION:
-        migrator = _MIGRATORS.get(current)
-        if migrator is None:
-            # module-level assert 已保证 _MIGRATORS 覆盖 [0, SCHEMA_VERSION)。
-            # 此处保留运行时兜底，避免 ``python -O`` 关掉 assert 时静默漂移。
-            raise RuntimeError(
-                f"missing migrator for schema_version={current}; "
-                "_MIGRATORS registry is incomplete"
-            )
-        migrator(conn)
-        current += 1
+    owns_transaction = not conn.in_transaction
+    if owns_transaction:
+        conn.execute("BEGIN IMMEDIATE")
+    try:
+        # Another process may have completed the migration while this
+        # connection waited for the write lock.
+        current = current_version(conn)
+        while current < SCHEMA_VERSION:
+            migrator = _MIGRATORS.get(current)
+            if migrator is None:
+                raise RuntimeError(
+                    f"missing migrator for schema_version={current}; "
+                    "_MIGRATORS registry is incomplete"
+                )
+            migrator(conn)
+            current += 1
 
-    set_meta(conn, "schema_version", str(SCHEMA_VERSION))
-    conn.commit()
-    return SCHEMA_VERSION
+        set_meta(conn, "schema_version", str(SCHEMA_VERSION))
+        if owns_transaction:
+            conn.commit()
+        return SCHEMA_VERSION
+    except Exception:
+        if owns_transaction:
+            conn.rollback()
+        raise
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
@@ -115,6 +195,22 @@ def get_meta(conn: sqlite3.Connection, key: str, default: str | None = None) -> 
     return row[0] if row else default
 
 
+def _execute_script(conn: sqlite3.Connection, script: str) -> None:
+    """Execute a DDL script without ``executescript``'s implicit commit."""
+
+    buffer: list[str] = []
+    for line in script.splitlines(keepends=True):
+        buffer.append(line)
+        statement = "".join(buffer)
+        if not sqlite3.complete_statement(statement):
+            continue
+        if statement.strip():
+            conn.execute(statement)
+        buffer = []
+    if "".join(buffer).strip():
+        raise sqlite3.OperationalError("incomplete SQL migration statement")
+
+
 def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
     columns = {
         row[1]
@@ -125,7 +221,8 @@ def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+    _execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS norm_packs (
             id TEXT PRIMARY KEY,
@@ -163,7 +260,8 @@ def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+    _execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS norm_sources (
             id TEXT PRIMARY KEY,
@@ -251,7 +349,8 @@ def _migrate_v5_to_v6(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v6_to_v7(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+    _execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS law_relations (
             id TEXT PRIMARY KEY,
@@ -314,7 +413,8 @@ def _migrate_v6_to_v7(conn: sqlite3.Connection) -> None:
 
 def _migrate_v7_to_v8(conn: sqlite3.Connection) -> None:
     """新增 ``document_number_index`` 反查表。详见 schema.py SCHEMA_V8_SQL 注释。"""
-    conn.executescript(
+    _execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS document_number_index (
             document_number TEXT NOT NULL,
@@ -333,7 +433,8 @@ def _migrate_v7_to_v8(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v8_to_v9(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+    _execute_script(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS commentary_books (
             id TEXT PRIMARY KEY,
@@ -384,6 +485,24 @@ def _migrate_v8_to_v9(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v9_to_v10(conn: sqlite3.Connection) -> None:
+    """Normalize the legacy non-contract department level value."""
+
+    conn.execute(
+        "UPDATE laws SET level = 'department_rule' "
+        "WHERE level = 'departmental_rule'"
+    )
+
+
+def _migrate_v10_to_v11(conn: sqlite3.Connection) -> None:
+    """Add exact-alias and FTS row mappings, then remove legacy duplicates."""
+
+    from chinalaw.search_indexes import rebuild_search_indexes
+
+    _execute_script(conn, SCHEMA_V11_DELTA_SQL)
+    rebuild_search_indexes(conn)
+
+
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """空 DB → 一次性落最新累积 DDL。
 
@@ -393,15 +512,15 @@ def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     本 wrapper 把这一行为收进 :data:`_MIGRATORS` 注册表，保留单步升一档的
     contract（v0 → v1）；后续 ``_migrate_v1_to_v2`` ... ``_migrate_v7_to_v8``
     在自身的 ``IF NOT EXISTS`` / ``PRAGMA table_info`` 守护下重复跑全部
-    ALTER 无副作用。详见 docs/DB_MIGRATOR_REGISTRY_SPEC.md §2 / 附录 A。
+    ALTER 无副作用。维护纪律见 docs/DEVELOPMENT_GUIDE.md §5。
     """
-    conn.executescript(SCHEMA_V9_SQL)
+    _execute_script(conn, SCHEMA_V11_SQL)
 
 
 # Migrator 注册表：``current_version`` → 把 schema 升一档的回调。
 #
 # 每次新增 schema 版本时必须同步追加键值对（详见
-# ``docs/DB_MIGRATOR_REGISTRY_SPEC.md`` §3.1 与附录 A）。下面的 module-level
+# ``docs/DEVELOPMENT_GUIDE.md`` §5）。下面的 module-level
 # assert 在 import 时立刻校验注册表覆盖 ``[0, SCHEMA_VERSION)``，把"忘加
 # elif 分支但 schema_version 仍被升号"这一类 silent corruption 提前到模块
 # 加载阶段失败。
@@ -415,10 +534,12 @@ _MIGRATORS: dict[int, Callable[[sqlite3.Connection], None]] = {
     6: _migrate_v6_to_v7,
     7: _migrate_v7_to_v8,
     8: _migrate_v8_to_v9,
+    9: _migrate_v9_to_v10,
+    10: _migrate_v10_to_v11,
 }
 
 assert set(_MIGRATORS) == set(range(0, SCHEMA_VERSION)), (
     f"_MIGRATORS keys {sorted(_MIGRATORS)} 不等于 [0, {SCHEMA_VERSION})；"
     "新增 schema 版本时必须同步更新 _MIGRATORS（详见 "
-    "docs/DB_MIGRATOR_REGISTRY_SPEC.md）"
+    "docs/DEVELOPMENT_GUIDE.md §5）"
 )

@@ -7,17 +7,44 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from chinalaw.db import (
     _MIGRATORS,
+    SQLITE_BUSY_TIMEOUT_MS,
     _migrate_v0_to_v1,
     current_version,
     migrate,
     open_connection,
     set_meta,
 )
-from chinalaw.schema import SCHEMA_VERSION
+from chinalaw.schema import (
+    SCHEMA_V1_SQL,
+    SCHEMA_V2_SQL,
+    SCHEMA_V3_SQL,
+    SCHEMA_V4_SQL,
+    SCHEMA_V5_SQL,
+    SCHEMA_V6_SQL,
+    SCHEMA_V7_SQL,
+    SCHEMA_V8_SQL,
+    SCHEMA_V9_SQL,
+    SCHEMA_V10_SQL,
+    SCHEMA_VERSION,
+)
+
+SCHEMA_SQL_BY_VERSION = {
+    1: SCHEMA_V1_SQL,
+    2: SCHEMA_V2_SQL,
+    3: SCHEMA_V3_SQL,
+    4: SCHEMA_V4_SQL,
+    5: SCHEMA_V5_SQL,
+    6: SCHEMA_V6_SQL,
+    7: SCHEMA_V7_SQL,
+    8: SCHEMA_V8_SQL,
+    9: SCHEMA_V9_SQL,
+    10: SCHEMA_V10_SQL,
+}
 
 
 class MigratorRegistryTests(unittest.TestCase):
@@ -30,6 +57,11 @@ class MigratorRegistryTests(unittest.TestCase):
         "document_number_index",
         "commentary_books",
         "article_commentaries",
+        "law_alias_index",
+        "laws_fts_rows",
+        "articles_fts_rows",
+        "norm_sources_fts_rows",
+        "norm_clauses_fts_rows",
     )
 
     def test_migrators_registry_complete(self) -> None:
@@ -57,6 +89,31 @@ class MigratorRegistryTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_connection_configures_busy_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = open_connection(Path(tmp) / "t.db")
+            try:
+                timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+            finally:
+                conn.close()
+        self.assertEqual(timeout, SQLITE_BUSY_TIMEOUT_MS)
+
+    def test_concurrent_empty_database_migrations_serialize(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "t.db"
+
+            def run_migration() -> int:
+                conn = open_connection(db)
+                try:
+                    return migrate(conn)
+                finally:
+                    conn.close()
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                versions = list(pool.map(lambda _item: run_migration(), range(2)))
+
+        self.assertEqual(versions, [SCHEMA_VERSION, SCHEMA_VERSION])
+
     def test_migrate_from_each_version(self) -> None:
         """从 0..SCHEMA_VERSION-1 任一起点都能升到最新且关键表齐全。
 
@@ -76,10 +133,9 @@ class MigratorRegistryTests(unittest.TestCase):
                         # 真正的空 DB，让 migrate 走 _migrate_v0_to_v1。
                         self.assertEqual(current_version(conn), 0)
                     else:
-                        # 先把所有表建出来再把 schema_version 强制设回 N，
-                        # 模拟"DB 处于 vN 状态"。后续 migrator 必须 idempotent
-                        # 跳过已存在 column / table。
-                        _migrate_v0_to_v1(conn)
+                        # 使用真实的累计 vN DDL，而不是先建最新 schema 再倒填
+                        # 版本号；否则漏写某档 migrator 也会被最新表结构掩盖。
+                        conn.executescript(SCHEMA_SQL_BY_VERSION[start])
                         set_meta(conn, "schema_version", str(start))
                         conn.commit()
                         self.assertEqual(current_version(conn), start)
@@ -102,6 +158,43 @@ class MigratorRegistryTests(unittest.TestCase):
                         )
                 finally:
                     conn.close()
+
+    def test_v10_normalizes_legacy_department_rule_level(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "t.db"
+            conn = open_connection(db)
+            try:
+                _migrate_v0_to_v1(conn)
+                conn.execute(
+                    """
+                    INSERT INTO laws (
+                        id, title, aliases, level, status, source_url,
+                        source_name, source_checked_at, source_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "legacy-department-rule",
+                        "历史部门规章",
+                        "[]",
+                        "departmental_rule",
+                        "current",
+                        "https://example.test/legacy",
+                        "example.test",
+                        "2026-08-06T00:00:00+00:00",
+                        "legacy-hash",
+                    ),
+                )
+                set_meta(conn, "schema_version", "9")
+                conn.commit()
+
+                self.assertEqual(migrate(conn), SCHEMA_VERSION)
+                row = conn.execute(
+                    "SELECT level FROM laws WHERE id = ?",
+                    ("legacy-department-rule",),
+                ).fetchone()
+                self.assertEqual(row["level"], "department_rule")
+            finally:
+                conn.close()
 
 
 if __name__ == "__main__":

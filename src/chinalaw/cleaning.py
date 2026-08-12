@@ -21,7 +21,14 @@ from urllib.parse import urljoin
 from xml.etree import ElementTree as ET
 
 from chinalaw.aliases import display_short_title, merge_law_aliases
+from chinalaw.contracts import validate_law_payload
 from chinalaw.document_numbers import extract_document_number
+from chinalaw.resource_limits import (
+    MAX_LOCAL_SOURCE_BYTES,
+    read_zip_member_limited,
+    run_limited,
+    validate_zip_archive,
+)
 from chinalaw.service import normalize_article_number
 
 CLEANING_SCHEMA_VERSION = 1
@@ -87,6 +94,7 @@ TOC_STRUCTURAL_PAGE_RE = re.compile(
 ARTICLE_REFERENCE_FRAGMENT_RE = re.compile(
     r"^(?:第?[〇零一二三四五六七八九十百千万两0-9]+(?:款|项|段))(?:$|[\u4e00-\u9fff].*)"
 )
+INVISIBLE_FORMAT_RE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 
 
 def canonicalize(raw: object, *, source_kind: str, **options) -> dict:
@@ -105,6 +113,8 @@ def canonicalize(raw: object, *, source_kind: str, **options) -> dict:
 
 def canonicalize_external_json(payload: dict) -> dict:
     """Validate and shallow-normalize an already canonical-looking payload."""
+    if not isinstance(payload, dict):
+        raise ValueError("canonical law payload must be an object")
     required = [
         "id",
         "title",
@@ -119,15 +129,22 @@ def canonicalize_external_json(payload: dict) -> dict:
     if missing:
         raise ValueError(f"canonical law payload missing fields: {', '.join(missing)}")
 
+    raw_articles = payload.get("articles")
+    if not isinstance(raw_articles, list):
+        raise ValueError("canonical law payload articles must be an array")
+    raw_aliases = payload.get("aliases", [])
+    if not isinstance(raw_aliases, list):
+        raise ValueError("canonical law payload aliases must be an array")
+
     normalized = dict(payload)
-    normalized["articles"] = normalize_articles(list(payload.get("articles") or []))
+    normalized["articles"] = normalize_articles(raw_articles)
     title = str(payload["title"])
     short_title = normalized.get("short_title") or infer_short_title(title)
     normalized["short_title"] = display_short_title(title, short_title)
     normalized["aliases"] = merge_law_aliases(
         title,
         normalized.get("short_title"),
-        list(payload.get("aliases") or []),
+        raw_aliases,
     )
     normalized.setdefault("document_number", None)
     normalized.setdefault("issuing_body", None)
@@ -135,7 +152,7 @@ def canonicalize_external_json(payload: dict) -> dict:
     normalized.setdefault("effective_at", None)
     normalized.setdefault("repealed_at", None)
     normalized.setdefault("source_hash", build_articles_hash(normalized["articles"]))
-    return normalized
+    return validate_law_payload(normalized)
 
 
 def canonicalize_markdown(raw: object, **metadata) -> dict:
@@ -211,7 +228,7 @@ def canonicalize_flk_npc(
 
     title = detail_data.get("title") or law_id
     short_title = display_short_title(title, infer_short_title(title))
-    return {
+    payload = {
         "id": law_id,
         "title": title,
         "short_title": short_title,
@@ -222,8 +239,7 @@ def canonicalize_flk_npc(
         # document_number / repealed_at 这两条曾被硬编码为 None，与同模块
         # 其他三条 canonicalize 路径（external_json / markdown / docx 经
         # _canonicalize_local_text_payload）形成同层不变量违反——其它三路
-        # 都从输入读，只 flk_npc 路径无视输入。修复路径见
-        # docs/CLEANING_FLK_NPC_RESTORE_METADATA_SPEC.md §3：
+        # 都从输入读，只 flk_npc 路径无视输入。当前修复规则是：
         #   document_number 优先 detail JSON 候选键 (wenhao / wh /
         #   documentNumber)，退到 docx 题注调 extract_document_number 首匹配
         #   （与 HTML adapter 同型）；
@@ -242,10 +258,10 @@ def canonicalize_flk_npc(
         "category_ids": list(category_ids or []),
         # normalize_articles 是 cleaning 层的 invariant 兜底（trailing heading
         # 剥离 + part / number 兜底）。其他 3 个 source_kind 都走过；本路径必须
-        # 与之对称，否则 fetch --to-fixture 落盘时会漂移（详见
-        # docs/CANONICALIZE_FLK_NPC_NORMALIZE_SPEC.md）。
+        # 与之对称，否则 fetch --to-fixture 落盘时会漂移。
         "articles": normalize_articles(parse_articles_from_word_bytes(docx_bytes)),
     }
+    return validate_law_payload(payload, require_articles=True)
 
 
 def parse_articles_from_word_bytes(word_bytes: bytes) -> list[dict]:
@@ -268,8 +284,8 @@ def parse_articles_from_word_bytes(word_bytes: bytes) -> list[dict]:
 def _flk_document_number(detail_data: dict, docx_bytes: bytes) -> str | None:
     """Recover ``document_number`` for the FLK canonicalize path.
 
-    flk JSON 详情接口实测**没有**发文号字段（``docs/CLEANING_FLK_NPC_RESTORE_METADATA_SPEC.md``
-    §1.1）。但仍优先在 ``detail_data`` 上做防御性读，覆盖未来 flk schema 升级
+    flk JSON 详情接口实测**没有**发文号字段。但仍优先在 ``detail_data`` 上做
+    防御性读，覆盖未来 flk schema 升级
     或 caller 注入合成 payload 的情形；退到 docx 题注（preamble）调
     :func:`chinalaw.document_numbers.extract_document_number` 抽首匹配。
 
@@ -409,28 +425,28 @@ def parse_articles_from_docx(docx_bytes: bytes) -> list[dict]:
 
 
 def _convert_legacy_doc_to_text(doc_bytes: bytes) -> str:
+    if len(doc_bytes) > MAX_LOCAL_SOURCE_BYTES:
+        raise ValueError(
+            f"legacy Word payload exceeds limit: {len(doc_bytes)} > {MAX_LOCAL_SOURCE_BYTES}"
+        )
     with tempfile.TemporaryDirectory() as td:
         doc_path = Path(td) / "source.doc"
         doc_path.write_bytes(doc_bytes)
 
         textutil = shutil.which("textutil")
         if textutil:
-            result = subprocess.run(
+            result = run_limited(
                 [textutil, "-convert", "txt", "-stdout", str(doc_path)],
-                check=False,
-                capture_output=True,
-                text=True,
+                runner=subprocess.run,
             )
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout
 
         antiword = shutil.which("antiword")
         if antiword:
-            result = subprocess.run(
+            result = run_limited(
                 [antiword, str(doc_path)],
-                check=False,
-                capture_output=True,
-                text=True,
+                runner=subprocess.run,
             )
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout
@@ -536,21 +552,57 @@ def parse_numbered_items_from_text(text: str, *, min_items: int = 2) -> list[dic
     return articles
 
 
+def parse_public_document_articles(text: str) -> list[dict]:
+    """Return searchable items for a non-empty public document.
+
+    Statutory article structure remains authoritative. Policy and meeting
+    documents may instead use a 1./2. item sequence; truly unnumbered material
+    is represented explicitly as one symbolic body item.
+    """
+
+    articles = parse_articles_from_text(text)
+    if articles:
+        return articles
+    numbered_items = parse_numbered_items_from_text(text)
+    if numbered_items:
+        return numbered_items
+    return single_body_article(text)
+
+
 def normalize_articles(articles: list[dict]) -> list[dict]:
     """Normalize article numbers and positions for canonical JSON input."""
+    if not isinstance(articles, list):
+        raise ValueError("canonical law payload articles must be an array")
     normalized: list[dict] = []
+    seen_numbers: set[str] = set()
     context = _new_parse_context()
     for pos, article in enumerate(articles, start=1):
+        if not isinstance(article, dict):
+            raise ValueError(f"article at position {pos} must be an object")
         item = dict(article)
-        number_display = str(item.get("number_display") or "").strip()
-        number = str(item.get("number") or "").strip()
-        if not number and number_display:
-            number = normalize_article_number(number_display)
+        number_display = _clean_text(str(item.get("number_display") or ""))
+        raw_number = _clean_text(str(item.get("number") or ""))
+        symbolic = raw_number or number_display
+        if symbolic in {"正文", "序言"}:
+            number = symbolic
+        else:
+            number = normalize_article_number(raw_number or number_display)
         if not number:
             raise ValueError(f"article at position {pos} missing number")
-        _sync_enum_context_from_part(context, item.get("part"))
+        if number in seen_numbers:
+            raise ValueError(f"duplicate article number: {number}")
+        seen_numbers.add(number)
+        if number_display and number not in {"正文", "序言"}:
+            display_number = normalize_article_number(number_display)
+            if display_number and display_number != number:
+                raise ValueError(
+                    f"article number mismatch at position {pos}: "
+                    f"number={raw_number!r}, number_display={number_display!r}"
+                )
+        part = _clean_text(str(item.get("part") or "")) or None
+        _sync_enum_context_from_part(context, part)
         text, trailing_headings = _split_trailing_structural_headings(
-            str(item.get("text") or "").strip(),
+            INVISIBLE_FORMAT_RE.sub("", str(item.get("text") or "")).strip(),
             context,
             allow_orphan_enum=True,
         )
@@ -559,8 +611,10 @@ def normalize_articles(articles: list[dict]) -> list[dict]:
         item["number"] = number
         item["number_display"] = number_display or number
         item["text"] = text
-        item["part"] = item.get("part") or _part_label(context)
-        item.setdefault("position", pos)
+        item["part"] = part or _part_label(context)
+        if item.get("title") is not None:
+            item["title"] = _clean_text(str(item["title"])) or None
+        item["position"] = pos
         normalized.append(item)
         for heading in trailing_headings:
             _update_context(context, heading)
@@ -661,7 +715,7 @@ def _canonicalize_local_text_payload(
         title,
         metadata.get("short_title") or infer_short_title(title),
     )
-    return {
+    payload = {
         "id": metadata["id"],
         "title": title,
         "short_title": short_title,
@@ -686,6 +740,7 @@ def _canonicalize_local_text_payload(
         ),
         "articles": normalized_articles,
     }
+    return validate_law_payload(payload, require_articles=True)
 
 
 def _extract_text_and_metadata(raw: object) -> tuple[str, dict]:
@@ -713,8 +768,13 @@ def _extract_bytes_and_metadata(raw: object) -> tuple[bytes, dict]:
 
 
 def _iter_docx_paragraphs(docx_bytes: bytes) -> list[dict]:
+    if len(docx_bytes) > MAX_LOCAL_SOURCE_BYTES:
+        raise ValueError(
+            f"DOCX payload exceeds limit: {len(docx_bytes)} > {MAX_LOCAL_SOURCE_BYTES}"
+        )
     with zipfile.ZipFile(BytesIO(docx_bytes)) as zf:
-        xml_bytes = zf.read("word/document.xml")
+        validate_zip_archive(zf)
+        xml_bytes = read_zip_member_limited(zf, "word/document.xml")
 
     root = ET.fromstring(xml_bytes)
     paragraphs: list[dict] = []
@@ -739,7 +799,7 @@ def _iter_docx_paragraphs(docx_bytes: bytes) -> list[dict]:
 
 
 def _clean_text(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", INVISIBLE_FORMAT_RE.sub("", text)).strip()
 
 
 def _is_toc_line(text: str) -> bool:
@@ -752,7 +812,7 @@ def _is_toc_line(text: str) -> bool:
     followed by a page number.
     """
 
-    if TOC_MARKER_RE.search(text):
+    if TOC_MARKER_RE.fullmatch(text):
         return True
     if TOC_DOT_LEADER_RE.search(text):
         return True
@@ -760,11 +820,22 @@ def _is_toc_line(text: str) -> bool:
 
 
 def _new_parse_context() -> dict[str, str | int | None]:
-    return {"book": None, "chapter": None, "section": None, "enum_ordinal": 0}
+    return {
+        "book": None,
+        "subbook": None,
+        "chapter": None,
+        "section": None,
+        "enum_ordinal": 0,
+    }
 
 
 def _part_label(context: dict[str, str | int | None]) -> str | None:
-    parts = [context["book"], context["chapter"], context["section"]]
+    parts = [
+        context["book"],
+        context["subbook"],
+        context["chapter"],
+        context["section"],
+    ]
     values = [value for value in parts if value]
     return " ".join(values) if values else None
 
@@ -810,8 +881,20 @@ def _sync_enum_context_from_part(
 
 
 def _update_context(context: dict[str, str | int | None], heading: str) -> None:
-    if "分编" in heading or "编" in heading or heading == "附则":
+    if heading == "附则":
         context["book"] = heading
+        context["subbook"] = None
+        context["chapter"] = None
+        context["section"] = None
+        context["enum_ordinal"] = 0
+    elif "分编" in heading:
+        context["subbook"] = heading
+        context["chapter"] = None
+        context["section"] = None
+        context["enum_ordinal"] = 0
+    elif "编" in heading:
+        context["book"] = heading
+        context["subbook"] = None
         context["chapter"] = None
         context["section"] = None
         context["enum_ordinal"] = 0

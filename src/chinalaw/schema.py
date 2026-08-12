@@ -9,7 +9,7 @@ v0.1 策略：
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 11
 
 
 SCHEMA_V1_SQL = """
@@ -362,3 +362,56 @@ CREATE INDEX IF NOT EXISTS idx_article_commentaries_article
 CREATE INDEX IF NOT EXISTS idx_article_commentaries_book
     ON article_commentaries(book_id, position);
 """
+
+
+# v10 is a data-only migration; new databases use the same cumulative DDL.
+SCHEMA_V10_SQL = SCHEMA_V9_SQL
+
+
+SCHEMA_V11_DELTA_SQL = """
+CREATE INDEX IF NOT EXISTS idx_laws_short_title ON laws(short_title);
+
+CREATE TABLE IF NOT EXISTS law_alias_index (
+    alias TEXT NOT NULL,
+    law_id TEXT NOT NULL REFERENCES laws(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK(kind IN ('exact', 'derived')),
+    position INTEGER NOT NULL CHECK(position >= 0),
+    PRIMARY KEY (alias, law_id, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_law_alias_index_lookup
+    ON law_alias_index(alias, kind, law_id);
+CREATE INDEX IF NOT EXISTS idx_law_alias_index_law
+    ON law_alias_index(law_id, position);
+
+CREATE TABLE IF NOT EXISTS laws_fts_rows (
+    law_id TEXT PRIMARY KEY REFERENCES laws(id) ON DELETE CASCADE,
+    fts_rowid INTEGER NOT NULL UNIQUE CHECK(fts_rowid > 0)
+);
+
+CREATE TABLE IF NOT EXISTS articles_fts_rows (
+    article_id TEXT PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
+    law_id TEXT NOT NULL REFERENCES laws(id) ON DELETE CASCADE,
+    fts_rowid INTEGER NOT NULL UNIQUE CHECK(fts_rowid > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_articles_fts_rows_law
+    ON articles_fts_rows(law_id);
+
+CREATE TABLE IF NOT EXISTS norm_sources_fts_rows (
+    norm_source_id TEXT PRIMARY KEY REFERENCES norm_sources(id) ON DELETE CASCADE,
+    fts_rowid INTEGER NOT NULL UNIQUE CHECK(fts_rowid > 0)
+);
+
+CREATE TABLE IF NOT EXISTS norm_clauses_fts_rows (
+    clause_id TEXT PRIMARY KEY REFERENCES norm_clauses(id) ON DELETE CASCADE,
+    norm_source_id TEXT NOT NULL REFERENCES norm_sources(id) ON DELETE CASCADE,
+    fts_rowid INTEGER NOT NULL UNIQUE CHECK(fts_rowid > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_norm_clauses_fts_rows_source
+    ON norm_clauses_fts_rows(norm_source_id);
+"""
+
+
+SCHEMA_V11_SQL = SCHEMA_V10_SQL + SCHEMA_V11_DELTA_SQL

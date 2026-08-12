@@ -251,13 +251,12 @@ class FlkNpcMetadataExistingFixtureRegressionTests(unittest.TestCase):
     """既有 fixture 回归保护，确保本 PR 不漂移现有 fixture 的字段语义。"""
 
     def test_existing_contract_chapter_interpretation_fixture_metadata_unchanged(self):
-        """``data/fixtures/contract_chapter_interpretation_2023.json`` 是当前唯一
-        从 flk_npc 落盘的 fixture，document_number / repealed_at 都是 null。
+        """``data/fixtures/contract_chapter_interpretation_2023.json`` 保留
+        已清洗出的正式文号，repealed_at 仍为 null。
 
         本 PR 改 cleaning 层后再用同样的 detail_data + 一份模拟 docx
-        重跑 canonicalize，metadata 应仍为 None（fixture 当前 detail 数据
-        不带 wenhao / fzrq，docx 题注也无文号）—— 即对现有 fixture 输出
-        语义零回归。
+        重跑 canonicalize；合成 detail 数据不带 wenhao / fzrq，docx 题注也无
+        文号，因此该边界输出仍应为 None，不影响 fixture 已有的正式文号。
         """
 
         fixture_path = (
@@ -267,10 +266,9 @@ class FlkNpcMetadataExistingFixtureRegressionTests(unittest.TestCase):
             / "contract_chapter_interpretation_2023.json"
         )
         fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
-        # fixture 落盘时已经是 canonicalize 后的 payload；本回归只确认其
-        # document_number / repealed_at 都为 None，与本 PR canonicalize_flk_npc
-        # 无法从 detail_data 找到这两个字段时的输出一致。
-        self.assertIsNone(fixture["document_number"])
+        # fixture 落盘时已经是 canonicalize 后的 payload；正式文号来自
+        # 清洗阶段的元数据 / 题注恢复，废止日期当前仍为空。
+        self.assertEqual(fixture["document_number"], "法释〔2023〕13号")
         self.assertIsNone(fixture["repealed_at"])
 
         # 再用同 fixture 的核心 metadata 合成 detail_payload + 模拟 docx，

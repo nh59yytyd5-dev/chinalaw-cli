@@ -60,6 +60,8 @@ def _item_id(pack_id: str, item: dict, position: int) -> str:
 
 
 def _normalize_item(pack_id: str, item: dict, position: int) -> dict:
+    if not isinstance(item, dict):
+        raise ValueError(f"norm pack item at position {position} must be an object")
     item_type = (_clean_text(item.get("item_type")) or "").lower()
     if not item_type:
         if item.get("norm_source_id") or item.get("norm_source_name"):
@@ -102,6 +104,8 @@ def _normalize_item(pack_id: str, item: dict, position: int) -> dict:
     reference_text = _clean_text(item.get("reference_text"))
     if item_type == "reference" and not reference_text:
         reference_text = law_title or law_id or norm_source_name or norm_source_id
+        if not reference_text:
+            raise ValueError("reference item requires reference_text")
     if item_type in {"law", "article"} and not (law_id or law_title):
         raise ValueError(f"{item_type} item requires law_id or law_title")
     if item_type in {"norm_source", "norm_clause"} and not (
@@ -140,8 +144,7 @@ def _add_unique(target: list[dict], item: dict) -> None:
         target.append(item)
 
 
-# C901: 已知复杂（McCabe 30），规范包依赖归一；列为待拆分技术债，见
-# docs/decisions/ADR-0009-module-boundaries.md。
+# C901: 规范包依赖归一逻辑集中于此；后续拆分应保持公开结果不变。
 def _normalize_dependencies(value: object, items: list[dict]) -> dict:  # noqa: C901
     if value is None:
         value = {}
@@ -219,6 +222,8 @@ def _normalize_dependencies(value: object, items: list[dict]) -> dict:  # noqa: 
 
 
 def _normalize_pack_payload(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("norm pack payload must be an object")
     name = _clean_text(payload.get("name"))
     if not name:
         raise ValueError("norm pack requires name")
@@ -448,6 +453,22 @@ def _resolve_pack_row(conn: sqlite3.Connection, identifier: str) -> sqlite3.Row 
     ).fetchone()
 
 
+def _resolve_pack_row_by_id(
+    conn: sqlite3.Connection,
+    pack_id: str,
+) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT p.*, COUNT(i.id) AS item_count
+        FROM norm_packs p
+        LEFT JOIN norm_pack_items i ON i.pack_id = p.id
+        WHERE p.id = ?
+        GROUP BY p.id
+        """,
+        (pack_id,),
+    ).fetchone()
+
+
 def _enrich_item_from_resolved(item: dict, resolved: dict | None) -> dict:
     if not resolved:
         return item
@@ -509,6 +530,8 @@ def add_item_to_pack(
     pack_name = _clean_text(identifier)
     if not pack_name:
         raise NormPackError("pack name is required")
+    if not isinstance(item, dict):
+        raise NormPackError("pack item must be an object")
     explicit_item_id = _clean_text(item.get("id"))
 
     with connect(db_path) as conn:
@@ -563,7 +586,7 @@ def add_item_to_pack(
 
     with connect(db_path) as conn:
         migrate(conn)
-        row = _resolve_pack_row(conn, pack["id"])
+        row = _resolve_pack_row_by_id(conn, pack["id"])
         if row is None:
             if not create:
                 return None
@@ -586,7 +609,7 @@ def add_item_to_pack(
                     "{}",
                 ),
             )
-            row = _resolve_pack_row(conn, pack["id"])
+            row = _resolve_pack_row_by_id(conn, pack["id"])
             if row is None:
                 return None
         pack = _pack_row_to_dict(row)

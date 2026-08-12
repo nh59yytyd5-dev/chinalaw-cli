@@ -46,6 +46,8 @@ class LawStatus(str, Enum):
     CURRENT = "current"
     AMENDED = "amended"
     REPEALED = "repealed"
+    PENDING_EFFECTIVE = "pending_effective"
+    SEED = "seed"
     UNKNOWN = "unknown"
 
 

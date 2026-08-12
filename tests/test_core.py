@@ -21,6 +21,7 @@ from chinalaw import (
     cleaning,
     formatters,
     loader,
+    netio,
     normpacks,
     normsources,
     rebuild,
@@ -862,6 +863,21 @@ class LoaderAndServiceTests(unittest.TestCase):
         self.assertEqual(payload_cn["item"], payload_cn["article"])
         self.assertEqual(payload_cn["article"]["id"], payload_ar["article"]["id"])
 
+    def test_restored_data_security_law_articles_are_queryable(self):
+        article_21 = service.get_article(self.db_path, "数据安全法", "第二十一条")
+        article_42 = service.get_article(self.db_path, "数据安全法", "42")
+
+        self.assertEqual(article_21["article"]["number"], "21")
+        self.assertIn("重要数据目录", article_21["article"]["text"])
+        self.assertEqual(article_42["article"]["number"], "42")
+        self.assertIn("政务数据开放目录", article_42["article"]["text"])
+
+    def test_restored_cybersecurity_law_article_is_queryable(self):
+        payload = service.get_article(self.db_path, "网络安全法", "第二十五条")
+
+        self.assertEqual(payload["article"]["number"], "25")
+        self.assertIn("网络安全专用产品目录", payload["article"]["text"])
+
     def test_get_article_not_found(self):
         payload = service.get_article(self.db_path, "民法典", "99999")
         self.assertIsNone(payload["article"])
@@ -887,7 +903,8 @@ class LoaderAndServiceTests(unittest.TestCase):
     def test_empty_law_identifier_does_not_fuzzy_match(self):
         self.assertIsNone(service.get_law(self.db_path, "   "))
         self.assertIsNone(service.get_article(self.db_path, "   ", "3"))
-        self.assertIsNone(service.get_articles(self.db_path, "   ", "3"))
+        articles = service.get_articles(self.db_path, "   ", "3")
+        self.assertEqual(articles["error"], "law_not_found")
 
     def test_get_article_by_alias_and_inserted_number(self):
         payload = service.get_article(self.db_path, "示例条例", "第十四条之一")
@@ -1479,11 +1496,12 @@ class SourceProbeTests(unittest.TestCase):
             "</noscript><script src='/wzws-waf-cgi/jquery.js'></script></body></html>"
         )
         with patch(
-            "chinalaw.adapters.flk_npc.urlopen",
-            return_value=_FakeHTTPResponse(
-                html,
+            "chinalaw.adapters.flk_npc.netio.request_bytes",
+            return_value=netio.NetworkResponse(
                 url="https://flk.npc.gov.cn/law-search/search/flfgDetails?bbbs=law-1",
-                content_type="text/html",
+                status_code=200,
+                headers={"Content-Type": "text/html"},
+                content=html.encode("utf-8"),
             ),
         ), self.assertRaises(ValueError) as ctx:
             adapter.fetch_law_detail("law-1")
@@ -1724,6 +1742,56 @@ class SourceProbeTests(unittest.TestCase):
         self.assertIn("本条续款。", payload["articles"][0]["text"])
         self.assertEqual(payload["articles"][1]["number"], "2")
         self.assertEqual(len(payload["source_hash"]), 64)
+
+    def test_cleaning_preserves_book_before_subbook(self):
+        payload = cleaning.canonicalize(
+            """
+            第二编 物权
+            第一分编 通则
+            第一章 一般规定
+            第二百零五条 本编调整因物的归属和利用产生的民事关系。
+            """,
+            source_kind="markdown",
+            id="local-property-book",
+            title="中华人民共和国示例法",
+            level="law",
+            status="current",
+            source_url="local-file:property.md",
+            source_name="property.md",
+            source_checked_at="2026-08-06T00:00:00+00:00",
+        )
+
+        self.assertEqual(
+            payload["articles"][0]["part"],
+            "第二编 物权 第一分编 通则 第一章 一般规定",
+        )
+
+    def test_cleaning_removes_zero_width_format_characters(self):
+        payload = cleaning.canonicalize(
+            {
+                "id": "zero-width-law",
+                "title": "零宽字符测试法",
+                "short_title": "零宽测试法",
+                "aliases": [],
+                "level": "law",
+                "status": "current",
+                "source_url": "https://example.test/zero-width",
+                "source_name": "example.test",
+                "source_checked_at": "2026-08-06T00:00:00+00:00",
+                "articles": [
+                    {
+                        "number": "1",
+                        "number_display": "第一条",
+                        "part": "第一章 总则​",
+                        "text": "正文​内容。",
+                    }
+                ],
+            },
+            source_kind="external_json",
+        )
+
+        self.assertEqual(payload["articles"][0]["part"], "第一章 总则")
+        self.assertEqual(payload["articles"][0]["text"], "正文内容。")
 
     def test_cleaning_treats_enumerated_headings_as_structure(self):
         payload = cleaning.canonicalize(
@@ -2394,7 +2462,7 @@ class CourtGongbaoFetchTests(unittest.TestCase):
         first = result["rows"][0]
         self.assertEqual(first["detail_id"], "a" * 30)
         self.assertEqual(first["serial_no"], "sfjs")
-        self.assertEqual(first["status"], "current")
+        self.assertEqual(first["status"], "unknown")
         self.assertIn("示例案件", first["title"])
         self.assertEqual(first["issue"], "2026年03期")
         self.assertTrue(first["url"].endswith(f"/Details/{'a' * 30}.html"))
@@ -2472,7 +2540,7 @@ class CourtGongbaoFetchTests(unittest.TestCase):
             )
         self.assertEqual(payload["id"], f"court_gongbao:{'a' * 30}")
         self.assertEqual(payload["level"], "judicial_interpretation")
-        self.assertEqual(payload["status"], "current")
+        self.assertEqual(payload["status"], "unknown")
         self.assertEqual(payload["source_name"], "gongbao.court.gov.cn")
         self.assertEqual(payload["issuing_body"], "最高人民法院")
         self.assertEqual(payload["document_number"], "法释〔2026〕5号")
@@ -3566,7 +3634,7 @@ class SppGovCnFetchTests(unittest.TestCase):
         # detail_id 形态：去 leading / + .shtml + 剥 fragment
         self.assertEqual(first["detail_id"], "xwfbh/wsfbt/202501/t20250116_679579")
         self.assertEqual(first["channel"], "sfjs")
-        self.assertEqual(first["status"], "current")
+        self.assertEqual(first["status"], "unknown")
         self.assertEqual(first["released_at"], "2025-01-16")
         self.assertIn("袭警", first["title"])
         # 列表回填的 url 不带 fragment / 双斜杠
@@ -3797,8 +3865,10 @@ class SppGovCnFetchTests(unittest.TestCase):
         self.assertEqual(payload["level"], "guiding_case")
         # 单方发布 → issuing_body 不含 court
         self.assertEqual(payload["issuing_body"], "最高人民检察院")
-        # 指导性案例文档非条文化结构，articles 可能为 0（按 ADR-0008 边界 + user 指示，本期不专门做切分）
-        self.assertGreaterEqual(len(payload["articles"]), 0)
+        # 指导性案例文档非条文化结构，也必须保留为可检索的正文条目。
+        self.assertEqual(len(payload["articles"]), 1)
+        self.assertEqual(payload["articles"][0]["number"], "正文")
+        self.assertIn("检例第249号", payload["articles"][0]["text"])
 
     def test_build_law_payload_unnumbered_policy_keeps_body_article(self):
         adapter = spp_gov_cn.SppGovCnAdapter()
@@ -4024,6 +4094,40 @@ class SourceVerifyTests(unittest.TestCase):
 
 
 class SyncWorkflowTests(unittest.TestCase):
+    @staticmethod
+    def _payload(
+        law_id: str,
+        *,
+        source_hash: str | None = None,
+        status: str = "current",
+        checked_at: str = "2026-04-22T00:00:00+00:00",
+    ) -> dict:
+        suffix = law_id.rsplit("-", 1)[-1]
+        return {
+            "id": law_id,
+            "title": f"中华人民共和国同步测试法{suffix}",
+            "short_title": f"同步测试法{suffix}",
+            "aliases": [],
+            "level": "law",
+            "status": status,
+            "issuing_body": "全国人民代表大会",
+            "document_number": None,
+            "released_at": "2026-01-01",
+            "effective_at": "2026-02-01",
+            "repealed_at": "2026-04-01" if status == "repealed" else None,
+            "source_url": f"https://flk.npc.gov.cn/detail?id={law_id}",
+            "source_name": "flk.npc.gov.cn",
+            "source_checked_at": checked_at,
+            "source_hash": source_hash or f"hash-{law_id}",
+            "articles": [
+                {
+                    "number": "1",
+                    "number_display": "第一条",
+                    "text": f"同步测试正文{suffix}。",
+                }
+            ],
+        }
+
     def test_sync_source_imports_search_results(self):
         import tempfile
 
@@ -4328,6 +4432,166 @@ class SyncWorkflowTests(unittest.TestCase):
         self.assertEqual(adapter.calls, [("2026-04-19", result["published_to"], 1, 1)])
         self.assertEqual(result["mode"], "incremental")
         self.assertEqual(result["laws_loaded"], 1)
+
+    def test_batch_failure_on_second_page_keeps_first_page_and_checkpoint(self):
+        import tempfile
+
+        owner = self
+
+        class FakeAdapter:
+            def search_list(self, query, page_num=1, page_size=20):
+                if page_num == 2:
+                    raise TimeoutError("second page timed out")
+                return {
+                    "total": 2,
+                    "rows": [{"bbbs": "law-1", "title": "同步测试法一"}],
+                }
+
+            def build_law_payload(self, bbbs, search_row=None):
+                return owner._payload(bbbs)
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with patch(
+                "chinalaw.sync.get_source_adapter",
+                return_value=FakeAdapter(),
+            ), self.assertRaises(TimeoutError):
+                sync_source(
+                    db_path,
+                    source="flk_npc",
+                    batch=True,
+                    page_size=1,
+                )
+
+            self.assertIsNotNone(service.get_law(db_path, "同步测试法1"))
+            with connect(db_path) as conn:
+                migrate(conn)
+                self.assertEqual(
+                    get_meta(conn, "source:flk_npc:batch:last_page"),
+                    "1",
+                )
+                self.assertEqual(
+                    get_meta(conn, "source:flk_npc:batch:next_page"),
+                    "2",
+                )
+
+    def test_incremental_watermark_advances_only_after_empty_page(self):
+        import tempfile
+
+        owner = self
+
+        class FakeAdapter:
+            def __init__(self):
+                self.pages = []
+
+            def list_laws(self, since=None, until=None, page_num=1, page_size=20):
+                self.pages.append(page_num)
+                return {
+                    "total": 1,
+                    "rows": (
+                        [{"bbbs": "law-8", "title": "同步测试法八"}]
+                        if page_num == 1
+                        else []
+                    ),
+                }
+
+            def build_law_payload(self, bbbs, search_row=None):
+                return owner._payload(bbbs)
+
+        adapter = FakeAdapter()
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                migrate(conn)
+                set_meta(conn, "source:flk_npc:last_incremental_to", "2026-04-01")
+
+            with patch("chinalaw.sync.get_source_adapter", return_value=adapter):
+                partial = sync_source(
+                    db_path,
+                    source="flk_npc",
+                    incremental=True,
+                    max_pages=1,
+                    page_size=1,
+                )
+                completed = sync_source(
+                    db_path,
+                    source="flk_npc",
+                    incremental=True,
+                    page_size=1,
+                )
+
+            self.assertEqual(partial["stop_reason"], "max_pages")
+            self.assertFalse(partial["window_exhausted"])
+            self.assertIsNotNone(partial["resume_token"])
+            self.assertEqual(completed["stop_reason"], "no_rows")
+            self.assertTrue(completed["window_exhausted"])
+            self.assertEqual(adapter.pages, [1, 2])
+            with connect(db_path) as conn:
+                migrate(conn)
+                self.assertEqual(
+                    get_meta(conn, "source:flk_npc:last_incremental_to"),
+                    completed["published_to"],
+                )
+
+    def test_same_hash_refreshes_metadata_without_rebuilding_revision(self):
+        import tempfile
+
+        owner = self
+
+        class FakeAdapter:
+            def search_list(self, query, page_size=20):
+                return {"rows": [{"bbbs": "law-7", "title": "同步测试法七"}]}
+
+            def build_law_payload(self, bbbs, search_row=None):
+                return owner._payload(
+                    bbbs,
+                    source_hash="stable-hash",
+                    status="repealed",
+                    checked_at="2026-05-01T00:00:00+00:00",
+                )
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                migrate(conn)
+                loader.load_law_from_dict(
+                    conn,
+                    self._payload(
+                        "law-7",
+                        source_hash="stable-hash",
+                        checked_at="2026-04-01T00:00:00+00:00",
+                    ),
+                )
+                revision_count_before = conn.execute(
+                    "SELECT COUNT(*) FROM revisions WHERE law_id = 'law-7'"
+                ).fetchone()[0]
+
+            with patch("chinalaw.sync.get_source_adapter", return_value=FakeAdapter()):
+                result = sync_source(
+                    db_path,
+                    source="flk_npc",
+                    query="同步测试法七",
+                    limit=1,
+                )
+
+            with connect(db_path) as conn:
+                migrate(conn)
+                row = conn.execute(
+                    "SELECT status, repealed_at, source_checked_at FROM laws WHERE id = 'law-7'"
+                ).fetchone()
+                revision_count_after = conn.execute(
+                    "SELECT COUNT(*) FROM revisions WHERE law_id = 'law-7'"
+                ).fetchone()[0]
+                article_count = conn.execute(
+                    "SELECT COUNT(*) FROM articles WHERE law_id = 'law-7'"
+                ).fetchone()[0]
+
+        self.assertEqual(result["laws_loaded"], 0)
+        self.assertEqual(result["laws_skipped"], 1)
+        self.assertEqual(result["metadata_refreshed"], 1)
+        self.assertEqual(tuple(row), ("repealed", "2026-04-01", "2026-05-01T00:00:00+00:00"))
+        self.assertEqual(revision_count_after, revision_count_before)
+        self.assertEqual(article_count, 1)
 
 
 class NormPackTests(unittest.TestCase):
@@ -4777,7 +5041,7 @@ class NormSourceTests(unittest.TestCase):
             disabled = service.get_articles(
                 db_path, "甲方放款要求", "1,2", include_norm=False
             )
-            self.assertIsNone(disabled)
+            self.assertEqual(disabled["error"], "law_not_found")
 
     def test_get_articles_batch_mixes_law_and_norm(self):
         import tempfile

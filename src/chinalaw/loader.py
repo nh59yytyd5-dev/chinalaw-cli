@@ -32,9 +32,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from chinalaw import cleaning
-from chinalaw.datapaths import builtin_data_dir
+from chinalaw.contracts import validate_law_payload
+from chinalaw.datapaths import builtin_data_dir, builtin_data_search_message
 from chinalaw.db import connect, migrate, set_meta
 from chinalaw.document_numbers import index_document_number
+from chinalaw.search_indexes import (
+    delete_article_search_indexes,
+    insert_article_search_index,
+    replace_law_search_indexes,
+)
 
 FIXTURES_DIR = builtin_data_dir("fixtures")
 
@@ -167,15 +173,97 @@ def _upsert_revision(conn: sqlite3.Connection, payload: dict, source_hash: str) 
     )
 
 
+def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
+    """Refresh law/source metadata without replacing articles or revisions.
+
+    Upstream effect status and freshness can change while the normative body
+    remains byte-for-byte identical.  Sync/fetch use this path for same-hash
+    payloads so those changes are visible without rebuilding article FTS rows.
+    """
+
+    if not isinstance(payload, dict):
+        raise ValueError("canonical law payload must be an object")
+    normalized = dict(payload)
+    normalized.setdefault("aliases", [])
+    normalized.setdefault("source_name", "unknown")
+    normalized["articles"] = cleaning.normalize_articles(
+        normalized.get("articles", [])
+    )
+    normalized["source_hash"] = normalized.get("source_hash") or _content_hash(
+        normalized["articles"]
+    )
+    normalized["source_checked_at"] = normalized.get(
+        "source_checked_at"
+    ) or datetime.now(timezone.utc).isoformat()
+    validate_law_payload(normalized, require_articles=False)
+
+    law_id = normalized["id"]
+    conn.execute(
+        """
+        UPDATE laws SET
+            title = ?, short_title = ?, aliases = ?, level = ?, issuing_body = ?,
+            document_number = ?, released_at = ?, effective_at = ?, repealed_at = ?,
+            status = ?, source_url = ?, source_name = ?, source_checked_at = ?,
+            source_hash = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (
+            normalized["title"],
+            normalized.get("short_title"),
+            json.dumps(normalized.get("aliases", []), ensure_ascii=False),
+            normalized["level"],
+            normalized.get("issuing_body"),
+            normalized.get("document_number"),
+            normalized.get("released_at"),
+            normalized.get("effective_at"),
+            normalized.get("repealed_at"),
+            normalized["status"],
+            normalized["source_url"],
+            normalized.get("source_name", "unknown"),
+            normalized["source_checked_at"],
+            normalized["source_hash"],
+            law_id,
+        ),
+    )
+    index_document_number(conn, normalized)
+    categories = normalized.get("categories", [])
+    category_ids = normalized.get("category_ids", [])
+    if categories:
+        _upsert_categories(conn, categories)
+    if category_ids:
+        _replace_law_categories(conn, law_id, category_ids)
+
+    replace_law_search_indexes(
+        conn,
+        law_id=law_id,
+        title=normalized["title"],
+        short_title=normalized.get("short_title"),
+        aliases=normalized.get("aliases", []),
+    )
+
+
 def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
     """写入单部法规 + 条文 + FTS。返回写入的条文数。"""
-    law_id = payload["id"]
-    articles: list[dict] = payload.get("articles", [])
+    if not isinstance(payload, dict):
+        raise ValueError("canonical law payload must be an object")
 
-    source_hash = payload.get("source_hash") or _content_hash(articles)
-    source_checked_at = payload.get("source_checked_at") or datetime.now(
-        timezone.utc
-    ).isoformat()
+    payload = dict(payload)
+    payload.setdefault("aliases", [])
+    payload.setdefault("source_name", "unknown")
+    payload["articles"] = cleaning.normalize_articles(payload.get("articles", []))
+    payload["source_hash"] = payload.get("source_hash") or _content_hash(
+        payload["articles"]
+    )
+    payload["source_checked_at"] = payload.get(
+        "source_checked_at"
+    ) or datetime.now(timezone.utc).isoformat()
+    validate_law_payload(payload, require_articles=False)
+
+    law_id = payload["id"]
+    articles: list[dict] = payload["articles"]
+
+    source_hash = payload["source_hash"]
+    source_checked_at = payload["source_checked_at"]
     categories = payload.get("categories", [])
     category_ids = payload.get("category_ids", [])
 
@@ -228,22 +316,17 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
     if category_ids:
         _replace_law_categories(conn, law_id, category_ids)
 
-    # laws_fts：先按 law_id 删除旧记录，再插入新记录
-    conn.execute("DELETE FROM laws_fts WHERE law_id = ?", (law_id,))
-    conn.execute(
-        "INSERT INTO laws_fts(law_id, title, short_title, aliases) "
-        "VALUES (?, ?, ?, ?)",
-        (
-            law_id,
-            payload["title"],
-            payload.get("short_title") or "",
-            " ".join(payload.get("aliases", [])),
-        ),
+    replace_law_search_indexes(
+        conn,
+        law_id=law_id,
+        title=payload["title"],
+        short_title=payload.get("short_title"),
+        aliases=payload.get("aliases", []),
     )
 
     # articles：全量替换策略（简单可靠，v0.1 适用）
+    delete_article_search_indexes(conn, law_id)
     conn.execute("DELETE FROM articles WHERE law_id = ?", (law_id,))
-    conn.execute("DELETE FROM articles_fts WHERE law_id = ?", (law_id,))
 
     count = 0
     for pos, art in enumerate(articles, start=1):
@@ -268,10 +351,13 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
                 art.get("position", pos),
             ),
         )
-        conn.execute(
-            "INSERT INTO articles_fts(article_id, law_id, law_title, "
-            "number_display, text) VALUES (?, ?, ?, ?, ?)",
-            (article_id, law_id, payload["title"], number_display, text),
+        insert_article_search_index(
+            conn,
+            article_id=article_id,
+            law_id=law_id,
+            law_title=payload["title"],
+            number_display=number_display,
+            text=text,
         )
         count += 1
 
@@ -280,13 +366,21 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
 
 def load_files(db_path: Path | str, paths: Iterable[Path]) -> dict:
     """加载多个 JSON 文件。返回统计摘要。"""
+    file_paths = [Path(path) for path in paths]
+    if not file_paths:
+        return {
+            "laws_loaded": 0,
+            "articles_loaded": 0,
+            "titles": [],
+        }
+
     total_laws = 0
     total_articles = 0
     loaded: list[str] = []
 
     with connect(db_path) as conn:
         migrate(conn)
-        for p in paths:
+        for p in file_paths:
             payload = cleaning.canonicalize(
                 json.loads(Path(p).read_text(encoding="utf-8")),
                 source_kind="external_json",
@@ -315,9 +409,20 @@ def load_fixtures(db_path: Path | str, fixtures_dir: Path | None = None) -> dict
             "laws_loaded": 0,
             "articles_loaded": 0,
             "titles": [],
-            "note": f"fixtures dir missing: {directory}",
+            "note": (
+                f"fixtures dir missing: {directory}; "
+                f"{builtin_data_search_message('fixtures')}"
+            ),
         }
     paths = sorted(directory.glob("*.json"))
+    if not paths:
+        return {
+            "laws_loaded": 0,
+            "articles_loaded": 0,
+            "titles": [],
+            "fixtures_dir": str(directory),
+            "note": f"fixtures dir contains no JSON files: {directory}",
+        }
     result = load_files(db_path, paths)
     result["fixtures_dir"] = str(directory)
     return result
