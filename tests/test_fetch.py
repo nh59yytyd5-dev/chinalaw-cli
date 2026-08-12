@@ -12,6 +12,7 @@ mock 数据源 adapter.search_list / build_law_payload，覆盖：
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 import tempfile
@@ -918,7 +919,9 @@ class FetchLawTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td, self._patch_adapter(adapter):
             db_path = Path(td) / "t.db"
             fetch_mod.fetch_law(db_path, "示例法")
-            with sqlite3.connect(db_path) as conn:
+            # contextlib.closing 显式关闭连接：Windows 下未关闭的 SQLite 连接会
+            # 让 TemporaryDirectory 清理报 WinError 32。
+            with contextlib.closing(sqlite3.connect(db_path)) as conn:
                 article_ids_before = conn.execute(
                     "SELECT id FROM articles WHERE law_id = ? ORDER BY position", ("law-1",)
                 ).fetchall()
@@ -938,7 +941,7 @@ class FetchLawTests(unittest.TestCase):
             adapter._payloads["law-1"] = refreshed
             result = fetch_mod.fetch_law(db_path, "示例法")
 
-            with sqlite3.connect(db_path) as conn:
+            with contextlib.closing(sqlite3.connect(db_path)) as conn:
                 law = conn.execute(
                     "SELECT status, repealed_at, source_checked_at FROM laws WHERE id = ?",
                     ("law-1",),
@@ -1672,15 +1675,18 @@ class FetchCanonicalIdAcrossOutputsTests(unittest.TestCase):
         adapter = self._flk_adapter(raw_bbbs)
         with tempfile.TemporaryDirectory() as td, self._patch(adapter):
             db_path = Path(td) / "legacy.db"
-            with sqlite3.connect(db_path) as conn:
+            # contextlib.closing 显式关闭连接：Windows 下未关闭的 SQLite 连接会
+            # 让 TemporaryDirectory 清理报 WinError 32。
+            with contextlib.closing(sqlite3.connect(db_path)) as conn:
                 conn.execute("CREATE TABLE sentinel(value TEXT NOT NULL)")
                 conn.execute("INSERT INTO sentinel(value) VALUES ('keep')")
+                conn.commit()
             before = db_path.read_bytes()
 
             result = fetch_mod.fetch_law(db_path, "民法典", dry_run=True)
 
             after = db_path.read_bytes()
-            with sqlite3.connect(db_path) as conn:
+            with contextlib.closing(sqlite3.connect(db_path)) as conn:
                 tables = {
                     row[0]
                     for row in conn.execute(

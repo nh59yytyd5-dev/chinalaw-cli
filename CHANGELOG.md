@@ -52,6 +52,9 @@
   崩溃；改用兼容 bash 3.2 → 5.x 的 `${arr[@]+"${arr[@]}"}` 惯用法。（issue #3）
 - Windows `.cmd` shim 中文路径损坏与 `%` 被环境变量展开的问题；user-site 安装下
   随包数据定位失效导致 init 加载 0 部法规的问题。
+- Windows：snapshot 追加锁不再先读占位字节（msvcrt 字节锁为强制锁，其它 handle
+  读取已锁区域直接 `ERROR_LOCK_VIOLATION`），改为直接锁定 byte 0；两个 fetch 测试
+  显式关闭 SQLite 连接，修复临时目录清理 WinError 32。
 
 ### 新增
 

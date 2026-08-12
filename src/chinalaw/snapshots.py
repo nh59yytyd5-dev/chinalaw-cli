@@ -189,10 +189,9 @@ def _lock_file(lock_file) -> None:
     if os.name == "nt":
         import msvcrt
 
-        lock_file.seek(0)
-        if not lock_file.read(1):
-            lock_file.write(b"\0")
-            lock_file.flush()
+        # Windows 字节锁是强制锁：其它 handle 对已锁字节的 read/write 会直接
+        # PermissionError（ERROR_LOCK_VIOLATION），因此不能在加锁前读占位字节。
+        # LockFile 允许锁定 EOF 之后的区域，byte 0 无需事先存在。
         lock_file.seek(0)
         msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
         return
