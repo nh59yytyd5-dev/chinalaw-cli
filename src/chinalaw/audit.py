@@ -21,9 +21,14 @@ _CITATION_RE = re.compile(
     rf"《(?P<law>[^》]{{1,80}})》\s*(?P<number>{_ARTICLE_NUMBER_RE})"
 )
 _SHORT_CITATION_RE = re.compile(
-    rf"(?<![A-Za-z0-9_])"
+    rf"(?:(?<!\w)|(?<=[见依据按照参引援用]))"
     rf"(?P<law>九民|[民公证])\s*§\s*(?P<number>{_NUMBER_CORE_RE})\s*(?:条|项)?"
 )
+_CITATION_RANGE_RE = re.compile(
+    rf"^第?\s*(?P<start>{_NUMBER_BASE_RE})\s*(?:条)?\s*"
+    rf"[-－—~～至到]\s*第?\s*(?P<end>{_NUMBER_BASE_RE})\s*条$"
+)
+_MAX_CITATION_RANGE = 100
 _DATE_RE = re.compile(r"(?:19|20)\d{2}[年/-]\d{1,2}(?:[月/-]\d{1,2}日?)?")
 _PUNCT_RE = re.compile(r"[\s　，,。；;：:、（）()【】\[\]《》“”\"'‘’`]+")
 _SHORT_LAW_ALIASES = {
@@ -63,12 +68,13 @@ def extract_citations(text: str) -> list[dict]:
         law_input = match.group("law").strip()
         if _should_ignore_book_title_citation(law_input, number_input):
             continue
-        citations.append(
-            {
+        number_pairs = _expand_citation_numbers(number_input)
+        for requested_number, normalized_number in number_pairs:
+            citation = {
                 "raw": raw,
                 "law_input": law_input,
-                "number_input": number_input,
-                "number": service.normalize_article_number(number_input),
+                "number_input": requested_number,
+                "number": normalized_number,
                 "position": {
                     "start": start,
                     "end": end,
@@ -77,7 +83,9 @@ def extract_citations(text: str) -> list[dict]:
                 "context": _context(text, start, end),
                 "quoted_text": _extract_quoted_text(text, end),
             }
-        )
+            if len(number_pairs) > 1:
+                citation["range_input"] = number_input
+            citations.append(citation)
     for match in _SHORT_CITATION_RE.finditer(text or ""):
         raw = match.group(0)
         start = match.start()
@@ -101,6 +109,24 @@ def extract_citations(text: str) -> list[dict]:
         )
     citations.sort(key=lambda item: item.get("position", {}).get("start", 0))
     return citations
+
+
+def _expand_citation_numbers(number_input: str) -> list[tuple[str, str]]:
+    match = _CITATION_RANGE_RE.fullmatch((number_input or "").strip())
+    if not match:
+        return [(number_input, service.normalize_article_number(number_input))]
+    start = service.normalize_article_number(f"第{match.group('start')}条")
+    end = service.normalize_article_number(f"第{match.group('end')}条")
+    if not start.isdigit() or not end.isdigit():
+        return [(number_input, "")]
+    start_value = int(start)
+    end_value = int(end)
+    if start_value > end_value or end_value - start_value + 1 > _MAX_CITATION_RANGE:
+        return [(number_input, "")]
+    return [
+        (str(number), str(number))
+        for number in range(start_value, end_value + 1)
+    ]
 
 
 def _should_ignore_book_title_citation(law_input: str, number_input: str) -> bool:
@@ -767,9 +793,23 @@ def _status_issue(law: dict, *, as_of: str | None, strict: bool) -> dict | None:
     if law.get("via") == "norm_fallback":
         return None
     status = law.get("status")
-    if status in {"current", "active"}:
-        return None
     if as_of:
+        as_of_date = service._parse_iso_date(as_of)
+        repealed_at = law.get("repealed_at")
+        repealed_date = service._parse_iso_date(repealed_at)
+        if as_of_date is not None and repealed_date is not None and as_of_date >= repealed_date:
+            return _issue(
+                "error",
+                "repealed_before_as_of",
+                (
+                    f"引用法规已于 {repealed_at} 废止，晚于或等于该日的事实时点 "
+                    f"{as_of} 不能仅凭该旧法作为依据；请核对 relation/applicable 与承继法。"
+                ),
+                strict=strict,
+                details={"as_of": as_of, "repealed_at": repealed_at},
+            )
+        return None
+    if status in {"current", "active"}:
         return None
     if status == "repealed":
         return _issue(

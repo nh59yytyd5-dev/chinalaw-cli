@@ -15,7 +15,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from chinalaw.aliases import display_short_title, merge_law_aliases
-from chinalaw.db import connect, get_meta, migrate
+from chinalaw.db import connect, connect_readonly, current_version, migrate
+from chinalaw.schema import SCHEMA_VERSION
 
 # ---------- 辅助 ----------
 
@@ -69,10 +70,25 @@ def normalize_article_number(raw: str) -> str:
     s = re.sub(r"\s+", "", str(raw))
     if not s:
         return ""
+    if s in {"正文", "序言"}:
+        return s
 
     dotted = re.fullmatch(r"第?(?P<number>[0-9]+(?:\.[0-9]+)+)条?", s)
     if dotted:
         return dotted.group("number")
+
+    # A citation commonly names a paragraph/item after the article.  Only the
+    # article component identifies the database row; the suffix is retained by
+    # the caller when it needs paragraph-level analysis.
+    article_with_suffix = re.fullmatch(
+        r"(?P<article>第(?:[0-9]+|[〇零一二三四五六七八九十百千万两]+)条"
+        r"(?:之(?:[0-9]+|[〇零一二三四五六七八九十百千万两]+))?)"
+        r"(?:(?:第)?(?:[0-9]+|[〇零一二三四五六七八九十百千万两]+)"
+        r"(?:款|项|目))*",
+        s,
+    )
+    if article_with_suffix:
+        s = article_with_suffix.group("article")
 
     inserted = re.fullmatch(
         r"第?(?P<base>[0-9]+|[〇零一二三四五六七八九十百千万两]+)条之"
@@ -93,40 +109,47 @@ def normalize_article_number(raw: str) -> str:
 
 
 def _number_like_to_arabic(raw: str) -> str:
-    s = (
-        str(raw)
-        .replace("第", "")
-        .replace("条", "")
-        .replace("项", "")
-        .strip()
+    s = str(raw).strip()
+    wrapper = re.fullmatch(
+        r"第?(?P<number>[0-9]+|[〇零一二三四五六七八九十百千万两]+)(?:条|项)?",
+        s,
     )
+    if not wrapper:
+        return ""
+    s = wrapper.group("number")
     if not s:
         return ""
-    digits = re.sub(r"[^0-9]", "", s)
-    if digits and not re.search(r"[\u4e00-\u9fff]", s):
-        return str(int(digits))
-    if re.search(r"[\u4e00-\u9fff]", s):
-        return _chinese_to_arabic(s)
-    return s
+    if s.isdigit():
+        return str(int(s))
+    return _chinese_to_arabic(s)
 
 
 def _chinese_to_arabic(s: str) -> str:
-    s = s.replace("第", "").replace("条", "").strip()
+    if not s or any(ch not in _CHINESE_NUMERALS for ch in s):
+        return ""
+    if not any(_CHINESE_NUMERALS[ch] >= 10 for ch in s):
+        digits = "".join(str(_CHINESE_NUMERALS[ch]) for ch in s)
+        return str(int(digits)) if digits else ""
+
     total = 0
+    section = 0
     current = 0
     for ch in s:
         v = _CHINESE_NUMERALS.get(ch)
         if v is None:
-            continue
-        if v >= 10:
-            if current == 0:
-                current = 1
-            total += current * v
+            return ""
+        if v < 10:
+            current = v
+        elif v < 10000:
+            section += (current or 1) * v
             current = 0
         else:
-            current = v
-    total += current
-    return str(total) if total else s
+            section += current
+            total += (section or 1) * v
+            section = 0
+            current = 0
+    value = total + section + current
+    return str(value) if value else ""
 
 
 def _articles_coverage(article_count: int | None, status: str | None = None) -> str:
@@ -531,7 +554,7 @@ def _resolve_law_row_with_via(
 ) -> tuple[sqlite3.Row | None, str | None]:
     """Like ``_resolve_law_row`` but also returns which path matched.
 
-    via 取值参见 ``docs/ALIAS_SYSTEM_SPEC.md`` §3.2.2：
+    via 取值参见 ``docs/CONTRACT.md`` §4.1.1：
     ``id_match`` / ``title_match`` / ``short_title_match`` / ``alias_exact``
     / ``alias_derived`` / ``like_fallback``。
     """
@@ -539,43 +562,19 @@ def _resolve_law_row_with_via(
     identifier = normalize_law_identifier(identifier)
     if not identifier:
         return None, None
-    exact_alias_pattern = _like_pattern(json.dumps(identifier, ensure_ascii=False))
     fuzzy_pattern = _like_pattern(identifier)
 
-    row = conn.execute(
-        f"""
-        SELECT l.*
-        FROM laws l
-        LEFT JOIN articles a ON a.law_id = l.id
-        WHERE l.id = ? OR l.title = ? OR l.short_title = ? OR l.aliases LIKE ? ESCAPE '\\'
-        GROUP BY l.id
-        ORDER BY
-            CASE
-                WHEN l.id = ? THEN 0
-                WHEN l.title = ? THEN 1
-                WHEN l.short_title = ? THEN 2
-                ELSE 3
-            END,
-            {_LAW_RESOLUTION_ORDER}
-        LIMIT 1
-        """,
-        (
-            identifier,
-            identifier,
-            identifier,
-            exact_alias_pattern,
-            identifier,
-            identifier,
-            identifier,
-        ),
-    ).fetchone()
+    for column, via in (
+        ("id", "id_match"),
+        ("title", "title_match"),
+        ("short_title", "short_title_match"),
+    ):
+        row = _resolve_law_row_by_column(conn, column, identifier)
+        if row is not None:
+            return row, via
+
+    row = _resolve_law_row_by_indexed_alias(conn, identifier, kind="exact")
     if row is not None:
-        if row["id"] == identifier:
-            return row, "id_match"
-        if row["title"] == identifier:
-            return row, "title_match"
-        if row["short_title"] == identifier:
-            return row, "short_title_match"
         return row, "alias_exact"
 
     row = _resolve_law_row_by_derived_alias(conn, identifier)
@@ -618,10 +617,79 @@ def _aliases_for_law_row(row: sqlite3.Row) -> list[str]:
     return merge_law_aliases(row["title"], short_title, aliases)
 
 
-def _resolve_law_row_by_derived_alias(
+def _resolve_law_row_by_column(
     conn: sqlite3.Connection,
+    column: str,
     identifier: str,
 ) -> sqlite3.Row | None:
+    if column not in {"id", "title", "short_title"}:
+        raise ValueError(f"unsupported exact law column: {column}")
+    return conn.execute(
+        f"""
+        SELECT l.*
+        FROM laws l
+        LEFT JOIN articles a ON a.law_id = l.id
+        WHERE l.{column} = ?
+        GROUP BY l.id
+        ORDER BY {_LAW_RESOLUTION_ORDER}
+        LIMIT 1
+        """,
+        (identifier,),
+    ).fetchone()
+
+
+def _has_law_alias_index(conn: sqlite3.Connection) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'law_alias_index'"
+    ).fetchone() is not None
+
+
+def _resolve_law_row_by_indexed_alias(
+    conn: sqlite3.Connection,
+    identifier: str,
+    *,
+    kind: str,
+) -> sqlite3.Row | None:
+    if not _has_law_alias_index(conn):
+        return _resolve_law_row_by_legacy_alias(conn, identifier, kind=kind)
+    return conn.execute(
+        f"""
+        SELECT l.*
+        FROM law_alias_index alias_index
+        JOIN laws l ON l.id = alias_index.law_id
+        LEFT JOIN articles a ON a.law_id = l.id
+        WHERE alias_index.alias = ? AND alias_index.kind = ?
+        GROUP BY l.id
+        ORDER BY {_LAW_RESOLUTION_ORDER}
+        LIMIT 1
+        """,
+        (identifier, kind),
+    ).fetchone()
+
+
+def _resolve_law_row_by_legacy_alias(
+    conn: sqlite3.Connection,
+    identifier: str,
+    *,
+    kind: str,
+) -> sqlite3.Row | None:
+    """Read-only compatibility for pre-v11 databases that cannot migrate."""
+
+    if kind == "exact":
+        pattern = _like_pattern(json.dumps(identifier, ensure_ascii=False))
+        return conn.execute(
+            f"""
+            SELECT l.*
+            FROM laws l
+            LEFT JOIN articles a ON a.law_id = l.id
+            WHERE l.aliases LIKE ? ESCAPE '\\'
+            GROUP BY l.id
+            ORDER BY {_LAW_RESOLUTION_ORDER}
+            LIMIT 1
+            """,
+            (pattern,),
+        ).fetchone()
     rows = conn.execute(
         f"""
         SELECT l.*
@@ -631,10 +699,17 @@ def _resolve_law_row_by_derived_alias(
         ORDER BY {_LAW_RESOLUTION_ORDER}
         """
     ).fetchall()
-    for row in rows:
-        if identifier in _aliases_for_law_row(row):
-            return row
-    return None
+    return next(
+        (row for row in rows if identifier in _aliases_for_law_row(row)),
+        None,
+    )
+
+
+def _resolve_law_row_by_derived_alias(
+    conn: sqlite3.Connection,
+    identifier: str,
+) -> sqlite3.Row | None:
+    return _resolve_law_row_by_indexed_alias(conn, identifier, kind="derived")
 
 
 def _fetch_revisions(conn: sqlite3.Connection, law_id: str) -> list[dict]:
@@ -907,21 +982,126 @@ def _snapshot_to_law(snapshot: dict) -> dict:
     }
 
 
+def _law_from_current_articles(conn: sqlite3.Connection, law_row: sqlite3.Row) -> dict:
+    article_rows = conn.execute(
+        "SELECT * FROM articles WHERE law_id = ? ORDER BY position",
+        (law_row["id"],),
+    ).fetchall()
+    law = _row_to_law(law_row, article_count=len(article_rows))
+    law["articles"] = [_row_to_article(row) for row in article_rows]
+    return law
+
+
+def _decode_revision_snapshot(snapshot_json: str, law_row: sqlite3.Row) -> dict:
+    try:
+        snapshot = json.loads(snapshot_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("revision snapshot is not valid JSON") from exc
+    if not isinstance(snapshot, dict):
+        raise ValueError("revision snapshot must be an object")
+    if snapshot.get("id") != law_row["id"]:
+        raise ValueError("revision snapshot law id does not match its parent law")
+    articles = snapshot.get("articles", [])
+    if not isinstance(articles, list) or any(not isinstance(item, dict) for item in articles):
+        raise ValueError("revision snapshot articles must be an array of objects")
+    try:
+        return _snapshot_to_law(snapshot)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("revision snapshot is missing required law fields") from exc
+
+
+def _revision_snapshot_diagnostic(
+    revision: dict,
+    *,
+    code: str,
+    message: str,
+    fallback: str | None = None,
+) -> dict:
+    diagnostic = {
+        "severity": "warning" if fallback else "error",
+        "code": code,
+        "message": message,
+        "revision_id": revision.get("id"),
+        "content_hash": revision.get("content_hash"),
+    }
+    if fallback:
+        diagnostic["fallback"] = fallback
+    return diagnostic
+
+
+def _revision_unavailable_law(
+    law_row: sqlite3.Row,
+    revisions: list[dict],
+    revision: dict,
+    diagnostic: dict,
+) -> dict:
+    law = _row_to_law(law_row, article_count=0)
+    law.update(
+        {
+            "articles": [],
+            "article_count": 0,
+            "articles_coverage": "unavailable",
+            "ok": False,
+            "found": False,
+            "error": diagnostic["code"],
+            "reason": diagnostic["code"],
+            "message": diagnostic["message"],
+            "revision_diagnostic": diagnostic,
+        }
+    )
+    law["revisions"] = revisions
+    law["revision_count"] = len(revisions)
+    law["current_revision"] = revisions[0] if revisions else None
+    law["selected_revision"] = revision
+    return law
+
+
 def _build_law_from_revision_snapshot(
+    conn: sqlite3.Connection,
     law_row: sqlite3.Row,
     revisions: list[dict],
     revision: dict,
 ) -> dict | None:
     snapshot_json = revision.get("snapshot_json")
     if snapshot_json:
-        snapshot = json.loads(snapshot_json)
-        law = _snapshot_to_law(snapshot)
+        try:
+            law = _decode_revision_snapshot(snapshot_json, law_row)
+        except ValueError as exc:
+            diagnostic = _revision_snapshot_diagnostic(
+                revision,
+                code="revision_snapshot_corrupt",
+                message=f"所选历史版本快照损坏：{exc}。请重新 fetch/sync 或修复数据库。",
+                fallback=(
+                    "current_articles"
+                    if revision.get("content_hash") == law_row["source_hash"]
+                    else None
+                ),
+            )
+            if diagnostic.get("fallback"):
+                law = _law_from_current_articles(conn, law_row)
+                law["warnings"] = [diagnostic]
+                law["revision_diagnostic"] = diagnostic
+            else:
+                return _revision_unavailable_law(
+                    law_row, revisions, revision, diagnostic
+                )
     elif revision.get("content_hash") == law_row["source_hash"]:
-        law = _row_to_law(law_row, article_count=0)
-        law["articles"] = []
-        law["article_count"] = 0
+        diagnostic = _revision_snapshot_diagnostic(
+            revision,
+            code="revision_snapshot_missing_fallback_current",
+            message="所选版本缺少快照；其内容哈希与当前法规一致，已回退到当前 articles 表。",
+            fallback="current_articles",
+        )
+        law = _law_from_current_articles(conn, law_row)
+        law["warnings"] = [diagnostic]
+        law["revision_diagnostic"] = diagnostic
     else:
-        return None
+        diagnostic = _revision_snapshot_diagnostic(
+            revision,
+            code="revision_snapshot_missing",
+            message="所选历史版本缺少可回放快照，且不能由当前条文安全重建。",
+        )
+        return _revision_unavailable_law(law_row, revisions, revision, diagnostic)
 
     law["revisions"] = revisions
     law["revision_count"] = len(revisions)
@@ -1420,7 +1600,7 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
     返回扁平 dict，含 ``input`` / ``matched`` / ``via`` 三个必填字段；
     命中时还含 ``official_title`` / ``short_title`` / ``aliases`` / ``id``
     / ``level`` / ``status`` / ``issuing_body`` / ``released_at`` /
-    ``effective_at``。via 取值参见 ``docs/ALIAS_SYSTEM_SPEC.md`` §3.2.2：
+    ``effective_at``。via 取值参见 ``docs/CONTRACT.md`` §4.1.1：
     ``id_match`` / ``title_match`` / ``short_title_match`` / ``alias_exact``
     / ``alias_derived`` / ``like_fallback``。
 
@@ -1463,8 +1643,49 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
 def get_law_as_of(db_path: Path | str, identifier: str, as_of: str) -> dict | None:
     parsed = _parse_iso_date(as_of)
     if parsed is None:
-        return None
-    return _get_law_internal(db_path, identifier, as_of=parsed)
+        return {
+            "kind": "law_as_of_error",
+            "ok": False,
+            "found": False,
+            "error": "invalid_as_of",
+            "reason": "invalid_as_of",
+            "name": identifier,
+            "as_of": as_of,
+            "message": "--as-of 必须使用 YYYY-MM-DD。",
+        }
+    current = _get_law_internal(db_path, identifier)
+    if current is None:
+        return {
+            "kind": "law_as_of_error",
+            "ok": False,
+            "found": False,
+            "error": "law_not_found",
+            "reason": "law_not_found",
+            "name": identifier,
+            "as_of": as_of,
+            "message": "法规未入库或名称无法解析。",
+        }
+    selected = _get_law_internal(db_path, identifier, as_of=parsed)
+    if selected is None:
+        return {
+            "kind": "law_as_of_error",
+            "ok": False,
+            "found": False,
+            "error": "version_not_found_as_of",
+            "reason": "version_not_found_as_of",
+            "name": identifier,
+            "law_id": current.get("id"),
+            "as_of": as_of,
+            "message": "法规已入库，但本地没有该时点可用版本。",
+        }
+    if selected.get("error"):
+        return {
+            **selected,
+            "kind": "law_as_of_error",
+            "name": identifier,
+            "as_of": as_of,
+        }
+    return selected
 
 
 def _get_law_internal(
@@ -1489,7 +1710,7 @@ def _get_law_internal(
             selected = _select_revision_as_of(revisions, as_of)
             if selected is None:
                 return None
-            law = _build_law_from_revision_snapshot(row, revisions, selected)
+            law = _build_law_from_revision_snapshot(conn, row, revisions, selected)
             if law is not None:
                 law["categories"] = categories
             return _law_without_revision_snapshots(law)
@@ -1618,6 +1839,17 @@ def diagnose_article_miss(
                     "该时点判断。"
                 ),
                 "suggested_history": history_cmd,
+            }
+        if law_as_of.get("error"):
+            return {
+                "reason": law_as_of["error"],
+                "error": law_as_of["error"],
+                "law_id": law.get("id"),
+                "as_of": as_of_value,
+                "hint": law_as_of.get("message")
+                or "所选历史版本快照无法回放，请重新 fetch/sync 或修复数据库。",
+                "suggested_history": history_cmd,
+                "diagnostic": law_as_of.get("revision_diagnostic"),
             }
         law = law_as_of
 
@@ -1851,11 +2083,23 @@ def get_articles(
 ) -> dict | None:
     pairs = parse_article_number_spec(numbers)
     if not pairs:
-        return None
+        return _articles_error_payload(
+            "empty_numbers",
+            law_identifier,
+            numbers,
+            as_of=as_of,
+            message="条号列表为空或无法按法规条号 grammar 解析。",
+        )
 
     parsed_as_of = _parse_iso_date(as_of) if as_of else None
     if as_of and parsed_as_of is None:
-        return None
+        return _articles_error_payload(
+            "invalid_as_of",
+            law_identifier,
+            numbers,
+            as_of=as_of,
+            message="--as-of 必须使用 YYYY-MM-DD。",
+        )
 
     with connect(db_path) as conn:
         migrate(conn)
@@ -1867,8 +2111,16 @@ def get_articles(
                     conn, law_identifier, pairs
                 )
                 if fallback is not None:
+                    fallback["ok"] = fallback.get("missing_count", 0) == 0
+                    fallback["found"] = True
                     return fallback
-            return None
+            return _articles_error_payload(
+                "law_not_found",
+                law_identifier,
+                numbers,
+                as_of=as_of,
+                message="法规未入库或名称无法解析。",
+            )
 
         revisions = _fetch_revisions(conn, row["id"])
         categories = _fetch_categories_for_law(conn, row["id"])
@@ -1877,10 +2129,34 @@ def get_articles(
         if parsed_as_of is not None:
             selected = _select_revision_as_of(revisions, parsed_as_of)
             if selected is None:
-                return None
-            law = _build_law_from_revision_snapshot(row, revisions, selected)
+                return _articles_error_payload(
+                    "version_not_found_as_of",
+                    law_identifier,
+                    numbers,
+                    as_of=as_of,
+                    law=_law_reference_payload(_row_to_law(row)),
+                    message="法规已入库，但本地没有该时点可用版本。",
+                )
+            law = _build_law_from_revision_snapshot(conn, row, revisions, selected)
             if law is None:
-                return None
+                return _articles_error_payload(
+                    "version_not_found_as_of",
+                    law_identifier,
+                    numbers,
+                    as_of=as_of,
+                    law=_law_reference_payload(_row_to_law(row)),
+                    message="所选版本无法回放。",
+                )
+            if law.get("error"):
+                return _articles_error_payload(
+                    law["error"],
+                    law_identifier,
+                    numbers,
+                    as_of=as_of,
+                    law=_law_reference_payload(law),
+                    message=law.get("message") or "所选版本快照无法回放。",
+                    diagnostic=law.get("revision_diagnostic"),
+                )
             law["categories"] = categories
             article_map = _articles_by_number(law.get("articles", []))
         else:
@@ -1923,6 +2199,8 @@ def get_articles(
         missing = [item for item in items if not item["found"]]
         return {
             "kind": "law_articles",
+            "ok": not missing,
+            "found": True,
             "law": _law_reference_payload(law),
             "as_of": selected_as_of,
             "requested_numbers": [requested for requested, _ in pairs],
@@ -1933,6 +2211,40 @@ def get_articles(
             "items": items,
             "articles": items,
         }
+
+
+def _articles_error_payload(
+    error: str,
+    law_identifier: str,
+    numbers: str | list[str],
+    *,
+    as_of: str | None,
+    message: str,
+    law: dict | None = None,
+    diagnostic: dict | None = None,
+) -> dict:
+    payload = {
+        "kind": "law_articles_error",
+        "ok": False,
+        "found": False,
+        "error": error,
+        "reason": error,
+        "name": law_identifier,
+        "numbers": numbers,
+        "as_of": as_of,
+        "law": law,
+        "requested_numbers": [],
+        "normalized_numbers": [],
+        "item_count": 0,
+        "found_count": 0,
+        "missing_count": 0,
+        "items": [],
+        "articles": [],
+        "message": message,
+    }
+    if diagnostic:
+        payload["diagnostic"] = diagnostic
+    return payload
 
 
 def parse_articles_batch_spec(raw: str) -> list[tuple[str, str]]:
@@ -1976,6 +2288,32 @@ def get_articles_batch(
     entries = parse_articles_batch_spec(batch_spec)
     if not entries:
         return None
+    if as_of and _parse_iso_date(as_of) is None:
+        sections = [
+            {
+                "name": law_name,
+                "numbers_spec": numbers,
+                "result": None,
+                "error": "invalid_as_of",
+                "ok": False,
+            }
+            for law_name, numbers in entries
+        ]
+        return {
+            "kind": "law_articles_batch",
+            "ok": False,
+            "error": "invalid_as_of",
+            "reason": "invalid_as_of",
+            "message": "--as-of 必须使用 YYYY-MM-DD。",
+            "as_of": as_of,
+            "law_count": len(entries),
+            "item_count": 0,
+            "found_count": 0,
+            "missing_count": 0,
+            "failed_section_count": len(entries),
+            "error_count": len(entries),
+            "sections": sections,
+        }
     sections: list[dict] = []
     item_count = 0
     found_count = 0
@@ -1997,20 +2335,21 @@ def get_articles_batch(
         result = get_articles(
             db_path, law_name, numbers, as_of=as_of, include_norm=include_norm
         )
-        section_missing_count = result.get("missing_count", 0) if result is not None else 0
-        section_ok = result is not None and section_missing_count == 0
-        if result is None:
+        section_missing_count = result.get("missing_count", 0) if result else 0
+        result_error = result.get("error") if result else "law_not_found"
+        section_ok = bool(result) and result_error is None and section_missing_count == 0
+        if result_error is not None:
             failed_section_count += 1
         sections.append(
             {
                 "name": law_name,
                 "numbers_spec": numbers,
                 "result": result,
-                "error": None if result is not None else "law_not_found",
+                "error": result_error,
                 "ok": section_ok,
             }
         )
-        if result is not None:
+        if result is not None and result_error is None:
             item_count += result.get("item_count", 0)
             found_count += result.get("found_count", 0)
             missing_count += result.get("missing_count", 0)
@@ -2067,10 +2406,26 @@ def _get_article_internal(
             selected = _select_revision_as_of(revisions, as_of)
             if selected is None:
                 return None
-            law_from_revision = _build_law_from_revision_snapshot(row, revisions, selected)
+            law_from_revision = _build_law_from_revision_snapshot(
+                conn, row, revisions, selected
+            )
             if law_from_revision is None:
                 return None
             law_from_revision["categories"] = categories
+            if law_from_revision.get("error"):
+                return {
+                    "kind": "article_result",
+                    "ok": False,
+                    "found": False,
+                    "error": law_from_revision["error"],
+                    "reason": law_from_revision["error"],
+                    "message": law_from_revision.get("message"),
+                    "diagnostic": law_from_revision.get("revision_diagnostic"),
+                    "law": _law_reference_payload(law_from_revision),
+                    "article": None,
+                    "item": None,
+                    "requested_number": number,
+                }
             article = next(
                 (
                     item
@@ -2135,6 +2490,11 @@ def outline_law(
             row,
             article_count=_count_articles_for_law(conn, row["id"]),
         )
+        revisions = _fetch_revisions(conn, row["id"])
+        law["revisions"] = revisions
+        law["revision_count"] = len(revisions)
+        law["current_revision"] = revisions[0] if revisions else None
+        law["selected_revision"] = law["current_revision"]
         params: list[str] = [row["id"]]
         where = "law_id = ?"
         if part:
@@ -2662,73 +3022,50 @@ def applicable(
     }
 
 
-def status(db_path: Path | str) -> dict:
-    with connect(db_path) as conn:
-        migrate(conn)
-        law_count = conn.execute("SELECT COUNT(*) FROM laws").fetchone()[0]
-        article_count = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-        revision_count = conn.execute("SELECT COUNT(*) FROM revisions").fetchone()[0]
-        category_count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
-        norm_pack_count = conn.execute("SELECT COUNT(*) FROM norm_packs").fetchone()[0]
-        norm_source_count = conn.execute("SELECT COUNT(*) FROM norm_sources").fetchone()[0]
-        norm_clause_count = conn.execute("SELECT COUNT(*) FROM norm_clauses").fetchone()[0]
-        law_relation_count = conn.execute("SELECT COUNT(*) FROM law_relations").fetchone()[0]
-        applicability_rule_count = conn.execute(
-            "SELECT COUNT(*) FROM applicability_rules"
-        ).fetchone()[0]
-        last_sync = get_meta(conn, "last_sync_at")
-        last_applicability_sync = get_meta(conn, "last_applicability_sync_at")
-        schema_version = get_meta(conn, "schema_version")
+def status(db_path: Path | str, *, migrate_schema: bool = False) -> dict:
+    """Return database health metadata.
 
-        by_level_rows = conn.execute(
-            "SELECT level, COUNT(*) AS c FROM laws GROUP BY level ORDER BY c DESC"
-        ).fetchall()
-        by_level = [{"level": r["level"], "count": r["c"]} for r in by_level_rows]
+    Status is read-only by default: it neither creates a missing database nor
+    migrates an old schema. Callers performing an explicit write workflow may
+    opt into ``migrate_schema=True`` before reading the report.
+    """
 
-        by_status_rows = conn.execute(
-            "SELECT status, COUNT(*) AS c FROM laws GROUP BY status"
-        ).fetchall()
-        by_status = [{"status": r["status"], "count": r["c"]} for r in by_status_rows]
+    connection = connect(db_path) if migrate_schema else connect_readonly(db_path)
+    with connection as conn:
+        if migrate_schema:
+            migrate(conn)
+        tables = _status_table_names(conn)
+        schema_version = current_version(conn)
+        law_count = _status_count(conn, tables, "laws")
+        article_count = _status_count(conn, tables, "articles")
+        revision_count = _status_count(conn, tables, "revisions")
+        category_count = _status_count(conn, tables, "categories")
+        norm_pack_count = _status_count(conn, tables, "norm_packs")
+        norm_source_count = _status_count(conn, tables, "norm_sources")
+        norm_clause_count = _status_count(conn, tables, "norm_clauses")
+        law_relation_count = _status_count(conn, tables, "law_relations")
+        applicability_rule_count = _status_count(conn, tables, "applicability_rules")
+        last_sync = _status_meta(conn, tables, "last_sync_at")
+        last_applicability_sync = _status_meta(
+            conn,
+            tables,
+            "last_applicability_sync_at",
+        )
 
-        oldest_check = conn.execute(
-            "SELECT MIN(source_checked_at) FROM laws"
-        ).fetchone()[0]
-
-        stub_law_rows = conn.execute(
-            """
-            SELECT id, title, short_title
-            FROM laws
-            WHERE status <> 'seed'
-              AND NOT EXISTS (
-                SELECT 1 FROM articles WHERE articles.law_id = laws.id
-            )
-            ORDER BY title
-            """
-        ).fetchall()
-        seed_law_rows = conn.execute(
-            """
-            SELECT id, title, short_title
-            FROM laws
-            WHERE status = 'seed'
-            ORDER BY title
-            """
-        ).fetchall()
-        stub_laws = [
-            {
-                "id": r["id"],
-                "title": r["title"],
-                "short_title": r["short_title"],
-            }
-            for r in stub_law_rows
-        ]
-        seed_laws = [
-            {
-                "id": r["id"],
-                "title": r["title"],
-                "short_title": r["short_title"],
-            }
-            for r in seed_law_rows
-        ]
+        law_columns = _status_columns(conn, tables, "laws")
+        article_columns = _status_columns(conn, tables, "articles")
+        by_level = _status_group_counts(conn, law_columns, "level")
+        by_status = _status_group_counts(conn, law_columns, "status")
+        oldest_check = (
+            conn.execute("SELECT MIN(source_checked_at) FROM laws").fetchone()[0]
+            if "source_checked_at" in law_columns
+            else None
+        )
+        stub_laws, seed_laws = _status_incomplete_laws(
+            conn,
+            law_columns=law_columns,
+            article_columns=article_columns,
+        )
         populated_count = max(law_count - len(stub_laws) - len(seed_laws), 0)
         by_articles_coverage = []
         if populated_count:
@@ -2746,7 +3083,9 @@ def status(db_path: Path | str) -> dict:
 
     return {
         "db_path": str(db_path),
-        "schema_version": int(schema_version) if schema_version else 0,
+        "schema_version": schema_version,
+        "schema_current": schema_version == SCHEMA_VERSION,
+        "read_only": not migrate_schema,
         "laws": law_count,
         "articles": article_count,
         "revisions": revision_count,
@@ -2767,6 +3106,105 @@ def status(db_path: Path | str) -> dict:
         "seed_laws": seed_laws,
         "alias_agent": "enabled" if os.environ.get("CHINALAW_USE_ALIAS_AGENT") else "disabled",
     }
+
+
+def _status_table_names(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('table', 'view')"
+    ).fetchall()
+    return {str(row[0]) for row in rows}
+
+
+def _status_columns(
+    conn: sqlite3.Connection,
+    tables: set[str],
+    table: str,
+) -> set[str]:
+    if table not in tables:
+        return set()
+    return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _status_count(conn: sqlite3.Connection, tables: set[str], table: str) -> int:
+    if table not in tables:
+        return 0
+    return int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+
+
+def _status_meta(
+    conn: sqlite3.Connection,
+    tables: set[str],
+    key: str,
+) -> str | None:
+    if "meta" not in tables:
+        return None
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return str(row[0]) if row and row[0] is not None else None
+
+
+def _status_group_counts(
+    conn: sqlite3.Connection,
+    law_columns: set[str],
+    column: str,
+) -> list[dict]:
+    if column not in law_columns:
+        return []
+    rows = conn.execute(
+        f"SELECT {column}, COUNT(*) AS c FROM laws GROUP BY {column} ORDER BY c DESC"
+    ).fetchall()
+    return [{column: row[column], "count": row["c"]} for row in rows]
+
+
+def _status_incomplete_laws(
+    conn: sqlite3.Connection,
+    *,
+    law_columns: set[str],
+    article_columns: set[str],
+) -> tuple[list[dict], list[dict]]:
+    required = {"id", "title"}
+    if not required.issubset(law_columns):
+        return [], []
+    short_title = "short_title" if "short_title" in law_columns else "NULL AS short_title"
+    has_status = "status" in law_columns
+    has_articles = "law_id" in article_columns
+    without_articles = (
+        "NOT EXISTS (SELECT 1 FROM articles WHERE articles.law_id = laws.id)"
+        if has_articles
+        else "1 = 1"
+    )
+    non_seed = "status <> 'seed'" if has_status else "1 = 1"
+    stub_rows = conn.execute(
+        f"""
+        SELECT id, title, {short_title}
+        FROM laws
+        WHERE {non_seed} AND {without_articles}
+        ORDER BY title
+        """
+    ).fetchall()
+    seed_rows = (
+        conn.execute(
+            f"""
+            SELECT id, title, {short_title}
+            FROM laws
+            WHERE status = 'seed'
+            ORDER BY title
+            """
+        ).fetchall()
+        if has_status
+        else []
+    )
+
+    def shape(rows: list[sqlite3.Row]) -> list[dict]:
+        return [
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "short_title": row["short_title"],
+            }
+            for row in rows
+        ]
+
+    return shape(stub_rows), shape(seed_rows)
 
 
 def history(db_path: Path | str, identifier: str) -> dict | None:
@@ -2800,9 +3238,27 @@ def diff_law_as_of(
     to_as_of: str,
 ) -> dict | None:
     before = get_law_as_of(db_path, identifier, from_as_of)
-    after = get_law_as_of(db_path, identifier, to_as_of)
-    if before is None or after is None:
+    if before is None:
         return None
+    if before.get("error"):
+        return _diff_error_payload(
+            before,
+            side="from",
+            identifier=identifier,
+            from_as_of=from_as_of,
+            to_as_of=to_as_of,
+        )
+    after = get_law_as_of(db_path, identifier, to_as_of)
+    if after is None:
+        return None
+    if after.get("error"):
+        return _diff_error_payload(
+            after,
+            side="to",
+            identifier=identifier,
+            from_as_of=from_as_of,
+            to_as_of=to_as_of,
+        )
     article_diff = _compare_articles(before, after)
     return {
         "law_id": after["id"],
@@ -2822,10 +3278,32 @@ def diff_law_as_of(
     }
 
 
-# ---------- 子系统 re-export（向后兼容） ----------
-# trace 子系统已拆分至 chinalaw.trace（见 docs/decisions/ADR-0009-module-boundaries.md）。
-# 此处 re-export 保持 `chinalaw.service.trace_article_as_of` 可用：cli 以
-# service.trace_article_as_of(...) 调用，测试以 @patch("chinalaw.service.trace_article_as_of")
-# 打桩，均依赖此路径。置于文件末尾：等 service 模块体执行完、trace 依赖的基础 helper
-# 全部定义后再触发 trace 加载，从而打破 service <-> trace 的循环 import。
-from chinalaw.trace import trace_article_as_of  # noqa: E402,F401
+def _diff_error_payload(
+    result: dict,
+    *,
+    side: str,
+    identifier: str,
+    from_as_of: str,
+    to_as_of: str,
+) -> dict:
+    return {
+        "kind": "law_diff_error",
+        "ok": False,
+        "found": False,
+        "error": result["error"],
+        "reason": result.get("reason") or result["error"],
+        "error_side": side,
+        "name": identifier,
+        "from_as_of": from_as_of,
+        "to_as_of": to_as_of,
+        "message": result.get("message"),
+        "diagnostic": result.get("revision_diagnostic"),
+    }
+
+
+def trace_article_as_of(*args, **kwargs):
+    """Lazy compatibility wrapper that keeps ``chinalaw.trace`` importable first."""
+
+    from chinalaw.trace import trace_article_as_of as trace_impl
+
+    return trace_impl(*args, **kwargs)

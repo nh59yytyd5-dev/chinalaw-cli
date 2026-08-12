@@ -1,6 +1,6 @@
 """Common legal short-name aliases.
 
-设计参见 ``docs/ALIAS_SYSTEM_SPEC.md``。本模块只承载「发布主体 → 圈内后缀」
+设计边界见 ``docs/CLEANING.md`` §4。本模块只承载「发布主体 → 圈内后缀」
 的全域规律，不承载「特定法名 → 特定圈内简称」（那是 fixture / DB 里的
 ``laws.short_title`` / ``laws.aliases`` 字段的责任，也是 fetch 时领域贡献者
 的责任）。
@@ -279,7 +279,7 @@ def common_law_aliases(title: str | None) -> list[str]:
     本函数只承载「发布主体 → 后缀」全域规则。特定法的官方简称
     （企业破产法 → 破产法）由 fixture 的 ``short_title`` 提供；
     领域圈内黑话由 fixture 的 ``aliases`` JSON 字段提供。
-    详见 ``docs/ALIAS_SYSTEM_SPEC.md``。
+    详见 ``docs/CLEANING.md`` §4。
     """
 
     text = (title or "").strip()
@@ -358,7 +358,7 @@ def preferred_short_title(title: str | None) -> str | None:
     返回 ``None`` 表示标题不属于规则可派生范围，调用方应继续 fallback
     （剥发布主体长前缀 / 剥「中华人民共和国」）。
 
-    详见 ``docs/FETCH_LAYER_SPEC.md`` §1。
+    详见 ``docs/CLEANING.md`` §4。
     """
 
     aliases = common_law_aliases(title)

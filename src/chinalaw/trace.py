@@ -1,9 +1,9 @@
 """Trace 子系统：跨两个时点追溯同一法规中的某条/某段文本。
 
-从 service.py 拆出（见 docs/decisions/ADR-0009-module-boundaries.md）。
+从 service.py 拆出；当前模块边界见 docs/ARCHITECTURE.md §2。
 纯启发式、只读、非破坏性：读取已落库的版本快照与同名 sibling 行，对条文文本打分。
 
-对上：`trace_article_as_of` 由 cli 调用；service.py 末尾 re-export 该函数保持
+对上：`trace_article_as_of` 由 cli 调用；service.py 的 lazy wrapper 保持
 `chinalaw.service.trace_article_as_of` 向后兼容（cli 调用点与测试 patch 依赖此路径）。
 对下：复用 service 的 row 映射 / 版本解析 / 条号归一化等基础 helper。
 """
@@ -179,7 +179,7 @@ def _trace_law_versions(
     for row in _trace_candidate_rows(conn, anchor_row):
         revisions = _fetch_revisions(conn, row["id"])
         for revision in revisions:
-            law = _build_law_from_revision_snapshot(row, revisions, revision)
+            law = _build_law_from_revision_snapshot(conn, row, revisions, revision)
             if not law or not law.get("articles"):
                 continue
             key = (law["id"], revision.get("content_hash") or revision["id"])
@@ -502,7 +502,7 @@ def trace_article_as_of(
             "hint": (
                 "本地缺少该时点的完整版本。先运行 "
                 f"`chinalaw fetch {shlex.quote(name)} --status amended --list-matches` "
-                "查看旧版本候选，再用 `--prefer-bbbs` 补全需要的版本。"
+                "查看旧版本候选，再用 `--prefer-id` 补全需要的版本。"
             ),
         }
 
@@ -527,26 +527,64 @@ def trace_article_as_of(
         item_numbers=item_numbers,
         limit=limit,
     )
-    best = candidates[0] if candidates else None
+    ranked_best = candidates[0] if candidates else None
+    same_number_article = _articles_by_number(to_law.get("articles", [])).get(
+        source_article.get("number")
+    )
+    same_number_candidate = None
+    if same_number_article is not None:
+        same_number_candidate = next(
+            (
+                candidate
+                for candidate in candidates
+                if (candidate.get("article") or {}).get("number")
+                == source_article.get("number")
+            ),
+            None,
+        ) or _trace_candidate_score(
+            source_article,
+            same_number_article,
+            len(to_law.get("articles") or []),
+            item_numbers,
+        )
+    ranked_confidence = (
+        float(ranked_best.get("confidence") or 0.0) if ranked_best else 0.0
+    )
+    best = ranked_best if ranked_confidence >= 0.72 else same_number_candidate or ranked_best
+    if best is same_number_candidate and same_number_candidate is not None:
+        candidates = [
+            same_number_candidate,
+            *[candidate for candidate in candidates if candidate is not same_number_candidate],
+        ][: max(limit, 1)]
     target_article = best.get("article") if best else None
     confidence = float(best.get("confidence") or 0.0) if best else 0.0
     ok = confidence >= 0.72
-    status = best.get("status") if ok and best else "deleted"
+    deleted = same_number_candidate is None and not ok
+    status = "deleted" if deleted else best.get("status") if best else "deleted"
     evidence = _trace_evidence(source_article, target_article, best, item_numbers)
+    if same_number_candidate is not None and not ok:
+        evidence.append("目标版本仍存在同号条文；低文本相似度仅表示实质修正，不能据此判定删除")
+    elif deleted:
+        evidence = [
+            "目标版本不存在同号条文",
+            f"最高候选置信度 {confidence:.4f} 低于对应阈值 0.72",
+            *evidence,
+        ]
 
     source_items = _trace_item_payload(source_article, item_numbers)
-    target_items = _trace_item_payload(target_article, item_numbers)
+    visible_target = target_article if not deleted else None
+    target_items = _trace_item_payload(visible_target, item_numbers)
     diff = {
         "number_changed": bool(
-            target_article and source_article.get("number") != target_article.get("number")
+            visible_target and source_article.get("number") != visible_target.get("number")
         ),
         "text_changed": bool(
-            target_article
+            visible_target
             and _trace_normalize_text(source_article.get("text"))
             != _trace_normalize_text(target_article.get("text"))
         ),
         "part_changed": bool(
-            target_article and source_article.get("part") != target_article.get("part")
+            visible_target and source_article.get("part") != visible_target.get("part")
         ),
         "similarity": round(float(best.get("similarity") or 0.0), 4) if best else 0.0,
         "confidence": round(confidence, 4),
@@ -576,8 +614,8 @@ def trace_article_as_of(
         "to": {
             **(_trace_version_payload(to_law) or {}),
             "as_of": to_as_of,
-            "article": target_article if ok else None,
-            "items": target_items if ok else [],
+            "article": visible_target,
+            "items": target_items,
         },
         "status": status,
         "confidence": round(confidence, 4),
@@ -585,5 +623,5 @@ def trace_article_as_of(
         "diff": diff,
         "candidates": public_candidates,
         "available_versions": available_versions,
-        "warning": None if ok else "low_confidence_or_deleted",
+        "warning": None if ok else "possible_deleted" if deleted else "low_confidence",
     }

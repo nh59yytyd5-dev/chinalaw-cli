@@ -13,6 +13,11 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from chinalaw.contracts import (
+    validate_iso_date_value,
+    validate_iso_datetime_value,
+    validate_source_url_value,
+)
 from chinalaw.datapaths import builtin_data_dir
 from chinalaw.db import connect, migrate, set_meta
 
@@ -66,30 +71,135 @@ def load_applicability_from_dict(
     *,
     source_path: Path | None = None,
 ) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("applicability payload must be an object")
     source_defaults = {
         "source_name": payload.get("source_name") or "manual-rule-seed",
         "source_url": payload.get("source_url") or _local_source_url(source_path),
         "source_checked_at": payload.get("source_checked_at") or _utc_now(),
     }
+    relations = payload.get("relations", [])
+    rules = payload.get("rules", [])
+    if not isinstance(relations, list):
+        raise ValueError("applicability payload relations must be an array")
+    if not isinstance(rules, list):
+        raise ValueError("applicability payload rules must be an array")
+    normalized_relations = [
+        _validate_relation({**source_defaults, **_record(item, "relation", index)})
+        for index, item in enumerate(relations, start=1)
+    ]
+    normalized_rules = [
+        _validate_rule({**source_defaults, **_record(item, "rule", index)})
+        for index, item in enumerate(rules, start=1)
+    ]
     relation_count = 0
     rule_count = 0
     topics: set[str] = set()
 
-    for relation in payload.get("relations") or []:
-        _upsert_relation(conn, {**source_defaults, **relation})
+    for relation in normalized_relations:
+        _upsert_relation(conn, relation)
         relation_count += 1
 
-    for rule in payload.get("rules") or []:
-        _upsert_rule(conn, {**source_defaults, **rule})
+    for rule in normalized_rules:
+        _upsert_rule(conn, rule)
         rule_count += 1
-        if rule.get("topic"):
-            topics.add(str(rule["topic"]))
+        topics.add(rule["topic"])
 
     return {
         "relations_loaded": relation_count,
         "rules_loaded": rule_count,
         "topics": sorted(topics),
     }
+
+
+def _record(value: object, kind: str, index: int) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError(f"applicability {kind} #{index} must be an object")
+    return dict(value)
+
+
+def _required_text(record: dict, field: str, context: str) -> str:
+    value = record.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{context} field {field!r} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_text(record: dict, field: str, context: str) -> None:
+    value = record.get(field)
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"{context} field {field!r} must be a string or null")
+
+
+def _validate_common_source(record: dict, context: str) -> None:
+    _required_text(record, "source_name", context)
+    validate_source_url_value(
+        record.get("source_url"),
+        f"{context} field 'source_url'",
+        local_schemes={"local-file", "local-seed"},
+    )
+    validate_iso_datetime_value(
+        record.get("source_checked_at"),
+        f"{context} field 'source_checked_at'",
+    )
+    metadata = record.get("metadata", {})
+    if metadata is not None and not isinstance(metadata, dict):
+        raise ValueError(f"{context} field 'metadata' must be an object")
+
+
+def _validate_relation(relation: dict) -> dict:
+    context = "applicability relation"
+    for field in ("relation_type", "from_law_id", "to_law_id"):
+        _required_text(relation, field, context)
+    for field in (
+        "id",
+        "from_law_title",
+        "to_law_title",
+        "notes",
+    ):
+        _optional_text(relation, field, context)
+    validate_iso_date_value(
+        relation.get("effective_at"),
+        f"{context} field 'effective_at'",
+    )
+    _validate_common_source(relation, context)
+    return relation
+
+
+def _validate_rule(rule: dict) -> dict:
+    context = "applicability rule"
+    for field in ("topic", "primary_law_id", "rule_text"):
+        _required_text(rule, field, context)
+    for field in (
+        "id",
+        "domain",
+        "primary_law_title",
+        "fallback_law_id",
+        "fallback_law_title",
+        "transition_text",
+        "confidence",
+    ):
+        _optional_text(rule, field, context)
+    effective_from = rule.get("effective_from")
+    effective_to = rule.get("effective_to")
+    validate_iso_date_value(
+        effective_from,
+        f"{context} field 'effective_from'",
+    )
+    validate_iso_date_value(
+        effective_to,
+        f"{context} field 'effective_to'",
+    )
+    if (
+        isinstance(effective_from, str)
+        and isinstance(effective_to, str)
+        and effective_from > effective_to
+    ):
+        raise ValueError(
+            "applicability rule effective_from must not be later than effective_to"
+        )
+    _validate_common_source(rule, context)
+    return rule
 
 
 def _upsert_relation(conn: sqlite3.Connection, relation: dict) -> None:
