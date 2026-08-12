@@ -1,6 +1,6 @@
 """PR5c 守门测试 — `fetch.py` 5 处 `except Exception` 收窄到具体异常类型。
 
-详见 ``docs/FETCH_NARROW_EXCEPTION_HANDLERS_SPEC.md`` §3.3。
+异常边界遵循 ``docs/CONTRACT.md`` 中的只读查询与结构化错误契约。
 
 立场：``except Exception: return None`` 把真正的编程 bug（``AttributeError`` /
 ``KeyError`` / 配置错误）静默吞成"找不到"。本 PR 把 5 处分两类：
@@ -40,7 +40,7 @@ class DbHandlersStillSwallowDbErrors(unittest.TestCase):
         with TemporaryDirectory() as td:
             db = Path(td) / "stub.db"
             db.write_bytes(b"not a sqlite db")  # 损坏文件 → DatabaseError
-            # connect/migrate 会抛 sqlite3.DatabaseError；新窄 except 接住
+            # 只读连接会抛 sqlite3.DatabaseError；新窄 except 接住
             self.assertIsNone(
                 fetch._resolve_local_fetch_hint(db, "X", "flk_npc")
             )
@@ -101,17 +101,15 @@ class DbHandlersPropagateProgrammingErrors(unittest.TestCase):
                 fetch._resolve_local_fetch_hint(db, "X", "flk_npc")
 
     def test_resolve_local_fetch_hint_propagates_runtime_error(self) -> None:
-        # 模拟 db.migrate 缺 migrator 抛 RuntimeError；本 PR 后透传
+        # 模拟只读连接层抛 RuntimeError；本 PR 后透传
         with TemporaryDirectory() as td:
             db = Path(td) / "t.db"
             db.touch()  # 让 db.exists() 通过；空文件 sqlite3 视为 new DB
-            # connect 仍能开（空文件 → sqlite 当作 new DB），但 migrate
-            # 抛 RuntimeError；窄 except 不接 RuntimeError → 透传
             with (
                 patch.object(
                     fetch,
-                    "migrate",
-                    side_effect=RuntimeError("missing migrator for v9"),
+                    "connect_readonly",
+                    side_effect=RuntimeError("simulated readonly failure"),
                 ),
                 self.assertRaises(RuntimeError),
             ):
@@ -124,8 +122,8 @@ class DbHandlersPropagateProgrammingErrors(unittest.TestCase):
             with (
                 patch.object(
                     fetch,
-                    "migrate",
-                    side_effect=RuntimeError("missing migrator for v9"),
+                    "connect_readonly",
+                    side_effect=RuntimeError("simulated readonly failure"),
                 ),
                 self.assertRaises(RuntimeError),
             ):
@@ -150,7 +148,7 @@ class DbHandlersPropagateProgrammingErrors(unittest.TestCase):
             with (
                 patch.object(
                     fetch,
-                    "connect",
+                    "connect_readonly",
                     side_effect=sqlite3.ProgrammingError("simulated SQL misuse"),
                 ),
                 self.assertRaises(sqlite3.ProgrammingError),

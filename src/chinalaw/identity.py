@@ -7,7 +7,7 @@
 本模块不替代 ``service.py`` 的 SQL 查询路径——SQL 查询走索引，本模块
 在拿到候选 row 后做 Python 层二次校验。
 
-设计：纯函数，不读 DB、不抛异常。详见 ``docs/FETCH_LAYER_SPEC.md`` §2。
+设计：纯函数，不读 DB、不抛异常；调用边界见 ``docs/CONTRACT.md`` §4.11。
 """
 
 from __future__ import annotations

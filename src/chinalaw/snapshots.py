@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -151,21 +153,82 @@ def append_command_record(
     db_path: str | Path,
     argv: list[str] | None = None,
 ) -> dict:
-    """Append one compact evidence record and return it."""
+    """Append one compact evidence record atomically and return it."""
 
     path = Path(snapshot_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    record = build_command_record(
-        command=command,
-        payload=payload,
-        db_path=db_path,
-        argv=argv or [],
-        evidence_id=_next_evidence_id(path),
-    )
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
-        fh.write("\n")
+    with _snapshot_append_lock(path):
+        record = build_command_record(
+            command=command,
+            payload=payload,
+            db_path=db_path,
+            argv=argv or [],
+            evidence_id=_next_evidence_id(path),
+        )
+        encoded = (
+            json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        _append_jsonl_record(path, encoded)
     return record
+
+
+@contextmanager
+def _snapshot_append_lock(path: Path) -> Iterator[None]:
+    """Serialize evidence-id allocation and append across processes."""
+
+    lock_path = path.with_name(f".{path.name}.lock")
+    with lock_path.open("a+b") as lock_file:
+        _lock_file(lock_file)
+        try:
+            yield
+        finally:
+            _unlock_file(lock_file)
+
+
+def _lock_file(lock_file) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        lock_file.seek(0)
+        if not lock_file.read(1):
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(lock_file) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _append_jsonl_record(path: Path, encoded: bytes) -> None:
+    """Append one record and isolate any truncated tail left by a crashed writer."""
+
+    with path.open("a+b") as fh:
+        fh.seek(0, os.SEEK_END)
+        if fh.tell() > 0:
+            fh.seek(-1, os.SEEK_END)
+            if fh.read(1) != b"\n":
+                fh.seek(0, os.SEEK_END)
+                fh.write(b"\n")
+        fh.seek(0, os.SEEK_END)
+        fh.write(encoded)
+        fh.flush()
+        os.fsync(fh.fileno())
 
 
 def build_command_record(

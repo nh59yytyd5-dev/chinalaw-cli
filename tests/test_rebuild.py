@@ -51,6 +51,21 @@ class RebuildCleanTests(unittest.TestCase):
         with connect(db_path) as conn:
             migrate(conn)
             load_law_from_dict(conn, _dirty_interpretation_payload())
+            # The loader now enforces current cleaning invariants. Recreate a
+            # legacy pre-contract row directly so rebuild-clean still tests its
+            # migration purpose rather than bypassing the ingest choke point.
+            conn.execute(
+                "UPDATE articles SET text = ? WHERE law_id = ? AND number = ?",
+                (
+                    "第一条正文。\n二、民事权利",
+                    "court-general-interpretation-2022",
+                    "1",
+                ),
+            )
+            conn.execute(
+                "UPDATE articles SET part = NULL WHERE law_id = ? AND number = ?",
+                ("court-general-interpretation-2022", "2"),
+            )
 
     def test_rebuild_clean_reapplies_alias_and_heading_rules(self):
         with tempfile.TemporaryDirectory() as td:

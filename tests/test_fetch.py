@@ -13,6 +13,7 @@ mock 数据源 adapter.search_list / build_law_payload，覆盖：
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -360,6 +361,25 @@ class FetchLawTests(unittest.TestCase):
         self.assertTrue(result["law"].get("warnings"))
         self.assertNotIn("warnings", written)
 
+    def test_atomic_fixture_replace_failure_preserves_existing_file(self):
+        adapter = _FakeAdapter(rows=[{"bbbs": "law-1", "title": "中华人民共和国示例法"}])
+        with tempfile.TemporaryDirectory() as td, self._patch_adapter(adapter):
+            fixture_path = Path(td) / "law.json"
+            original = b'{"sentinel":"keep"}\n'
+            fixture_path.write_bytes(original)
+            with (
+                patch("chinalaw.fetch.os.replace", side_effect=OSError("replace failed")),
+                self.assertRaises(fetch_mod.FetchError),
+            ):
+                fetch_mod.fetch_law(
+                    Path(td) / "t.db",
+                    "示例法",
+                    to_fixture=fixture_path,
+                )
+
+            self.assertEqual(fixture_path.read_bytes(), original)
+            self.assertEqual(list(fixture_path.parent.glob(f".{fixture_path.name}.*.tmp")), [])
+
     def test_list_matches_returns_candidates_only(self):
         adapter = _FakeAdapter(rows=[
             {"bbbs": "law-1", "title": "中华人民共和国公司法", "gbrq": "2023-12-29", "sxx": 3},
@@ -660,6 +680,25 @@ class FetchLawTests(unittest.TestCase):
             with self.assertRaises(fetch_mod.FetchNotFoundError):
                 fetch_mod.fetch_law(db_path, "示例法", article="第一万条")
 
+            self.assertFalse(db_path.exists())
+
+    def test_missing_article_preserves_existing_fixture_bytes(self):
+        adapter = _FakeAdapter(rows=[{"bbbs": "law-1", "title": "中华人民共和国示例法"}])
+        with tempfile.TemporaryDirectory() as td, self._patch_adapter(adapter):
+            fixture_path = Path(td) / "law.json"
+            original = b'{"sentinel":"keep"}\n'
+            fixture_path.write_bytes(original)
+            with self.assertRaises(fetch_mod.FetchNotFoundError):
+                fetch_mod.fetch_law(
+                    Path(td) / "missing.db",
+                    "示例法",
+                    article="9999",
+                    to_fixture=fixture_path,
+                )
+
+            self.assertEqual(fixture_path.read_bytes(), original)
+            self.assertFalse((Path(td) / "missing.db").exists())
+
     # ---- 错误路径 -----------------------------------------------------------
 
     def test_no_results_raises_not_found(self):
@@ -686,6 +725,18 @@ class FetchLawTests(unittest.TestCase):
             with self.assertRaises(fetch_mod.FetchAmbiguousError) as ctx:
                 fetch_mod.fetch_law(db_path, "公司")  # 两个都包含"公司"
         self.assertEqual([c["bbbs"] for c in ctx.exception.candidates], ["law-1", "law-2"])
+
+    def test_unique_unrelated_candidate_is_rejected(self):
+        adapter = _FakeAdapter(rows=[{"bbbs": "law-1", "title": "中华人民共和国证券法"}])
+        with (
+            tempfile.TemporaryDirectory() as td,
+            self._patch_adapter(adapter),
+            self.assertRaises(fetch_mod.FetchAmbiguousError) as ctx,
+        ):
+            fetch_mod.fetch_law(Path(td) / "t.db", "目标法律")
+
+        self.assertEqual(ctx.exception.candidates[0]["id"], "law-1")
+        self.assertEqual(adapter.payload_calls, [])
 
     # ---- 选最佳匹配 ----------------------------------------------------------
 
@@ -857,6 +908,58 @@ class FetchLawTests(unittest.TestCase):
             self.assertFalse(second["loaded"])
             self.assertTrue(second["skipped"])
             self.assertEqual(second["article_count"], 2)
+
+    def test_same_hash_refreshes_metadata_without_rebuilding_body(self):
+        first_payload = _make_payload(bbbs="law-1", source_hash="same-hash")
+        adapter = _FakeAdapter(
+            rows=[{"bbbs": "law-1", "title": "中华人民共和国示例法"}],
+            payloads={"law-1": first_payload},
+        )
+        with tempfile.TemporaryDirectory() as td, self._patch_adapter(adapter):
+            db_path = Path(td) / "t.db"
+            fetch_mod.fetch_law(db_path, "示例法")
+            with sqlite3.connect(db_path) as conn:
+                article_ids_before = conn.execute(
+                    "SELECT id FROM articles WHERE law_id = ? ORDER BY position", ("law-1",)
+                ).fetchall()
+                revision_rows_before = conn.execute(
+                    "SELECT id, snapshot_json FROM revisions WHERE law_id = ? ORDER BY id",
+                    ("law-1",),
+                ).fetchall()
+
+            refreshed = {**first_payload}
+            refreshed.update(
+                {
+                    "status": "repealed",
+                    "repealed_at": "2026-06-01",
+                    "source_checked_at": "2026-08-06T12:00:00+00:00",
+                }
+            )
+            adapter._payloads["law-1"] = refreshed
+            result = fetch_mod.fetch_law(db_path, "示例法")
+
+            with sqlite3.connect(db_path) as conn:
+                law = conn.execute(
+                    "SELECT status, repealed_at, source_checked_at FROM laws WHERE id = ?",
+                    ("law-1",),
+                ).fetchone()
+                article_ids_after = conn.execute(
+                    "SELECT id FROM articles WHERE law_id = ? ORDER BY position", ("law-1",)
+                ).fetchall()
+                revision_rows_after = conn.execute(
+                    "SELECT id, snapshot_json FROM revisions WHERE law_id = ? ORDER BY id",
+                    ("law-1",),
+                ).fetchall()
+                last_mode = conn.execute(
+                    "SELECT value FROM meta WHERE key = ?",
+                    ("source:flk_npc:last_mode",),
+                ).fetchone()[0]
+
+        self.assertTrue(result["skipped"])
+        self.assertEqual(tuple(law), ("repealed", "2026-06-01", "2026-08-06T12:00:00+00:00"))
+        self.assertEqual(article_ids_after, article_ids_before)
+        self.assertEqual(revision_rows_after, revision_rows_before)
+        self.assertEqual(last_mode, "fetch")
 
     def test_force_reloads_when_same_source_hash(self):
         adapter = _FakeAdapter(
@@ -1191,6 +1294,148 @@ class FetchLawTests(unittest.TestCase):
             # 同名但 source_name 不同：fetch 不复用 manual id，新建 FLK 行
             self.assertEqual(ids, sorted(["manual-civil-code-extract", flk_bbbs]))
 
+    def test_canonical_lookup_checks_all_same_title_revisions(self):
+        from chinalaw.db import connect, migrate
+        from chinalaw.loader import load_law_from_dict
+
+        old = _make_payload(
+            bbbs="old-stable-id",
+            title="中华人民共和国公司法",
+            source_hash="old-hash",
+        )
+        old.update(
+            short_title="公司法",
+            aliases=["公司法"],
+            released_at="2020-01-01",
+            effective_at="2020-01-01",
+        )
+        matching = _make_payload(
+            bbbs="matching-stable-id",
+            title="中华人民共和国公司法",
+            source_hash="matching-hash",
+        )
+        matching.update(
+            short_title="公司法",
+            aliases=["公司法"],
+            released_at="2024-01-01",
+            effective_at="2024-07-01",
+        )
+        incoming = {**matching, "id": "raw-upstream-id"}
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                migrate(conn)
+                load_law_from_dict(conn, old)
+                load_law_from_dict(conn, matching)
+
+            resolved = fetch_mod._try_resolve_canonical_id(db_path, incoming)
+
+        self.assertEqual(resolved, "matching-stable-id")
+
+    def test_canonical_lookup_fails_loudly_when_multiple_rows_strict_match(self):
+        from chinalaw.db import connect, migrate
+        from chinalaw.loader import load_law_from_dict
+
+        first = _make_payload(bbbs="stable-a", source_hash="hash-a")
+        second = _make_payload(bbbs="stable-b", source_hash="hash-b")
+        incoming = _make_payload(bbbs="raw-upstream", source_hash="hash-c")
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                migrate(conn)
+                load_law_from_dict(conn, first)
+                load_law_from_dict(conn, second)
+
+            with self.assertRaises(fetch_mod.FetchAmbiguousError) as ctx:
+                fetch_mod._try_resolve_canonical_id(db_path, incoming)
+
+        self.assertEqual(
+            [candidate["id"] for candidate in ctx.exception.candidates],
+            ["stable-a", "stable-b"],
+        )
+
+    def test_applicability_references_supply_old_law_stable_ids(self):
+        from chinalaw import applicability
+
+        cases = [
+            ("flk-contract-law-1999", "中华人民共和国合同法", "1999-03-15", "1999-10-01"),
+            ("flk-property-law-2007", "中华人民共和国物权法", "2007-03-16", "2007-10-01"),
+            ("flk-security-law-1995", "中华人民共和国担保法", "1995-06-30", "1995-10-01"),
+            (
+                "flk-tort-liability-law-2009",
+                "中华人民共和国侵权责任法",
+                "2009-12-26",
+                "2010-07-01",
+            ),
+            ("flk-company-law-2018", "中华人民共和国公司法", "2018-10-26", "2018-10-26"),
+            ("flk-company-law-2024", "中华人民共和国公司法", "2023-12-29", "2024-07-01"),
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            applicability.load_applicability_fixtures(db_path)
+            resolved = []
+            for expected_id, title, released_at, effective_at in cases:
+                payload = _make_payload(
+                    bbbs=f"raw-{expected_id}",
+                    title=title,
+                    source_hash=f"hash-{expected_id}",
+                )
+                payload.update(
+                    short_title=title.removeprefix("中华人民共和国"),
+                    aliases=[title.removeprefix("中华人民共和国")],
+                    released_at=released_at,
+                    effective_at=effective_at,
+                )
+                resolved.append(fetch_mod._try_resolve_canonical_id(db_path, payload))
+
+        self.assertEqual(resolved, [case[0] for case in cases])
+
+    def test_fetch_closes_applicability_needs_fetch_loop(self):
+        from chinalaw import applicability
+
+        raw_id = "raw-contract-law-1999"
+        payload = _make_payload(
+            bbbs=raw_id,
+            title="中华人民共和国合同法",
+            source_hash="contract-law-fulltext",
+        )
+        payload.update(
+            short_title="合同法",
+            aliases=["合同法"],
+            status="repealed",
+            released_at="1999-03-15",
+            effective_at="1999-10-01",
+            repealed_at="2021-01-01",
+        )
+        adapter = _FakeAdapter(
+            rows=[{"bbbs": raw_id, "title": "中华人民共和国合同法", "sxx": 1}],
+            payloads={raw_id: payload},
+        )
+
+        with tempfile.TemporaryDirectory() as td, self._patch_adapter(adapter):
+            db_path = Path(td) / "t.db"
+            applicability.load_applicability_fixtures(db_path)
+            before = service.applicable(db_path, as_of="2019-01-01", topic="合同效力")
+            result = fetch_mod.fetch_law(db_path, "合同法")
+            after = service.applicable(db_path, as_of="2019-01-01", topic="合同效力")
+
+        self.assertTrue(
+            any(
+                item["law_id"] == "flk-contract-law-1999"
+                for item in before["matches"][0]["needs_fetch"]
+            )
+        )
+        self.assertEqual(result["law"]["id"], "flk-contract-law-1999")
+        self.assertIsNotNone(after["matches"][0]["primary_law"])
+        self.assertFalse(
+            any(
+                item["law_id"] == "flk-contract-law-1999"
+                for item in after["matches"][0]["needs_fetch"]
+            )
+        )
+
 
 class FetchCanonicalIdAcrossOutputsTests(unittest.TestCase):
     """canonical id 应该应用到所有出口：response.law / dry_run / to_fixture / 入库。
@@ -1421,6 +1666,31 @@ class FetchCanonicalIdAcrossOutputsTests(unittest.TestCase):
             self.assertFalse(db_path.exists())
 
         self.assertEqual(result["law"]["id"], raw_bbbs)
+
+    def test_dry_run_does_not_change_existing_db_bytes_or_schema(self):
+        raw_bbbs = "ff808081729d1efe01729d50b5c500bf"
+        adapter = self._flk_adapter(raw_bbbs)
+        with tempfile.TemporaryDirectory() as td, self._patch(adapter):
+            db_path = Path(td) / "legacy.db"
+            with sqlite3.connect(db_path) as conn:
+                conn.execute("CREATE TABLE sentinel(value TEXT NOT NULL)")
+                conn.execute("INSERT INTO sentinel(value) VALUES ('keep')")
+            before = db_path.read_bytes()
+
+            result = fetch_mod.fetch_law(db_path, "民法典", dry_run=True)
+
+            after = db_path.read_bytes()
+            with sqlite3.connect(db_path) as conn:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+                    )
+                }
+
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(after, before)
+        self.assertEqual(tables, {"sentinel"})
 
     def test_canonical_lookup_failure_falls_back_to_raw_bbbs(self):
         # 防御性场景：DB 路径不可达 / migrate 失败时，canonical 解析应安全降级，
