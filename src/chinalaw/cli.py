@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sqlite3
 import sys
 from contextlib import suppress
 from pathlib import Path
@@ -40,6 +41,16 @@ from chinalaw.db import DEFAULT_DB_PATH
 from chinalaw.sync import SYNC_SOURCES, sync_source
 
 _NOTICE_CONTEXT: dict[str, object] = {}
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be >= 1")
+    return parsed
 
 
 def _configure_text_stdio() -> None:
@@ -87,7 +98,7 @@ def _add_search_parser(sub) -> None:
         nargs="+",
         help="检索关键词；多个未加引号的词会按空格合并，便于 agent 容错",
     )
-    p_search.add_argument("--limit", type=int, default=20, help="返回结果数上限")
+    p_search.add_argument("--limit", type=_positive_int, default=20, help="返回结果数上限")
     p_search.add_argument(
         "--in",
         dest="in_laws",
@@ -246,7 +257,7 @@ def _add_read_parsers(sub) -> None:
     p_outline.add_argument("--part", help="按编/章/节文本过滤")
     p_outline.add_argument(
         "--preview-chars",
-        type=int,
+        type=_positive_int,
         default=80,
         help="每条正文预览字符数（默认 80）",
     )
@@ -321,7 +332,7 @@ def _add_read_parsers(sub) -> None:
     )
     p_cited_by.add_argument(
         "--limit",
-        type=int,
+        type=_positive_int,
         default=50,
         help="返回命中数上限（默认 50，最大 500）",
     )
@@ -330,13 +341,13 @@ def _add_read_parsers(sub) -> None:
     p_list = sub.add_parser("list", help="浏览法规（按级别/状态过滤）")
     p_list.add_argument("--level", help="效力级别，如 law / admin_regulation")
     p_list.add_argument("--status", help="状态，如 current / amended / repealed")
-    p_list.add_argument("--limit", type=int, default=50)
+    p_list.add_argument("--limit", type=_positive_int, default=50)
     _add_format_arg(p_list)
 
     p_laws = sub.add_parser("laws", help="列出法规 id / 全称 / 简称，避免 agent 直连 SQLite")
     p_laws.add_argument("--level", help="效力级别，如 law / admin_regulation")
     p_laws.add_argument("--status", help="状态，如 current / amended / repealed")
-    p_laws.add_argument("--limit", type=int, default=50)
+    p_laws.add_argument("--limit", type=_positive_int, default=50)
     _add_format_arg(p_laws)
 
 
@@ -375,7 +386,7 @@ def _add_sync_parser(sub) -> None:
     )
     p_sync.add_argument(
         "--limit",
-        type=int,
+        type=_positive_int,
         default=5,
         help="真实数据源同步数量上限（默认 5）",
     )
@@ -386,18 +397,18 @@ def _add_sync_parser(sub) -> None:
     )
     p_sync.add_argument(
         "--start-page",
-        type=int,
+        type=_positive_int,
         default=1,
         help="批量同步起始页（默认 1）",
     )
     p_sync.add_argument(
         "--max-pages",
-        type=int,
+        type=_positive_int,
         help="批量同步最多处理多少页",
     )
     p_sync.add_argument(
         "--page-size",
-        type=int,
+        type=_positive_int,
         default=20,
         help="批量同步每页数量（默认 20）",
     )
@@ -408,7 +419,7 @@ def _add_sync_parser(sub) -> None:
     )
     p_sync.add_argument(
         "--stop-after-stable-pages",
-        type=int,
+        type=_positive_int,
         help="连续若干页没有新变化时停止（增量同步辅助）",
     )
     p_sync.add_argument(
@@ -473,7 +484,7 @@ def _add_fetch_parser(sub) -> None:
         "--article",
         help="指定条款号（中式 / 阿拉伯 / 插入条款），命中后随完整法律一起入库并在响应定位返回",
     )
-    # 三种"非默认入库"动作互斥（参见 ADR-0006 §3 / CONTRACT.md §4.11）。
+    # 三种"非默认入库"动作互斥（见 CONTRACT.md §4.11）。
     # argparse 在冲突时自动退出码 2，与 fetch.FetchActionConflictError 对齐。
     fetch_action_group = p_fetch.add_mutually_exclusive_group()
     fetch_action_group.add_argument(
@@ -502,7 +513,7 @@ def _add_fetch_parser(sub) -> None:
     )
     p_fetch.add_argument(
         "--limit",
-        type=int,
+        type=_positive_int,
         default=5,
         help="搜索候选上限（默认 5）",
     )
@@ -518,7 +529,7 @@ def _add_fetch_parser(sub) -> None:
         help=(
             "按状态过滤搜索候选；flk_npc 支持完整枚举，gov_xzfgk / 证券公开源仅接受 "
             "current，其它源传入会 fail loud。用于 v0.2 时间效力闭环"
-            "（如 --status repealed 拉历史废止法）。详见 docs/CLI_STATUS_FLAG_SPEC.md。"
+            "（如 --status repealed 拉历史废止法；见 docs/CONTRACT.md §4.11.1）。"
         ),
     )
     _add_format_arg(p_fetch)
@@ -531,7 +542,7 @@ def _add_discover_parser(sub) -> None:
         help=(
             "按状态/关键词批量列出候选法规（不下载、不入库）。"
             "用作 fetch 的探测前哨：先 discover 拉候选池，再 fetch "
-            "--prefer-bbbs 精取。详见 docs/CLI_STATUS_FLAG_SPEC.md。"
+            "--prefer-id 精取；见 docs/CONTRACT.md §4.11.1。"
         ),
     )
     p_discover.add_argument(
@@ -551,12 +562,12 @@ def _add_discover_parser(sub) -> None:
         default=None,
         help=(
             "按状态过滤；flk_npc 支持完整枚举，gov_xzfgk / 证券公开源仅接受 current "
-            "（详见 docs/CLI_STATUS_FLAG_SPEC.md）。"
+            "（见 docs/CONTRACT.md §4.11.1）。"
         ),
     )
     p_discover.add_argument(
         "--limit",
-        type=int,
+        type=_positive_int,
         default=20,
         help="候选上限（默认 20）",
     )
@@ -608,7 +619,7 @@ def _add_ensure_parser(sub) -> None:
     )
     p_ensure.add_argument(
         "--limit",
-        type=int,
+        type=_positive_int,
         default=5,
         help="每个缺失法规的 fetch 搜索候选上限（默认 5）",
     )
@@ -724,7 +735,7 @@ def _add_rebuild_clean_parser(sub) -> None:
     )
     p_rebuild.add_argument(
         "--limit",
-        type=int,
+        type=_positive_int,
         help="最多处理多少部法规；调试用",
     )
     _add_format_arg(p_rebuild)
@@ -760,7 +771,7 @@ def _add_status_and_time_parsers(sub) -> None:
         "--items",
         help="限定款项 / 项号，如 '3,5'；用于比对司法解释引用的旧法项号",
     )
-    p_trace.add_argument("--limit", type=int, default=5, help="候选对应条文数量")
+    p_trace.add_argument("--limit", type=_positive_int, default=5, help="候选对应条文数量")
     _add_format_arg(p_trace)
     _add_snapshot_out_arg(p_trace)
 
@@ -790,7 +801,7 @@ def _add_status_and_time_parsers(sub) -> None:
         help="真实数据源 smoke：probe → search → fetch/clean → article locate（只读）",
     )
     # verify-source choices 由 sources.VERIFIABLE_SOURCES 驱动；adapter 必须同时
-    # 实装 search_list / build_law_payload。详见 ADR-0008 §3.2。
+    # 实装 search_list / build_law_payload；边界见 CONTRACT.md §4.11.1。
     p_verify_source.add_argument(
         "source",
         choices=list(sources.VERIFIABLE_SOURCES),
@@ -808,7 +819,7 @@ def _add_status_and_time_parsers(sub) -> None:
     )
     p_verify_source.add_argument(
         "--limit",
-        type=int,
+        type=_positive_int,
         default=5,
         help="搜索候选上限（默认 5）",
     )
@@ -913,7 +924,7 @@ def _add_commentary_parser(sub) -> None:
     )
     p_article.add_argument("law", help="法规 id / 全称 / 简称")
     p_article.add_argument("number", help="条款号，如 '143' 或 '第一百四十三条'")
-    p_article.add_argument("--limit", type=int, default=10, help="返回 commentary 上限")
+    p_article.add_argument("--limit", type=_positive_int, default=10, help="返回 commentary 上限")
     _add_format_arg(p_article)
 
 
@@ -1249,11 +1260,16 @@ def _handle_get(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) 
         if args.as_of
         else service.get_law(db_path, args.name)
     )
-    if law is None:
+    if law is None or law.get("error"):
+        miss = law or {"found": False, "name": args.name, "error": "law_not_found"}
         _emit(
-            {"found": False, "name": args.name},
+            miss,
             fmt,
-            lambda _: formatters.law_to_markdown(None),
+            lambda payload: (
+                f"! {payload.get('error')}: {payload.get('message') or '未找到该法规。'}\n"
+                if payload.get("error")
+                else formatters.law_to_markdown(None)
+            ),
         )
         return 1
     _record_snapshot(args, db_path, "get", law)
@@ -1398,11 +1414,16 @@ def _handle_articles(args, db_path: Path, fmt: str, parser: argparse.ArgumentPar
         as_of=args.as_of,
         include_norm=include_norm,
     )
-    if payload is None:
+    if payload is None or payload.get("error"):
+        miss = payload or {"found": False, "name": args.name, "numbers": numbers}
         _emit(
-            {"found": False, "name": args.name, "numbers": numbers},
+            miss,
             fmt,
-            lambda _: formatters.articles_to_markdown(None),
+            lambda item: (
+                f"! {item.get('error')}: {item.get('message') or '未找到指定法规或条文列表。'}\n"
+                if item.get("error")
+                else formatters.articles_to_markdown(None)
+            ),
         )
         return 1
     if args.bare:
@@ -1528,9 +1549,13 @@ def _handle_init(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
         strict=args.strict,
         source_smoke=args.source_smoke,
     )
+    fixture_ready = bool(
+        int(sync_result.get("laws_loaded") or 0) > 0
+        and int(sync_result.get("articles_loaded") or 0) > 0
+    )
     result = {
         "kind": "init_result",
-        "ok": bool(doctor_report.get("ok")),
+        "ok": fixture_ready and bool(doctor_report.get("ok")),
         "db_path": str(db_path),
         "fixture_sync": sync_result,
         "doctor": doctor_report,
@@ -1540,6 +1565,12 @@ def _handle_init(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
             "chinalaw doctor --format md",
         ],
     }
+    if not fixture_ready:
+        result["error"] = {
+            "code": "bundled_data_unavailable",
+            "message": sync_result.get("note")
+            or "init requires at least one bundled law and one bundled article",
+        }
     _emit(result, fmt, formatters.init_to_markdown)
     return 0 if result["ok"] else 1
 
@@ -1551,10 +1582,19 @@ def _handle_sync(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
             Path(args.applicability_dir) if args.applicability_dir else None,
         )
     elif args.from_dir:
-        paths = sorted(Path(args.from_dir).glob("*.json"))
+        directory = Path(args.from_dir).expanduser()
+        if not directory.exists():
+            raise ValueError(f"sync --from-dir does not exist: {directory}")
+        if not directory.is_dir():
+            raise ValueError(f"sync --from-dir is not a directory: {directory}")
+        paths = sorted(directory.glob("*.json"))
+        if not paths:
+            raise ValueError(f"sync --from-dir contains no JSON files: {directory}")
         result = loader.load_files(db_path, paths)
     elif args.fixtures:
         result = loader.load_fixtures(db_path)
+        if not result.get("laws_loaded") or not result.get("articles_loaded"):
+            raise ValueError(result.get("note") or "no bundled fixtures were loaded")
     elif args.source:
         result = sync_source(
             db_path,
@@ -1621,7 +1661,7 @@ def _handle_fetch(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser
     except ValueError as exc:
         # CLI ``--status`` fail loud：非 flk 源传入 status 时 fetch_law 抛
         # ValueError，按 ensure / pack 错误处理风格 emit + 退 2。详见
-        # docs/CLI_STATUS_FLAG_SPEC.md §3.5.3 / §4。
+        # discover 契约见 docs/CONTRACT.md §4.11.1。
         _emit(
             {
                 "kind": "law_fetch_error",
@@ -1648,7 +1688,7 @@ def _handle_discover(args, db_path: Path, fmt: str, parser: argparse.ArgumentPar
     except (ValueError, URLError, OSError, TimeoutError, json.JSONDecodeError) as exc:
         # transport / parse 异常族对齐 ``_handle_fetch`` 的 ``law_fetch_error``
         # envelope 契约（codex P2 fixup on PR #53；详见
-        # ``docs/CLI_DISCOVER_ERROR_ENVELOPE_SPEC.md`` §2 方案 A1）。
+        # discover error envelope 见 docs/CONTRACT.md §4.11.1）。
         # ``URLError`` 一刀覆盖整 urllib 族（含 ``HTTPError`` 子类），
         # ``OSError`` 覆盖 socket / connection 族（含 ``ConnectionError``），
         # ``TimeoutError`` 在 Python 3.10+ 与 ``socket.timeout`` 别名等价。
@@ -1824,7 +1864,7 @@ def _handle_rebuild_clean(
 
 
 def _handle_status(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
-    report = service.status(db_path)
+    report = service.status(db_path, migrate_schema=False)
     _emit(report, fmt, formatters.status_to_markdown)
     return 0
 
@@ -1850,11 +1890,16 @@ def _handle_diff(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
         args.from_as_of,
         args.to_as_of,
     )
-    if report is None:
+    if report is None or report.get("error"):
+        miss = report or {"found": False, "name": args.name, "error": "law_not_found"}
         _emit(
-            {"found": False, "name": args.name},
+            miss,
             fmt,
-            lambda _: formatters.diff_to_markdown(None),
+            lambda payload: (
+                f"! {payload.get('error')}: {payload.get('message') or '无法生成版本差异。'}\n"
+                if payload.get("error")
+                else formatters.diff_to_markdown(None)
+            ),
         )
         return 1
     _record_snapshot(args, db_path, "diff", report)
@@ -2336,7 +2381,12 @@ def app(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
 
-    db_path = Path(getattr(args, "db", None) or getattr(args, "global_db", None) or DEFAULT_DB_PATH)
+    db_path = Path(
+        getattr(args, "db", None)
+        or getattr(args, "global_db", None)
+        or os.environ.get("CHINALAW_DB")
+        or DEFAULT_DB_PATH
+    ).expanduser()
     fmt = getattr(args, "format", "json")
     _NOTICE_CONTEXT.clear()
     _NOTICE_CONTEXT.update(
@@ -2353,6 +2403,18 @@ def app(argv: list[str] | None = None) -> int:
         except BrokenPipeError:
             _suppress_broken_pipe()
             return 0
+        except (OSError, UnicodeError, ValueError, sqlite3.Error) as exc:
+            _emit(
+                {
+                    "kind": "cli_command_error",
+                    "command": args.command,
+                    "error": exc.__class__.__name__,
+                    "message": str(exc),
+                },
+                fmt,
+                lambda item: f"! {item['command']}: {item['error']}: {item['message']}\n",
+            )
+            return 2
     parser.print_help()
     return 0
 

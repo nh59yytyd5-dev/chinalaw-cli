@@ -8,12 +8,21 @@ This gate therefore rejects seed/stub records from ``data/fixtures``.
 
 from __future__ import annotations
 
+import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES_DIR = ROOT / "data" / "fixtures"
+MANIFEST_PATH = ROOT / "data" / "public_fixture_manifest.json"
+SRC_DIR = ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from chinalaw.contracts import validate_law_payload
+
 FORBIDDEN_STATUSES = {"seed", "stub"}
 REQUIRED_SOURCE_FIELDS = ("source_name", "source_url", "source_checked_at", "source_hash")
 FORBIDDEN_COVERAGE = {"seed", "stub", "sample", "excerpt", "partial"}
@@ -27,36 +36,128 @@ def _load_json(path: Path) -> dict:
     return payload
 
 
-def main() -> int:
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _load_manifest(path: Path) -> dict:
+    payload = _load_json(path)
+    if payload.get("schema_version") != 1:
+        raise ValueError("unsupported public fixture manifest schema_version")
+    fixtures = payload.get("fixtures")
+    if not isinstance(fixtures, dict):
+        raise ValueError("public fixture manifest requires fixtures object")
+    return fixtures
+
+
+def _sequence_errors(path: Path, articles: list[dict], spec: dict) -> list[str]:
+    errors: list[str] = []
+    label = _display_path(path)
+    sequence = spec.get("integer_sequence")
+    if not isinstance(sequence, dict):
+        return [f"{label}: manifest requires integer_sequence"]
+    first = sequence.get("first")
+    last = sequence.get("last")
+    if not isinstance(first, int) or not isinstance(last, int) or first < 1 or last < first:
+        return [f"{label}: invalid manifest integer_sequence"]
+
+    integer_numbers: list[int] = []
+    extra_numbers: list[str] = []
+    allow_inserted = spec.get("allow_inserted_articles") is True
+    allow_decimal = spec.get("allow_decimal_articles") is True
+    allowed_symbolic = set(spec.get("allowed_symbolic_numbers") or [])
+    for article in articles:
+        number = str(article.get("number") or "")
+        if re.fullmatch(r"[1-9]\d*", number):
+            integer_numbers.append(int(number))
+        elif allow_inserted and re.fullmatch(r"[1-9]\d*-[1-9]\d*", number):
+            continue
+        elif allow_decimal and re.fullmatch(r"[1-9]\d*(?:\.[1-9]\d*)+", number):
+            continue
+        elif number in allowed_symbolic:
+            continue
+        else:
+            extra_numbers.append(number)
+
+    expected_numbers = set(range(first, last + 1))
+    actual_numbers = set(integer_numbers)
+    missing = sorted(expected_numbers - actual_numbers)
+    unexpected = sorted(actual_numbers - expected_numbers)
+    if missing:
+        errors.append(f"{label}: missing integer articles {missing}")
+    if unexpected:
+        errors.append(f"{label}: unexpected integer articles {unexpected}")
+    if len(integer_numbers) != len(actual_numbers):
+        errors.append(f"{label}: duplicate integer article numbers")
+    if extra_numbers:
+        errors.append(f"{label}: unapproved non-integer article numbers {extra_numbers}")
+    return errors
+
+
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fixtures-dir", type=Path, default=FIXTURES_DIR)
+    parser.add_argument("--manifest", type=Path, default=MANIFEST_PATH)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
     errors: list[str] = []
     fixture_count = 0
+    try:
+        manifest = _load_manifest(args.manifest)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"public fixture check failed: invalid manifest: {exc}", file=sys.stderr)
+        return 1
 
-    for path in sorted(FIXTURES_DIR.glob("*.json")):
+    paths = sorted(args.fixtures_dir.glob("*.json"))
+    actual_names = {path.name for path in paths}
+    missing_specs = sorted(actual_names - set(manifest))
+    stale_specs = sorted(set(manifest) - actual_names)
+    if missing_specs:
+        errors.append(f"manifest missing fixture entries: {missing_specs}")
+    if stale_specs:
+        errors.append(f"manifest contains missing fixtures: {stale_specs}")
+
+    for path in paths:
         fixture_count += 1
         try:
             payload = _load_json(path)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
-            errors.append(f"{path.relative_to(ROOT)}: invalid JSON fixture: {exc}")
+            errors.append(f"{_display_path(path)}: invalid JSON fixture: {exc}")
             continue
 
         title = payload.get("title") or path.name
         status = payload.get("status")
         articles = payload.get("articles") or []
         coverage = payload.get("articles_coverage") or payload.get("coverage")
+        label = _display_path(path)
+        spec = manifest.get(path.name)
 
         if status in FORBIDDEN_STATUSES:
-            errors.append(f"{path.relative_to(ROOT)}: forbidden public status {status!r} ({title})")
+            errors.append(f"{label}: forbidden public status {status!r} ({title})")
         if coverage in FORBIDDEN_COVERAGE:
             errors.append(
-                f"{path.relative_to(ROOT)}: forbidden public coverage {coverage!r} ({title})"
+                f"{label}: forbidden public coverage {coverage!r} ({title})"
+            )
+        if (
+            payload.get("level") == "judicial_interpretation"
+            and not payload.get("document_number")
+        ):
+            errors.append(
+                f"{label}: judicial interpretation is missing document_number ({title})"
             )
         if not isinstance(articles, list) or not articles:
-            errors.append(f"{path.relative_to(ROOT)}: fixture has no articles ({title})")
+            errors.append(f"{label}: fixture has no articles ({title})")
         else:
             for idx, article in enumerate(articles, start=1):
                 if not isinstance(article, dict):
                     errors.append(
-                        f"{path.relative_to(ROOT)}: article #{idx} is not an object ({title})"
+                        f"{label}: article #{idx} is not an object ({title})"
                     )
                     continue
                 text = article.get("text")
@@ -65,11 +166,22 @@ def main() -> int:
                 if not str(text or "").strip():
                     number = article.get("number_display") or article.get("number") or idx
                     errors.append(
-                        f"{path.relative_to(ROOT)}: article {number!r} has empty text ({title})"
+                        f"{label}: article {number!r} has empty text ({title})"
                     )
+            if isinstance(spec, dict):
+                expected_count = spec.get("expected_article_count")
+                if len(articles) != expected_count:
+                    errors.append(
+                        f"{label}: expected {expected_count} articles, got {len(articles)}"
+                    )
+                errors.extend(_sequence_errors(path, articles, spec))
         for field in REQUIRED_SOURCE_FIELDS:
             if not payload.get(field):
-                errors.append(f"{path.relative_to(ROOT)}: missing {field} ({title})")
+                errors.append(f"{label}: missing {field} ({title})")
+        try:
+            validate_law_payload(payload, require_articles=True)
+        except ValueError as exc:
+            errors.append(f"{label}: canonical contract failed: {exc}")
 
     if errors:
         print("public fixture check failed:", file=sys.stderr)

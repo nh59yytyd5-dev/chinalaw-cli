@@ -1,9 +1,9 @@
 """数据源编排入口。
 
-各 adapter 通过 ``ADAPTER_REGISTRY`` 注册（ADR-0008 §3.1）；新源接入只需把
+各 adapter 通过 ``ADAPTER_REGISTRY`` 注册；新源接入只需把
 adapter 实例加入注册表，CLI ``probe`` / ``verify-source`` 等命令自动支持。
 
-行 / 候选项的 "主键" 抽象（ADR-0008 §3.2）：
+行 / 候选项的 "主键" 抽象：
 
 flk_npc 用 ``bbbs`` 字段标识一条法规；court_gongbao / court_main /
 spp_gov_cn 用 ``detail_id``。本模块通过 :func:`_row_id` 在不同 row 风格
@@ -14,6 +14,8 @@ spp_gov_cn 用 ``detail_id``。本模块通过 :func:`_row_id` 在不同 row 风
 
 from __future__ import annotations
 
+import math
+import os
 import re
 from datetime import datetime, timezone
 from html import unescape
@@ -41,7 +43,7 @@ _HTML_TAG_RE = re.compile(r"<[^>]+>")
 # 多源 adapter 注册表。Key 是 source name（CLI ``--source`` 接受的值，规整为
 # 小写下划线形式后比对）；value 是 adapter 实例。
 #
-# 新源接入 checklist（ADR-0008 §3.2）：
+# 新源接入 checklist：
 # 1. 在 ``src/chinalaw/adapters/`` 下创建 adapter 模块，至少实装 ``probe()``
 # 2. 在本表注册 ``default_adapter`` 实例
 # 3. 在 ADR / 调研报告里说明覆盖范围与暂缓字段
@@ -58,6 +60,12 @@ ADAPTER_REGISTRY = {
     "szse_cn": szse_cn.default_adapter,
     "chinaclear_cn": chinaclear_cn.default_adapter,
     "sac_net_cn": sac_net_cn.default_adapter,
+}
+
+_FETCH_THROTTLE_ENV = "CHINALAW_FETCH_THROTTLE_MS"
+_DEFAULT_REQUEST_INTERVALS = {
+    name: float(adapter.request_interval)
+    for name, adapter in ADAPTER_REGISTRY.items()
 }
 
 # 支持 verify-source 的源（adapter 必须同时实装 search_list / build_law_payload）。
@@ -81,10 +89,10 @@ VERIFIABLE_SOURCES = (
 #
 # CLI 层（``cli.py``）暴露 string keyword 给 agent，sources 这层做
 # string→int 变换并由 fetch / discover 透传到 adapter。仅 ``flk_npc`` 原生支
-# 持此过滤维度（详见 ``docs/CLI_STATUS_FLAG_SPEC.md`` §1.1 多源对照矩阵）；
+# 持此过滤维度（详见 ``docs/CONTRACT.md`` §4.11 / §4.11.1）；
 # gov_xzfgk / 证券公开源仅接受 current；court_gongbao / court_main /
 # spp_gov_cn 站点本身没有 status 维度，CLI 层在传入其它 status 时抛
-# ``ValueError`` fail loud（同 spec §2 方向 X）。
+# ``ValueError`` fail loud。
 #
 # 反向 ``SXX_TO_STATUS`` 在 ``cleaning.py:50`` 是权威定义；本表通过 dict
 # comprehension 反向派生，单点维护——未来 flk 加新 sxx 值时只改
@@ -152,7 +160,24 @@ def get_source_adapter(name: str):
     if normalized not in ADAPTER_REGISTRY:
         known = ", ".join(sorted(ADAPTER_REGISTRY))
         raise ValueError(f"unknown source: {name} (known: {known})")
-    return ADAPTER_REGISTRY[normalized]
+    adapter = ADAPTER_REGISTRY[normalized]
+    default_interval = _DEFAULT_REQUEST_INTERVALS[normalized]
+    raw_interval = os.environ.get(_FETCH_THROTTLE_ENV)
+    if raw_interval is None or not raw_interval.strip():
+        adapter.request_interval = default_interval
+        return adapter
+    try:
+        throttle_ms = float(raw_interval)
+    except ValueError as exc:
+        raise ValueError(
+            f"{_FETCH_THROTTLE_ENV} must be a non-negative finite number"
+        ) from exc
+    if not math.isfinite(throttle_ms) or throttle_ms < 0:
+        raise ValueError(
+            f"{_FETCH_THROTTLE_ENV} must be a non-negative finite number"
+        )
+    adapter.request_interval = max(default_interval, throttle_ms / 1000)
+    return adapter
 
 
 def probe_source(name: str) -> dict:
@@ -287,7 +312,7 @@ def verify_source(
 
 def _candidate_from_row(row: dict) -> dict:
     row_id = _row_id(row)
-    return {
+    candidate = {
         "id": row_id,
         "bbbs": row.get("bbbs") or row_id,  # 兼容老调用方（flk 风格）
         "detail_id": row.get("detail_id") or row_id,
@@ -295,6 +320,10 @@ def _candidate_from_row(row: dict) -> dict:
         "released_at": row.get("gbrq") or row.get("released_at") or row.get("issue") or "",
         "status": _status_from_row(row),
     }
+    for key in ("short_title", "aliases", "document_number"):
+        if row.get(key):
+            candidate[key] = row[key]
+    return candidate
 
 
 def _status_from_row(row: dict) -> str:
@@ -303,7 +332,7 @@ def _status_from_row(row: dict) -> str:
     优先级：``sxx`` > ``status``。FLK 的 ``sxx`` 是数值化生效状态语义最强的
     表达，遇到既有 ``status`` 文本兜底。``fetch.py`` 亦从此模块 import 此
     helper 作为权威；曾经存在的 ``fetch._normalize_row_status`` 已收口删除
-    （详见 docs/ADAPTER_HTML_HELPERS_SPEC.md §2.3）。
+    （共享 HTML 归一规则见 ``chinalaw.adapters._html``）。
     """
 
     if "sxx" in row:

@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from chinalaw import (
+    PROJECT_URL,
     USER_AGENT_TOKEN,
     __version__,
     cleaning,
@@ -97,7 +98,7 @@ class ReleaseMetadataTests(unittest.TestCase):
 
     def test_registered_adapter_user_agents_use_release_token(self) -> None:
         self.assertEqual(
-            f"chinalaw-cli/{__version__} (+https://github.com/chinalaw-cli/chinalaw-cli)",
+            f"chinalaw-cli/{__version__} (+{PROJECT_URL})",
             USER_AGENT_TOKEN,
         )
         seen_modules: set[str] = set()
@@ -306,6 +307,30 @@ class AgentPlatformNoticeTests(unittest.TestCase):
                 payload,
             )
 
+    def test_wheel_or_pipx_symlink_is_not_compared_with_checkout_wrapper(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            installed_module = root / "site-packages" / "chinalaw" / "notices.py"
+            installed_module.parent.mkdir(parents=True)
+            executable = root / "bin" / "chinalaw"
+            target = root / "pipx" / "venv" / "bin" / "chinalaw"
+            target.parent.mkdir(parents=True)
+            target.write_text("", encoding="utf-8")
+            executable.parent.mkdir(parents=True)
+            executable.symlink_to(target)
+
+            def which(name: str) -> str:
+                return str(executable if name == "chinalaw" else target)
+
+            collected: dict[str, dict] = {}
+            with (
+                mock.patch.object(notices, "__file__", str(installed_module)),
+                mock.patch.object(notices.shutil, "which", side_effect=which),
+            ):
+                notices._collect_install_notices(collected)
+
+        self.assertNotIn("global_wrapper_mismatch", collected)
+
 
 class SourceTextSafetyTests(unittest.TestCase):
     def test_article_markdown_frames_instruction_like_text_as_source_quote(self) -> None:
@@ -444,6 +469,37 @@ class AgentSetupScriptTests(unittest.TestCase):
         self.assertIn("doctor --format md", windows_script)
         self.assertIn("NoSkills", windows_script)
         self.assertIn("NoDoctor", windows_script)
+
+    def test_setup_agent_uses_portable_empty_array_expansion(self) -> None:
+        # issue #3：bash 3.2（macOS 自带）在 set -u 下 "${empty[@]}" 会 unbound。
+        # 必须用 ${arr[@]+"${arr[@]}"} 惯用法，且不得退回裸 "${skill_args[@]}"。
+        script = (REPO_ROOT / "scripts" / "setup-agent").read_text(encoding="utf-8")
+        self.assertIn('${skill_args[@]+"${skill_args[@]}"}', script)
+        self.assertNotIn('install-skills" "${skill_args[@]}"', script)
+
+    def test_setup_agent_auto_syncs_fixtures_for_new_users(self) -> None:
+        # issue #5：默认（auto）在空库时自动加载 fixtures，并提供 --no-sync-fixtures 退出。
+        script = (REPO_ROOT / "scripts" / "setup-agent").read_text(encoding="utf-8")
+        self.assertIn("SYNC_FIXTURES=auto", script)
+        self.assertIn("--no-sync-fixtures", script)
+        self.assertIn("db_is_empty", script)
+
+        windows_script = (REPO_ROOT / "scripts" / "setup-agent.ps1").read_text(encoding="utf-8")
+        self.assertIn("NoSyncFixtures", windows_script)
+        self.assertIn("Test-DbIsEmpty", windows_script)
+
+    def test_install_local_checks_python_version_before_venv(self) -> None:
+        # issue #4：创建 venv 前校验 Python >= 3.10；venv 失败提示覆盖 macOS。
+        script = (REPO_ROOT / "scripts" / "install-local").read_text(encoding="utf-8")
+        self.assertIn("resolve_bootstrap_python", script)
+        self.assertIn("MIN_PY_MINOR=10", script)
+        self.assertIn("Darwin", script)
+        self.assertIn("brew install python@3.12", script)
+
+        windows_script = (REPO_ROOT / "scripts" / "install-local.ps1").read_text(encoding="utf-8")
+        self.assertIn("Resolve-BootstrapPython", windows_script)
+        self.assertIn("MinPyMinor", windows_script)
+        self.assertIn("winget install Python.Python.3.12", windows_script)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from chinalaw import __version__, service, sources
+from chinalaw.datapaths import (
+    builtin_data_dir,
+    builtin_data_search_message,
+)
 from chinalaw.db import DEFAULT_DB_PATH
 from chinalaw.schema import SCHEMA_VERSION
 
@@ -31,6 +35,7 @@ def run_doctor(
         f"chinalaw {__version__} on Python {sys.version_info.major}.{sys.version_info.minor}",
     )
     _check_path(checks)
+    _check_bundled_data(checks)
     _check_db(checks, db, freshness_warn_days=freshness_warn_days)
     _check_skills(checks)
     _check_mcp(checks)
@@ -110,6 +115,27 @@ def _check_path(checks: list[dict[str, Any]]) -> None:
     _add(checks, "path", "pass", f"PATH resolves chinalaw to {exe}", data=data)
 
 
+def _check_bundled_data(checks: list[dict[str, Any]]) -> None:
+    fixtures = builtin_data_dir("fixtures")
+    fixture_count = len(list(fixtures.glob("*.json"))) if fixtures.is_dir() else 0
+    if fixture_count:
+        _add(
+            checks,
+            "bundled_data",
+            "pass",
+            f"发现 {fixture_count} 个内置 fixture：{fixtures}",
+            data={"fixtures_dir": str(fixtures), "fixture_count": fixture_count},
+        )
+        return
+    _add(
+        checks,
+        "bundled_data",
+        "fail",
+        f"未找到可用的内置 fixtures：{fixtures}",
+        hint=builtin_data_search_message("fixtures"),
+    )
+
+
 def _check_db(
     checks: list[dict[str, Any]],
     db: Path,
@@ -151,7 +177,7 @@ def _check_db(
             "schema_version",
             "fail",
             f"schema_version={schema_version}, expected={SCHEMA_VERSION}",
-            hint="运行当前版本 chinalaw status 触发迁移；迁移前建议备份数据库。",
+            hint="备份数据库后运行 chinalaw sync --fixtures 触发显式迁移。",
         )
 
     law_count = int(status.get("laws") or 0)

@@ -18,18 +18,89 @@ BIN_DIR="${CHINALAW_BIN_DIR:-${HOME}/.local/bin}"
 TARGET="${BIN_DIR}/chinalaw"
 MCP_TARGET="${BIN_DIR}/chinalaw-mcp"
 
+# pyproject.toml 声明 requires-python >= 3.10；低于此版本时 venv 里的 pip 往往过旧、
+# 不支持 PEP 660 editable install，报错还会伪装成「setup.py not found」这类误导信息。
+# 因此在创建 venv 前显式校验解释器版本。
+MIN_PY_MAJOR=3
+MIN_PY_MINOR=10
+
+py_version_ok() {
+    # $1: python 可执行文件；满足 >= MIN_PY_MAJOR.MIN_PY_MINOR 时返回 0。
+    "$1" -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (${MIN_PY_MAJOR}, ${MIN_PY_MINOR}) else 1)" \
+        >/dev/null 2>&1
+}
+
+py_version_str() {
+    "$1" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null || printf 'unknown'
+}
+
+# 平台相关的 Python / venv 安装提示（原脚本只覆盖 Debian/Ubuntu，见 issue #4）。
+python_setup_hint() {
+    case "$(uname -s)" in
+        Darwin)
+            cat >&2 <<'EOF'
+  macOS（Homebrew）：
+    brew install python@3.12
+  然后重跑 scripts/install-local，或显式指定解释器：
+    PYTHON="$(brew --prefix python@3.12)/bin/python3.12" scripts/install-local
+EOF
+            ;;
+        Linux)
+            cat >&2 <<'EOF'
+  Debian/Ubuntu：
+    sudo apt-get install -y python3.12 python3.12-venv
+  或用 pyenv / uv 安装 Python 3.10+，然后显式指定解释器：
+    PYTHON=python3.12 scripts/install-local
+EOF
+            ;;
+        *)
+            cat >&2 <<'EOF'
+  请安装 Python 3.10+（含 venv 模块），然后重跑，或用 PYTHON=/path/to/python 指定。
+EOF
+            ;;
+    esac
+}
+
+# 确保用于创建 venv 的解释器满足 requires-python；仅在需要新建 venv 时调用。
+resolve_bootstrap_python() {
+    if py_version_ok "$BOOTSTRAP_PYTHON"; then
+        return 0
+    fi
+
+    local found
+    found="$(py_version_str "$BOOTSTRAP_PYTHON")"
+
+    # 用户用 PYTHON=... 显式指定：尊重其选择，不擅自改用别的解释器，直接清晰报错。
+    if [ -n "${PYTHON:-}" ]; then
+        echo "error: PYTHON=${PYTHON} 指向 Python ${found}，但 chinalaw 需要 >= ${MIN_PY_MAJOR}.${MIN_PY_MINOR}。" >&2
+        python_setup_hint
+        exit 1
+    fi
+
+    # 默认 python3 太旧：自动探测系统里更新的解释器。
+    local cand
+    for cand in python3.13 python3.12 python3.11 python3.10; do
+        if command -v "$cand" >/dev/null 2>&1 && py_version_ok "$cand"; then
+            echo "note: 默认 python3 为 ${found}（< ${MIN_PY_MAJOR}.${MIN_PY_MINOR}），改用 $(command -v "$cand")。" >&2
+            BOOTSTRAP_PYTHON="$cand"
+            return 0
+        fi
+    done
+
+    echo "error: 未找到 Python >= ${MIN_PY_MAJOR}.${MIN_PY_MINOR}（默认 python3 为 ${found}）。chinalaw 需要 ${MIN_PY_MAJOR}.${MIN_PY_MINOR}+。" >&2
+    python_setup_hint
+    exit 1
+}
+
 mkdir -p "$BIN_DIR"
 
 if [ ! -x "$PYTHON_BIN" ]; then
+    resolve_bootstrap_python
     if ! "$BOOTSTRAP_PYTHON" -m venv "$VENV_DIR"; then
-        cat >&2 <<'EOF'
-warning: failed to create virtualenv; installing PATH wrappers in PYTHONPATH fallback mode.
-
-On Debian/Ubuntu, install the venv package first, for example:
-  apt-get install -y python3-venv
-
-Then rerun scripts/install-local to enable editable installation.
-EOF
+        echo "warning: 创建 venv 失败（${BOOTSTRAP_PYTHON}）；改用 PYTHONPATH 回退模式安装 PATH wrapper。" >&2
+        echo "如需启用完整的 editable 安装，请确保有可用的 Python 3.10+（含 venv 模块）：" >&2
+        python_setup_hint
+        echo "然后重跑 scripts/install-local。" >&2
     fi
 fi
 
@@ -37,18 +108,21 @@ if [ -x "$PYTHON_BIN" ] && ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; the
     if "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1; then
         echo "bootstrapped pip inside ${VENV_DIR}"
     else
-        cat >&2 <<'EOF'
-warning: virtualenv exists but pip is unavailable; using PYTHONPATH fallback mode.
-
-On Debian/Ubuntu, install python3-venv, then rerun scripts/install-local.
-EOF
+        echo "warning: venv 已创建但 pip 不可用；改用 PYTHONPATH 回退模式。" >&2
+        echo "请确保系统 Python 含 pip / venv 支持，然后重跑 scripts/install-local：" >&2
+        python_setup_hint
     fi
 fi
 
 if [ -x "$PYTHON_BIN" ] && "$PYTHON_BIN" -m pip install -e "$REPO_ROOT"; then
     echo "editable install ok: ${REPO_ROOT} (${PYTHON_BIN})"
-else
+elif [ -x "$PYTHON_BIN" ]; then
     echo "editable install failed; wrapper will fall back to PYTHONPATH mode" >&2
+    echo "  常见原因：venv 内 pip 过旧、不支持 PEP 660 editable 安装（报错可能伪装成" >&2
+    echo "  「setup.py or setup.cfg not found」）。可升级 pip 后重跑：" >&2
+    echo "    \"${PYTHON_BIN}\" -m pip install --upgrade pip && scripts/install-local" >&2
+else
+    echo "editable install skipped (无可用 venv)；wrapper will fall back to PYTHONPATH mode" >&2
 fi
 
 ln -sf "${REPO_ROOT}/scripts/chinalaw" "$TARGET"

@@ -49,10 +49,37 @@ def _compact_article_footer(law: dict) -> str | None:
     effective_at = law.get("effective_at")
     if effective_at:
         parts.append(f"{effective_at} 施行")
+    repealed_at = law.get("repealed_at")
+    if repealed_at:
+        parts.append(f"{repealed_at} 废止")
     freshness = _freshness_label(law)
     if freshness:
         parts.append(freshness)
     return f"[{'｜'.join(parts)}]" if parts else None
+
+
+def _full_article_footer(law: dict) -> list[str]:
+    """Render the shared provenance footer for article-shaped Markdown."""
+
+    lines = ["---"]
+    if law.get("status"):
+        lines.append(f"- 状态：{law.get('status')}")
+    if law.get("effective_at"):
+        lines.append(f"- 施行日期：{law.get('effective_at')}")
+    if law.get("repealed_at"):
+        lines.append(f"- 废止日期：{law.get('repealed_at')}")
+    current_revision = law.get("current_revision")
+    if current_revision:
+        lines.append(f"- 当前版本：{current_revision.get('version_label')}")
+    selected_revision = law.get("selected_revision")
+    if selected_revision and selected_revision != current_revision:
+        lines.append(f"- 历史版本：{selected_revision.get('version_label')}")
+    if law.get("source_url"):
+        lines.append(f"- 来源：{law.get('source_url')}")
+    freshness = _freshness_label(law)
+    if freshness:
+        lines.append(f"- 最后核查：{freshness}")
+    return lines
 
 
 def search_to_markdown(result: dict) -> str:
@@ -368,6 +395,8 @@ def law_to_markdown(law: dict) -> str:
         lines.append(f"- 发布日期：{law.get('released_at')}")
     if law.get("effective_at"):
         lines.append(f"- 施行日期：{law.get('effective_at')}")
+    if law.get("repealed_at"):
+        lines.append(f"- 废止日期：{law.get('repealed_at')}")
     current_revision = law.get("current_revision")
     if current_revision:
         lines.append(f"- 当前版本：{current_revision.get('version_label')}")
@@ -399,12 +428,15 @@ def law_to_markdown(law: dict) -> str:
     if articles:
         lines.append(f"## 条文（共 {len(articles)} 条）")
         lines.append("")
+        last_part = None
         for a in articles:
             header = a.get("number_display")
             if a.get("title"):
                 header += f"（{a.get('title')}）"
-            if a.get("part"):
-                lines.append(f"### {a.get('part')}")
+            part = a.get("part")
+            if part and part != last_part:
+                lines.append(f"### {part}")
+            last_part = part
             lines.append(f"**{header}**")
             lines.append("")
             lines.append(a.get("text", "").strip())
@@ -463,18 +495,7 @@ def article_to_markdown(
         return "\n".join(lines) + "\n"
 
     lines.append("")
-    lines.append("---")
-    lines.append(f"- 状态：{law.get('status')}")
-    current_revision = law.get("current_revision")
-    if current_revision:
-        lines.append(f"- 当前版本：{current_revision.get('version_label')}")
-    selected_revision = law.get("selected_revision")
-    if selected_revision and selected_revision != current_revision:
-        lines.append(f"- 历史版本：{selected_revision.get('version_label')}")
-    lines.append(f"- 来源：{law.get('source_url')}")
-    freshness = _freshness_label(law)
-    if freshness:
-        lines.append(f"- 最后核查：{freshness}")
+    lines.extend(_full_article_footer(law))
     return "\n".join(lines) + "\n"
 
 
@@ -528,6 +549,9 @@ def articles_to_markdown(
         if compact:
             lines.append(compact)
             lines.append("")
+    elif footer == "full":
+        lines.extend(_full_article_footer(law))
+        lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -669,7 +693,16 @@ def articles_batch_to_markdown(
     for section in sections:
         result = section.get("result")
         if result is None or result.get("law") is None:
-            label = "未提供条号" if section.get("error") == "missing_numbers" else "未找到法规"
+            labels = {
+                "missing_numbers": "未提供条号",
+                "empty_numbers": "条号无效",
+                "invalid_as_of": "时点格式无效",
+                "version_not_found_as_of": "时点版本缺失",
+                "revision_snapshot_corrupt": "版本快照损坏",
+                "revision_snapshot_missing": "版本快照缺失",
+                "law_not_found": "未找到法规",
+            }
+            label = labels.get(section.get("error"), "查询失败")
             parts.append(f"## {section.get('name')}（{label}，跳过）")
             parts.append("")
             continue
@@ -793,6 +826,9 @@ def outline_to_markdown_with_text(
         if compact:
             lines.append(compact)
             lines.append("")
+    elif footer == "full":
+        lines.extend(_full_article_footer(law))
+        lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -1652,6 +1688,9 @@ def init_to_markdown(payload: dict) -> str:
         f"- doctor errors：{doctor_report.get('error_count', 0)}",
         f"- doctor warnings：{doctor_report.get('warning_count', 0)}",
     ]
+    error = payload.get("error") or {}
+    if error:
+        lines.append(f"- 错误：{error.get('code')}: {error.get('message')}")
     next_commands = payload.get("next_commands") or []
     if next_commands:
         lines.extend(["", "## Next"])
@@ -1904,8 +1943,8 @@ _LEVEL_LABELS = {
     "law": "法律",
     "judicial_interpretation": "司法解释",
     "judicial_meeting_minutes": "司法会议纪要",
-    "administrative_regulation": "行政法规",
-    "departmental_rule": "部门规章",
+    "admin_regulation": "行政法规",
+    "department_rule": "部门规章",
     "local_regulation": "地方性法规",
     "constitution": "宪法",
 }

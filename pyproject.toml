@@ -59,6 +59,7 @@ include = [
   "/data/applicability",
   "/data/recommended_corpus.json",
   "/data/source_coverage.json",
+  "/data/public_fixture_manifest.json",
   "/docs",
   "/.claude/skills",
   "/scripts",
@@ -67,6 +68,11 @@ include = [
   "/NOTICES.md",
   "/CHANGELOG.md",
   "/pyproject.toml",
+]
+exclude = [
+  "/docs/FULL_AUDIT_*",
+  "/docs/REFACTOR_PLAN_*",
+  "/.agents",
 ]
 
 [tool.hatch.build.targets.wheel.shared-data]
@@ -86,12 +92,10 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "C901"]
 ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.mccabe]
-# 函数圈复杂度上限（防屎山 gate）。25 是基于现状实测的务实阈值：当前全库仅
-# 3 个函数超标（infer_source_id / _normalize_dependencies / fetch_law，已逐个
-# # noqa: C901 标记为待拆分技术债），因此引入它不需重写存量代码，却能拦截
-# “新增 25+ 复杂度函数”这类劣化。后续随重构逐步收紧阈值，详见
-# docs/decisions/ADR-0009-module-boundaries.md。
-max-complexity = 25
+# 函数圈复杂度上限（防屎山 gate）。Phase 9 拆分 fetch / contract 后从 25
+# 收紧到 21；当前仅 infer_source_id / _normalize_dependencies 两个存量入口有
+# 显式 C901 豁免，新增代码不得继续扩大该清单。
+max-complexity = 21
 
 [tool.ruff.lint.per-file-ignores]
 # 测试 fixture 大量出现长中文法条 / 案号 / URL 字符串，强行换行反而割裂语义。

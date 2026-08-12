@@ -51,10 +51,33 @@ jobs:
           PYTHONPATH: src
         run: python -m compileall -q src tests
 
+      - name: Validate public fixtures
+        run: python scripts/check-public-fixtures
+
       - name: Run unit tests (offline)
         env:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
+
+      - name: Run pytest release gate
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m pip install --upgrade "pytest>=8"
+          python -m pytest -q --junitxml="$RUNNER_TEMP/pytest.xml"
+          python - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(os.path.join(os.environ["RUNNER_TEMP"], "pytest.xml")).getroot()
+          suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+          skipped = sum(int(suite.attrib.get("skipped", 0)) for suite in suites)
+          maximum = 32
+          if skipped > maximum:
+              raise SystemExit(f"pytest skip budget exceeded: {skipped} > {maximum}")
+          print(f"pytest skip budget: {skipped}/{maximum}")
+          PY
 
   lint:
     runs-on: ubuntu-latest
@@ -111,6 +134,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "chinalaw doctor failed with exit $LASTEXITCODE" }
           $doctor = $doctorJson | ConvertFrom-Json
           if (-not $doctor.ok) { throw "chinalaw doctor returned ok=false" }
+
+      - name: Smoke Unicode and percent installation paths
+        shell: pwsh
+        run: |
+          $copyRoot = Join-Path $env:RUNNER_TEMP "法规%路径-chinalaw"
+          $binDir = Join-Path $env:RUNNER_TEMP "工具%目录"
+          $venvDir = Join-Path $env:RUNNER_TEMP "venv-unicode"
+          New-Item -ItemType Directory -Force -Path $copyRoot | Out-Null
+          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE "*") -Destination $copyRoot -Recurse -Force
+          $env:CHINALAW_BIN_DIR = $binDir
+          $env:CHINALAW_VENV = $venvDir
+          & (Join-Path $copyRoot "scripts\install-local.ps1")
+          & (Join-Path $binDir "chinalaw.cmd") --version
+          if ($LASTEXITCODE -ne 0) { throw "Unicode/% cmd shim failed" }
 
   install-smoke:
     name: install-smoke (${{ matrix.os }})
@@ -183,10 +220,53 @@ jobs:
       - name: Build sdist + wheel
         run: python -m build
 
-      - name: Smoke import installed wheel
+      - name: Inspect sdist contents
         run: |
-          python -m venv .venv-smoke
-          . .venv-smoke/bin/activate
-          pip install dist/*.whl
-          chinalaw --help
-          python -c "import chinalaw; print(chinalaw.__name__)"
+          python - <<'PY'
+          import glob
+          import tarfile
+
+          archive = glob.glob("dist/*.tar.gz")[0]
+          with tarfile.open(archive) as bundle:
+              names = bundle.getnames()
+          assert any(name.endswith("data/public_fixture_manifest.json") for name in names)
+          assert not any("FULL_AUDIT_" in name or "REFACTOR_PLAN_" in name for name in names)
+          PY
+
+      - name: Smoke installed wheel
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-smoke"
+          . "$RUNNER_TEMP/wheel-smoke/bin/activate"
+          python -m pip install dist/*.whl
+          db="$RUNNER_TEMP/wheel-smoke.db"
+          chinalaw --no-notice --db "$db" init --format json
+          chinalaw --no-notice --db "$db" article 民法典 第一百四十三条 --format json
+          chinalaw --no-notice corpus list --format json
+          chinalaw --no-notice sources list --format json
+          chinalaw --no-notice --db "$db" doctor --format json
+          deactivate
+
+      - name: Smoke installed sdist
+        run: |
+          python -m venv "$RUNNER_TEMP/sdist-smoke"
+          . "$RUNNER_TEMP/sdist-smoke/bin/activate"
+          python -m pip install dist/*.tar.gz
+          db="$RUNNER_TEMP/sdist-smoke.db"
+          chinalaw --no-notice --db "$db" init --format json
+          chinalaw --no-notice --db "$db" article 民法典 第一百四十三条 --format json
+          chinalaw --no-notice corpus list --format json
+          chinalaw --no-notice sources list --format json
+          chinalaw --no-notice --db "$db" doctor --format json
+          deactivate
+
+      - name: Smoke user-site wheel shared data
+        run: |
+          export PYTHONUSERBASE="$RUNNER_TEMP/userbase"
+          python -m pip install --user --force-reinstall dist/*.whl
+          export PATH="$PYTHONUSERBASE/bin:$PATH"
+          db="$RUNNER_TEMP/user-site-smoke.db"
+          chinalaw --no-notice --db "$db" init --format json
+          chinalaw --no-notice --db "$db" article 民法典 第一百四十三条 --format json
+          chinalaw --no-notice corpus list --format json
+          chinalaw --no-notice sources list --format json
+          chinalaw --no-notice --db "$db" doctor --format json

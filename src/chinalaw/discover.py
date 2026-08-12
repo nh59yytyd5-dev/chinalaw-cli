@@ -1,7 +1,7 @@
 """按状态/关键词批量列出候选法规（不下载、不入库）。
 
 discover 是 fetch 的"探测前哨"：agent 不知道具体法规名时，可先用
-status / keyword 过滤拉一批候选，再用 ``fetch --prefer-bbbs <id>`` 精取
+status / keyword 过滤拉一批候选，再用 ``fetch --prefer-id <id>`` 精取
 某一部。
 
 设计目标（与 ``fetch.fetch_law(..., list_matches=True)`` 的边界）：
@@ -9,12 +9,12 @@ status / keyword 过滤拉一批候选，再用 ``fetch --prefer-bbbs <id>`` 精
 - ``fetch`` 需要必填 ``name``，必返回**单一**最佳匹配（或抛 ambiguous）。
 - ``discover`` 不需要 ``name``，不抛 ambiguous，纯候选流。
 
-``flk_npc`` 原生支持完整 ``status`` 过滤（``docs/CLI_STATUS_FLAG_SPEC.md``
-§1.1 多源对照矩阵）。国家行政法规库、NFRA、证监会 / 交易所 / 中证登 /
+``flk_npc`` 原生支持完整 ``status`` 过滤。国家行政法规库、NFRA、证监会 /
+交易所 / 中证登 /
 协会公开页只有当前公开页语义，允许 ``--status current`` 作为 agent 友好过滤，
 其它 status fail loud。
 
-设计参见 ``docs/CLI_STATUS_FLAG_SPEC.md`` §3.4。
+公开行为见 ``docs/CONTRACT.md`` §4.11.1。
 """
 
 from __future__ import annotations

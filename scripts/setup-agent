@@ -11,7 +11,8 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-SYNC_FIXTURES=0
+# fixtures 加载策略：auto（默认，仅在数据库不存在/为空时加载）| always | never
+SYNC_FIXTURES=auto
 COPY_SKILLS=0
 DRY_RUN=0
 
@@ -19,20 +20,24 @@ usage() {
     cat <<'EOF'
 Usage: scripts/setup-agent [options]
 
-Install/update the global chinalaw command, install agent skills, optionally
-load bundled public fixtures, then run chinalaw doctor.
+Install/update the global chinalaw command, install agent skills, load bundled
+public fixtures on first run (empty database), then run chinalaw doctor.
 
 Options:
-  --sync-fixtures  Load builtin fixture data after installing the wrapper.
-  --copy-skills    Copy skills instead of symlinking them.
-  --dry-run        Preview skill installation only; install-local still runs.
-  -h, --help       Show this help.
+  --sync-fixtures     Always (re)load builtin fixture data, even if the local
+                      database already has content.
+  --no-sync-fixtures  Never load fixtures; leave the database untouched.
+                      (Default: load only when the database is missing/empty.)
+  --copy-skills       Copy skills instead of symlinking them.
+  --dry-run           Preview skill installation only; install-local still runs.
+  -h, --help          Show this help.
 EOF
 }
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --sync-fixtures) SYNC_FIXTURES=1; shift ;;
+        --sync-fixtures) SYNC_FIXTURES=always; shift ;;
+        --no-sync-fixtures) SYNC_FIXTURES=never; shift ;;
         --copy-skills) COPY_SKILLS=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -42,6 +47,24 @@ done
 
 "${REPO_ROOT}/scripts/install-local"
 
+# 优先使用刚安装的 wrapper 绝对路径，避免 $HOME/.local/bin 尚未加入 PATH 时
+# 后续 chinalaw 调用「command not found」；找不到再回退到 PATH 查找。
+BIN_DIR="${CHINALAW_BIN_DIR:-${HOME}/.local/bin}"
+CHINALAW="${BIN_DIR}/chinalaw"
+[ -x "$CHINALAW" ] || CHINALAW="chinalaw"
+
+# 判定是否需要为「新用户」加载 fixtures：默认数据库文件不存在即视为首次运行；
+# 文件已存在时进一步用 status（有 jq 时）判断是否 0 部法规。保守起见：无 jq 且
+# 数据库文件已存在时视为非空，不覆盖用户既有数据。
+db_is_empty() {
+    local db="${CHINALAW_DB:-${HOME}/.chinalaw/chinalaw.db}"
+    [ -s "$db" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 1
+    local laws
+    laws="$("$CHINALAW" status --format json 2>/dev/null | jq -r '.laws // 0' 2>/dev/null || printf '0')"
+    [ "${laws:-0}" -eq 0 ] 2>/dev/null
+}
+
 skill_args=()
 if [ "$COPY_SKILLS" -eq 1 ]; then
     skill_args+=(--copy)
@@ -49,10 +72,24 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
     skill_args+=(--dry-run)
 fi
-"${REPO_ROOT}/scripts/install-skills" "${skill_args[@]}"
+# NOTE: bash 3.2（macOS 自带）在 `set -u` 下把 "${empty_array[@]}" 视为 unbound
+# 并报错，仅靠 `skill_args=()` 初始化不足以规避。用 ${arr[@]+"${arr[@]}"} 惯用法
+# 同时兼容空数组与非空数组，且跨 bash 3.2 → 5.x 可移植。切勿简化回 "${skill_args[@]}"。
+"${REPO_ROOT}/scripts/install-skills" ${skill_args[@]+"${skill_args[@]}"}
 
-if [ "$SYNC_FIXTURES" -eq 1 ]; then
-    chinalaw sync --fixtures --format md
-fi
+case "$SYNC_FIXTURES" in
+    always)
+        "$CHINALAW" sync --fixtures --format md
+        ;;
+    never)
+        : # 用户显式跳过 fixtures
+        ;;
+    auto)
+        if db_is_empty; then
+            echo "==> 首次运行：数据库为空，自动加载公开 fixtures 基线（--no-sync-fixtures 可跳过）" >&2
+            "$CHINALAW" sync --fixtures --format md
+        fi
+        ;;
+esac
 
-chinalaw doctor --format md
+"$CHINALAW" doctor --format md

@@ -55,7 +55,9 @@ if [ "$SKILLS" -eq 1 ]; then
     if [ "$COPY_SKILLS" -eq 1 ]; then
         skill_args+=(--copy)
     fi
-    "${REPO_ROOT}/scripts/install-skills" "${skill_args[@]}"
+    # Bash 3.2 + set -u treats an empty "${array[@]}" as unbound. Keep the
+    # expansion portable for the default (no --copy-skills) path.
+    "${REPO_ROOT}/scripts/install-skills" ${skill_args[@]+"${skill_args[@]}"}
 fi
 
 if [ "$SYNC_FIXTURES" -eq 1 ]; then

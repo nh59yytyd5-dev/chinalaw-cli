@@ -90,6 +90,7 @@ def _opencode_skills_dir() -> Path:
 def _collect_install_notices(notices: dict[str, dict]) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     wrapper = repo_root / "scripts" / "chinalaw"
+    is_checkout = wrapper.is_file() and (repo_root / "pyproject.toml").is_file()
     exe = shutil.which("chinalaw")
     if not exe:
         notices["global_wrapper_mismatch"] = _notice(
@@ -97,7 +98,7 @@ def _collect_install_notices(notices: dict[str, dict]) -> None:
             _script_command("setup-agent"),
             severity="warning",
         )
-    else:
+    elif is_checkout:
         exe_path = Path(exe)
         try:
             if exe_path.is_symlink():
@@ -121,7 +122,8 @@ def _collect_install_notices(notices: dict[str, dict]) -> None:
             severity="info",
         )
 
-    _collect_skill_notice(notices, repo_root)
+    if is_checkout:
+        _collect_skill_notice(notices, repo_root)
 
 
 def _collect_skill_notice(notices: dict[str, dict], repo_root: Path) -> None:
