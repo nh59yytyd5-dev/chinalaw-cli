@@ -5,6 +5,82 @@
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-12
+
+本版本落地 2026-07-26 全面审计与 Phase 0–9 重构：85 条证据观察全部修复或显式
+核销，完整口径与证据见 `docs/FULL_AUDIT_20260726.md`、
+`docs/FULL_AUDIT_20260806_COMPLETION.md` 与 `docs/REFACTOR_PLAN_20260806.md`。
+
+### 变更（行为 / 兼容性）
+
+- 网络层统一走 `netio.SourcePolicy`：仅允许 HTTPS 且按源配置 host allowlist，
+  拒绝 userinfo、IP literal、内网 / 回环 / 云元数据地址，每次重定向后复验；
+  `fetch --prefer-id` 传入的 URL 同样受限，关闭 SSRF 与 `file://` 本地文件读取。
+- 法院公报源改用 HTTPS，官方 HTTPS 不可用时 fail loud，不再回落明文。
+- 响应正文、附件、DOCX 解压与外部进程（pdftotext / textutil / antiword）统一
+  大小上限与 timeout（`resource_limits.py`）。
+- adapter 不再把来源未提供的效力状态升级为 `current`，无证据时记 `unknown`；
+  空条文 payload 默认拒绝，会议纪要等非条文化文书显式转为 `正文` / 编号项目。
+- fetch 候选选择引入标题相似度评分：唯一但无关的候选不再自动入库，低置信一律
+  ambiguous / not-found；canonical ID 对全部候选 strict 匹配，不再因 `LIMIT 1`
+  漏掉正确修订版。
+- `fetch --article` / `--dry-run` / `--to-fixture` 失败零副作用：先完成全部校验
+  再原子落盘；只读 canonical lookup 使用 `mode=ro` 连接且不隐式 `migrate()`。
+- 相同正文 hash 时只刷新元数据与 source freshness，不再冻结 status、废止日与
+  核查时间。
+- `status` / `doctor` 默认只读，不再隐式迁移旧库；`init` 在缺 bundled 数据时
+  fail loud，不再返回 `ok: true`。
+- MCP 增加 framing / JSON-RPC / 参数三层校验：坏请求返回标准错误码且不再终止
+  会话，notification 永不产生响应。
+- Ruff 圈复杂度上限从 25 收紧到 21。
+
+### 修复
+
+- TOC 识别不再把正文中含「目录」的整条条文静默删除；据此恢复数据安全法
+  第 21 / 42 条、网络安全法第 25 条，并修复相关 position / part / corpus 计数。
+- HTML 清洗先剔除 script / style / noscript / template；`br` 支持属性、表格
+  单元格正确分隔，避免相邻条文粘连。
+- 清理 239 处零宽字符污染；补司法解释文号；补刑法「第一编 总则」层级；
+  修复仲裁法 2025 版本 ID 与 legacy alias。
+- 同步改为页级短事务 + 断点状态机：网络抓取移出写事务，崩溃最多损失当前页；
+  水位只在 `no_rows` 时推进；修复空库并发 migration 竞态与 snapshot 跨进程锁。
+- as-of 无 snapshot 且与现行同 hash 时从当前条文重建快照；snapshot JSON 损坏
+  转为结构化诊断；audit 增加 `repealed_before_as_of`；trace 不再对同号条文误报
+  deleted，`ok` 与 `status` 分离。
+- 引用 grammar 区分范围引用与插入条款；short citation 使用 Unicode 字母边界。
+- `scripts/setup-agent` 在无参数运行时不再因 `skill_args[@]: unbound variable`
+  崩溃；改用兼容 bash 3.2 → 5.x 的 `${arr[@]+"${arr[@]}"}` 惯用法。（issue #3）
+- Windows `.cmd` shim 中文路径损坏与 `%` 被环境变量展开的问题；user-site 安装下
+  随包数据定位失效导致 init 加载 0 部法规的问题。
+
+### 新增
+
+- `contracts.py`：唯一 canonical payload validator（类型 / 非空 / 枚举 / ISO
+  日期 / HTTPS URL / 严格条号 grammar / 条号与 position 唯一），loader 为最终
+  写入 choke point，所有 source_kind 与 fetch / sync / rebuild 共用。
+- schema v10（`departmental_rule` 枚举数据修复）与 v11（derived alias 分层索引、
+  FTS rowid 映射表）迁移；`search_indexes.py` 消除 alias miss 时全表 Python 扫描。
+- `data/public_fixture_manifest.json` + `scripts/check-public-fixtures`：
+  宣称「全文」的法规要求条号连续与官方条数，74 个 fixture 全量过门禁。
+- `scripts/install-local` / `install-local.ps1` 在创建虚拟环境前显式校验解释器满足
+  `requires-python >= 3.10`：默认 `python3` 过旧时自动探测 `python3.10`–`python3.13`
+  （Windows 兼顾 `py -3.x`）；仍找不到则给出平台相关提示（macOS/Homebrew、
+  Debian/apt、Windows/winget）并退出，替代原先误导性的
+  「setup.py or setup.cfg not found」pip 报错。venv 创建失败与 pip 不可用的提示
+  也从「仅 Debian/Ubuntu」扩展为平台相关。（issue #4）
+- `scripts/setup-agent` / `setup-agent.ps1` 对新用户默认加载 fixtures：无参数运行时，
+  若本地数据库不存在或为空则自动 `sync --fixtures`；新增 `--no-sync-fixtures`
+  （PowerShell `-NoSyncFixtures`）显式跳过，`--sync-fixtures` 语义改为「总是加载」。
+  （issue #5）
+- CI 发布门禁：fixture gate、pytest skip 预算（≤32）、sdist / wheel / user-site
+  安装矩阵、Windows Unicode / `%` 路径、MCP stdio 连续恢复、Bash 3.2 真实执行。
+
+### 文档
+
+- 新增全面审计报告、补审完成报告与重构计划；修复文档断链、命令示例、status
+  字段、节流环境变量与健康阈值；COMPLIANCE 改用真实项目 URL 与来源清单；
+  `.claude` 与 `.agents` skills 副本同步并纳入对照测试。
+
 ## [0.2.1] — 2026-06-30
 
 ### 修复

@@ -341,7 +341,7 @@ class DocumentationContractTests(unittest.TestCase):
             (repo_root / "data" / "source_coverage.json").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(USER_AGENT_TOKEN, f"chinalaw-cli/0.2.1 (+{PROJECT_URL})")
+        self.assertEqual(USER_AGENT_TOKEN, f"chinalaw-cli/0.5.0 (+{PROJECT_URL})")
         self.assertIn(PROJECT_URL, compliance)
         self.assertNotIn("github.com/chinalaw-cli/chinalaw-cli", compliance)
         self.assertNotIn("README 中维护者邮箱", compliance)

@@ -9,7 +9,7 @@
 shell 的 agent，在写合同审查、法律备忘录、引用核对或制度分析时，应先查本机规范
 来源，而不是凭模型记忆编法条。
 
-当前状态：`v0.2.1`。核心检索命令可用；fetch / 多源补全按具体来源持续迭代。
+当前状态：`v0.5.0`。核心检索命令可用；fetch / 多源补全按具体来源持续迭代。
 
 ## Why
 
@@ -37,13 +37,19 @@ shell 的 agent，在写合同审查、法律备忘录、引用核对或制度�
 
 ## Install
 
+> **前置要求：Python 3.10+**（见 `pyproject.toml` 的 `requires-python`）。
+> `scripts/install-local` 会在创建虚拟环境前检查解释器版本：默认 `python3` 过旧时
+> 自动探测 `python3.10`–`python3.13`；若都不满足会给出平台相关的安装提示
+> （macOS 用 Homebrew、Linux 用 apt/pyenv、Windows 用 python.org/winget），
+> 而不是抛出误导性的 pip 报错。也可用 `PYTHON=/path/to/python3.12 scripts/install-local` 显式指定。
+
 macOS / Linux / WSL：
 
 ```bash
 git clone https://github.com/nh59yytyd5-dev/chinalaw-cli.git
 cd chinalaw-cli
 scripts/install-local
-scripts/setup-agent
+scripts/setup-agent    # 首次运行（空库）会自动加载公开 fixtures 基线；--no-sync-fixtures 可跳过
 
 chinalaw init
 chinalaw article 民法典 524 --format card
@@ -55,7 +61,7 @@ Windows PowerShell：
 git clone https://github.com/nh59yytyd5-dev/chinalaw-cli.git
 cd chinalaw-cli
 .\scripts\install-local.ps1
-.\scripts\setup-agent.ps1
+.\scripts\setup-agent.ps1    # 首次运行（空库）自动加载 fixtures；-NoSyncFixtures 可跳过
 
 chinalaw init
 chinalaw article 民法典 524 --format card
