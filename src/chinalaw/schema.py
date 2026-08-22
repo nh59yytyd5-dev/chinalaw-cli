@@ -9,7 +9,7 @@ v0.1 策略：
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 SCHEMA_V1_SQL = """
@@ -415,3 +415,27 @@ CREATE INDEX IF NOT EXISTS idx_norm_clauses_fts_rows_source
 
 
 SCHEMA_V11_SQL = SCHEMA_V10_SQL + SCHEMA_V11_DELTA_SQL
+
+
+SCHEMA_V12_DELTA_SQL = """
+-- 私域规范快照：每次 import 成功的规范化 payload 全量快照。
+--
+-- 私域规范的原文文本此前不入库，``rebuild-clean --norm`` 完全依赖
+-- ``metadata.ingest.path`` 指向的原文件；原文件丢失即无法重建。本表在每次
+-- 导入时落一份规范化 payload（source 行全字段 + 全部 clauses），使 rebuild /
+-- history / diff 可以脱离原文件工作。删除 norm_sources 行时级联清除。
+CREATE TABLE IF NOT EXISTS norm_source_revisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    norm_source_id TEXT NOT NULL REFERENCES norm_sources(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(norm_source_id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS idx_norm_source_revisions_source
+    ON norm_source_revisions(norm_source_id, revision);
+"""
+
+
+SCHEMA_V12_SQL = SCHEMA_V11_SQL + SCHEMA_V12_DELTA_SQL

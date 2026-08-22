@@ -16,7 +16,12 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from chinalaw.schema import SCHEMA_V11_DELTA_SQL, SCHEMA_V11_SQL, SCHEMA_VERSION
+from chinalaw.schema import (
+    SCHEMA_V11_DELTA_SQL,
+    SCHEMA_V12_DELTA_SQL,
+    SCHEMA_V12_SQL,
+    SCHEMA_VERSION,
+)
 
 DEFAULT_DB_PATH = Path.home() / ".chinalaw" / "chinalaw.db"
 SQLITE_BUSY_TIMEOUT_MS = 30_000
@@ -503,6 +508,11 @@ def _migrate_v10_to_v11(conn: sqlite3.Connection) -> None:
     rebuild_search_indexes(conn)
 
 
+def _migrate_v11_to_v12(conn: sqlite3.Connection) -> None:
+    """新增 ``norm_source_revisions`` 私域规范快照表。详见 schema.py 注释。"""
+    _execute_script(conn, SCHEMA_V12_DELTA_SQL)
+
+
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """空 DB → 一次性落最新累积 DDL。
 
@@ -514,7 +524,7 @@ def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     在自身的 ``IF NOT EXISTS`` / ``PRAGMA table_info`` 守护下重复跑全部
     ALTER 无副作用。维护纪律见 docs/DEVELOPMENT_GUIDE.md §5。
     """
-    _execute_script(conn, SCHEMA_V11_SQL)
+    _execute_script(conn, SCHEMA_V12_SQL)
 
 
 # Migrator 注册表：``current_version`` → 把 schema 升一档的回调。
@@ -536,6 +546,7 @@ _MIGRATORS: dict[int, Callable[[sqlite3.Connection], None]] = {
     8: _migrate_v8_to_v9,
     9: _migrate_v9_to_v10,
     10: _migrate_v10_to_v11,
+    11: _migrate_v11_to_v12,
 }
 
 assert set(_MIGRATORS) == set(range(0, SCHEMA_VERSION)), (

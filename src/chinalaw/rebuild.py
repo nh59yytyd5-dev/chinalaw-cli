@@ -15,6 +15,7 @@ from pathlib import Path
 from chinalaw import cleaning, normsources
 from chinalaw.db import connect, migrate, set_meta
 from chinalaw.loader import load_law_from_dict
+from chinalaw.models import normalize_norm_source_type
 from chinalaw.service import _resolve_law_row
 
 
@@ -192,7 +193,7 @@ def _rebuild_norm_clean(
         for row in rows:
             try:
                 current_payload = _norm_payload_from_current_rows(conn, row)
-                cleaned = _norm_payload_for_rebuild(row)
+                cleaned, rebuild_source = _norm_payload_for_rebuild(conn, row)
                 comparison = _compare_norm_payloads(current_payload, cleaned)
                 changed = comparison["changed"]
                 loaded = False
@@ -214,6 +215,7 @@ def _rebuild_norm_clean(
                         "title": row["name"],
                         "changed": changed,
                         "loaded": loaded,
+                        "rebuild_source": rebuild_source,
                         **comparison,
                     }
                 )
@@ -435,33 +437,65 @@ def _norm_payload_from_current_rows(conn: sqlite3.Connection, row: sqlite3.Row) 
     }
 
 
-def _norm_payload_for_rebuild(row: sqlite3.Row) -> dict:
+def _norm_rebuild_source_type(value: object) -> str:
+    """rebuild 专用的 source_type 归一化。
+
+    ``import_source_from_dict`` 对 source_type 做严格枚举校验；存量库可能
+    还留着已废弃的旧值或更早的枚举外值，rebuild 重建 payload 时先按
+    ``LEGACY_NORM_SOURCE_TYPE_MAP`` 映射，映射不到才兜底 ``other``
+    （不回写 DB 原值），保证 rebuild 不炸。
+    """
+
+    cleaned = str(value).strip() if value is not None else ""
+    normalized, _ = normalize_norm_source_type(cleaned)
+    return normalized
+
+
+def _norm_payload_for_rebuild(conn: sqlite3.Connection, row: sqlite3.Row) -> tuple[dict, str]:
+    """重建用 payload：优先原文件，缺失时回退最新 revision 快照。
+
+    返回 ``(payload, rebuild_source)``；``rebuild_source`` 为 ``"file"`` 或
+    ``"snapshot"``。两者皆不可用时抛错，由上层走 errors 通道。
+    """
+
     metadata = _decode_metadata(row["metadata_json"])
     ingest = metadata.get("ingest") if isinstance(metadata.get("ingest"), dict) else {}
     source_path_raw = ingest.get("path")
+    if source_path_raw:
+        source_path = Path(source_path_raw).expanduser()
+        if source_path.exists():
+            text = normsources.read_source_text(source_path)
+            return normsources.build_source_from_text(
+                text,
+                name=row["name"],
+                source_id=row["id"],
+                short_name=row["short_name"],
+                source_type=_norm_rebuild_source_type(row["source_type"]),
+                authority=row["authority"],
+                binding_scope=row["binding_scope"],
+                jurisdiction=row["jurisdiction"],
+                effective_at=row["effective_at"],
+                repealed_at=row["repealed_at"],
+                source_url=row["source_url"],
+                source_name=row["source_name"],
+                source_checked_at=row["source_checked_at"],
+                source_hash=row["source_hash"],
+                aliases=_decode_aliases(row["aliases"]),
+                metadata=metadata,
+            ), "file"
+    snapshot = normsources.get_latest_revision_snapshot(conn, row["id"])
+    if snapshot is not None:
+        snapshot = dict(snapshot)
+        snapshot["source_type"] = _norm_rebuild_source_type(snapshot.get("source_type"))
+        return snapshot, "snapshot"
     if not source_path_raw:
-        raise ValueError("norm source has no ingest.path metadata; re-ingest the source file")
-    source_path = Path(source_path_raw).expanduser()
-    if not source_path.exists():
-        raise FileNotFoundError(f"norm source file not found: {source_path}")
-    text = normsources.read_source_text(source_path)
-    return normsources.build_source_from_text(
-        text,
-        name=row["name"],
-        source_id=row["id"],
-        short_name=row["short_name"],
-        source_type=row["source_type"],
-        authority=row["authority"],
-        binding_scope=row["binding_scope"],
-        jurisdiction=row["jurisdiction"],
-        effective_at=row["effective_at"],
-        repealed_at=row["repealed_at"],
-        source_url=row["source_url"],
-        source_name=row["source_name"],
-        source_checked_at=row["source_checked_at"],
-        source_hash=row["source_hash"],
-        aliases=_decode_aliases(row["aliases"]),
-        metadata=metadata,
+        raise ValueError(
+            "norm source has no ingest.path metadata and no stored revision snapshot; "
+            "re-ingest the source file"
+        )
+    raise FileNotFoundError(
+        f"norm source file not found: {Path(source_path_raw).expanduser()}; "
+        "no stored revision snapshot"
     )
 
 

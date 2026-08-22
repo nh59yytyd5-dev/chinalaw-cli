@@ -51,6 +51,19 @@ agent 和外部脚本不应直接调用 `_split_trailing_structural_headings()`�
 
 `source_hash` 表示上游内容身份，不表示 cleaning 代码版本。因此 cleaning 规则升级后，即使 `source_hash` 不变，也可能需要重建本地库。
 
+### 3.1 非条文化文书的切分（court_main 等 HTML 来源）
+
+司法政策、会议纪要等文书不使用"第N条"条号，清洗按正文形态依次尝试：
+
+1. `N.【标题】正文` 连续编号条目（纪要类文档典型形态，如九民纪要 130 条）：
+   `parse_titled_numbered_items_from_text` 解析，`number` 归一为阿拉伯数字串，
+   `title` 取【】内容，`part` 取"一、"节 / "（一）"小节标题上下文；文号、印发通知、
+   主送机关、目录块和引言汇成 symbolic `序言` 条目置于首位。
+   编号断档 / 重复 / 条目正文为空时抛 ValueError（fail loud），不得静默退化为单条全文。
+2. 无标题的 `N. 正文` 编号项：`parse_numbered_items_from_text`。
+3. 均不成立时保持单条 `正文` 形态（既有行为），并在适配层对"嵌入引用的法条节选"
+   做首条序号校验，避免把引文当成本文书的条文。
+
 ## 4. Alias 规则
 
 清洗阶段会通过 `aliases.py` 派生常用简称，例如：

@@ -50,7 +50,12 @@ chinalaw fetch 民法典 --article 第五百八十五条 --format json
 - 客户 instruction
 - 项目特别要求
 
-这些内容对真实 agent 工作流很重要。`chinalaw-cli` 应让它们进入同一检索流程，但必须明确区分效力层级。
+这些内容对真实 agent 工作流很重要。`chinalaw-cli` 让它们进入同一检索流程，
+并已落地效力层级区分：私域规范以受控 `source_type` 枚举按约束力来源分类
+（CONTRACT §2.9，类型间不做绝对效力排序），检索输出带 `hierarchy` /
+`binding_note`（该类型的约束力定性提示），与公开法同命中时顶层附加
+`conflict_notice`，markdown 明确标注"不是国家法规范"；MCP 默认不暴露私域
+（`--allow-private-norms` 显式开启），`norm export` 带防泄漏标注。
 
 ### Fetch + Cleaning
 

@@ -5,6 +5,50 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 私域规范效力提示：`NormSourceType` 受控枚举按约束力来源分类
+  （`contractual_requirement` 合同约定型 / `internal_governance` 内部治理型
+  / `standard` 标准型 / `trade_usage` 习惯惯例型 / `other`）；私域规范之间
+  不提供绝对效力排序，检索输出中的私域命中带 `hierarchy: "private_norm"`
+  与该类型约束力定性提示 `binding_note` 字段，markdown 渲染中文类型名并附
+  "不是国家法规范"醒目提示；`search` 同时命中公开法与私域规范时顶层附加
+  `conflict_notice`。
+- 私域规范生命周期管理：schema v12 新增 `norm_source_revisions` 快照表，
+  每次 `norm import` / `norm ingest` 写入规范化 payload 快照；新命令
+  `norm delete`（连带删除条款、快照与检索索引）、`norm history`、
+  `norm diff [--from N --to M]`；`rebuild-clean --norm` 在原文件丢失时
+  fallback 最新快照重建，item 标 `rebuild_source: "snapshot"`。
+- `norm export` 输出顶层带 `sensitivity: "private"` 与 `notice` 防泄漏
+  提示；新增 `--metadata-only`，只导出元数据与条款号 / 标题清单。
+- `chinalaw-mcp` 新增 `--allow-private-norms` 开关（默认关闭，见下）。
+- `data/norms/acme-lending-policy.json`：虚构私域规范示例（机构与项目均
+  为虚构），只随仓库分发、不打进发布包。
+- court_main 清洗支持司法会议纪要条级切分：`N.【标题】` 连续编号条目
+  （如九民纪要 130 条）解析为独立 articles，前置通知 / 目录 / 引言汇成
+  `序言` 条目，编号断档或空条目 fail loud。九民纪要等审判指导性文件
+  由此经公开法通道入库（`level: judicial_meeting_minutes`），不再占用
+  私域规范通道。
+
+### 变更（行为 / 兼容性）
+
+- **MCP 默认行为变化：`chinalaw-mcp` 默认不再暴露私域规范。**
+  `chinalaw_article` / `chinalaw_articles` 不再 fallback 私域条款，
+  `chinalaw_search` 的 `kind=all` 不再返回 norm 命中，显式 `kind=norm`
+  返回错误并提示开关；需以 `--allow-private-norms` 启动恢复旧行为。
+- `source_type` 从开放枚举改为受控枚举，按约束力来源分类（§2.9），缺省值
+  `internal_governance`：`norm ingest --source-type` / `norm import` 对完全
+  未知的值 fail loud（exit 2 / ValueError）；已废弃的旧枚举值
+  （`lender_requirement` → `contractual_requirement`，`internal_compliance` /
+  `private_policy` → `internal_governance`，`industry_standard` → `standard`）
+  导入时自动映射并附 `deprecation_warning`；存量库中的旧值不做数据迁移，
+  输出层归一为新值并附 `legacy_source_type` 原值，其余枚举外历史值按
+  `other` 处理。私域规范之间不做绝对效力排序，无 `norm_source_type_rank`
+  字段。
+- `article` / `articles` 私域 fallback 的 law 形状 `status` 由 `"active"`
+  改为 `"not_applicable"`（私域规范无国家法效力状态语义，该值不属于
+  LawStatus 枚举），`via: "norm_fallback"` 标记不变。
+
 ## [0.5.0] — 2026-08-12
 
 本版本落地 2026-07-26 全面审计与 Phase 0–9 重构：85 条证据观察全部修复或显式

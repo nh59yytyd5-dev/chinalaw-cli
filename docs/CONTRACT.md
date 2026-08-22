@@ -48,7 +48,7 @@
 ## 2. 数据模型（SQLite DDL）
 
 > 所有表 schema 由 `chinalaw.schema` 模块在显式写入流程调用 `migrate()` 时创建。
-> 当前 schema 版本 = **11**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
+> 当前 schema 版本 = **12**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
 >
 > `law_relations` / `applicability_rules` 已进入 alpha 协议，用于时间效力检索线索。`alias_records` / `call_log` 仍属后续方向。
 
@@ -146,6 +146,25 @@ CREATE TABLE norm_sources (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+**`norm_source_revisions` — 私域规范快照（schema v12 新增）**：
+
+```sql
+CREATE TABLE norm_source_revisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    norm_source_id TEXT NOT NULL REFERENCES norm_sources(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL,               -- 同一 source 内从 1 递增
+    snapshot_json TEXT NOT NULL,             -- 导入时的规范化 payload 全量快照
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(norm_source_id, revision)
+);
+```
+
+**用途**：每次 `norm import` / `norm ingest` 成功都会写入一份规范化 payload
+（source 行全字段 + 全部 clauses）快照，使 `rebuild-clean --norm` 在原文件
+丢失时仍能重建（item 标 `rebuild_source: "snapshot"`），并支撑 `norm history`
+/ `norm diff`。`snapshot_json` 是内部存储字段，不在公开 JSON 输出中原样暴露；
+删除 `norm_sources` 行时级联清除。
 
 ### 2.5 `norm_clauses` — 私域规范条款
 
@@ -300,6 +319,12 @@ CREATE TABLE meta (
 `judicial_meeting_minutes` / `judicial_policy` / `guiding_case` 不在 flk.npc 数据
 范围内，由 `court_gongbao` / `court_main` / `spp_gov_cn` 等多源 adapter 直接写入。
 
+`judicial_meeting_minutes` 类文书不使用"第N条"条号，清洗按 `N.【标题】` 编号条目
+切分（规则见 docs/CLEANING.md §3.1）：`number` 为阿拉伯数字串，`number_display`
+保留原始形态（如 `1.`），`title` 取【】内容；文号 / 印发通知 / 引言等前置内容
+汇成 symbolic `序言` 条目。编号断档或条目正文为空时 fetch 报错（fail loud），
+不静默退化为单条全文。
+
 **`status`（LawStatus）**：
 
 | 值 | 含义 |
@@ -311,7 +336,40 @@ CREATE TABLE meta (
 | `unknown` | 未知 |
 | `seed` | 本仓库样例 / 核心条款 seed；不是官方效力状态，不保证全文完整 |
 
-**`source_type`（NormSourceType，开放枚举）**：示例值 `private_policy` / `lender_requirement` / `internal_compliance` / `industry_standard`。本期不强制约束，由贡献者自行约定。
+**`source_type`（NormSourceType，受控枚举，按约束力来源分类）**：
+
+| 值 | 中文名 | 含义 | 约束力定性（`binding_note`） |
+|----|--------|------|------|
+| `contractual_requirement` | 合同约定型 | 放款条件、交易相对方要求 | 仅经合同约定产生约束力，属合同义务范畴 |
+| `internal_governance` | 内部治理型 | 公司制度、合规手册、HR 制度（缺省值） | 对内约束力；劳动法语境下规章制度需经民主程序并公示才对员工生效（劳动合同法§4） |
+| `standard` | 标准型 | 国标 / 行标 / 团标 | 强制性标准必须执行，推荐性标准经合同援引方有约束力（标准化法§2、§10） |
+| `trade_usage` | 习惯惯例型 | 交易习惯、行业惯例 | 民法典§10 意义上的习惯，作为法源补充 |
+| `other` | 其他 | 兜底类型 | 约束力来源需个案判断 |
+
+私域规范之间**不提供绝对效力排序**：各类型约束力来源不同，不存在线性高低，
+输出层只附该类型的约束力定性提示（`binding_note` 字段），绝不生成
+"XX 效力高于 XX" 的判断，也不做逐条语义冲突判断。九民纪要等审判指导性文件
+不属于私域规范，走公开法通道（见 `level` 枚举），不占用本表。
+
+`norm import` / `norm ingest --source-type` 对完全未知的值 fail loud
+（ValueError，CLI exit 2）。已废弃的旧枚举值按 `LEGACY_NORM_SOURCE_TYPE_MAP`
+自动映射（`lender_requirement` → `contractual_requirement`，
+`internal_compliance` / `private_policy` → `internal_governance`，
+`industry_standard` → `standard`）：导入侧映射后继续导入并在结果中附
+`deprecation_warning` 与 `legacy_source_type`；存量库中的旧值不做数据迁移，
+输出层归一为新值并附 `legacy_source_type` 原值；其余枚举外历史值按 `other`
+处理并同样附 `legacy_source_type`。
+
+**私域规范的效力分层输出**：
+
+- 检索结果中的私域命中带 `hierarchy: "private_norm"` 与 `binding_note`
+  （该 source_type 的约束力定性提示）字段；公开法命中不带 `hierarchy` 字段。
+- `article` / `articles` 在公开法未命中时 fallback 到私域条款，此时 law 形状的
+  `status` 固定为 **`not_applicable`**（私域规范没有国家法的"现行状态"语义，
+  该值不属于 LawStatus 枚举），并带 `via: "norm_fallback"` 标记。
+- `search` 同时命中公开法条与私域规范时，JSON 顶层附加 `conflict_notice`
+  字段："公开法与私域规范均命中，效力以公开法为准；私域规范仅在合同/制度
+  约定范围内约束。"Markdown 输出在私域小节前渲染同一提示。
 
 ---
 
@@ -558,7 +616,8 @@ JSON 输出 schema：
   ],
   "law_hits": [Law],
   "norm_clause_hits": [{...}],
-  "norm_source_hits": [NormSource]
+  "norm_source_hits": [NormSource],
+  "conflict_notice": "string | 仅公开法与私域规范同时命中时出现，见 §2.9"
 }
 ```
 
@@ -873,14 +932,35 @@ Markdown 输出选项：
 | `list` | — | `[NormSource, ...]` |
 | `show <name>` | 私域规范标识 | `NormSource`（含 `clauses`） |
 | `clause <name> <number>` | 标识 + 条款号 | `{source, clause, requested_number}` |
-| `import <file>` | JSON 文件 | `{kind: "norm_source_import", source_id, name, clauses_loaded, source_type}` |
+| `import <file>` | JSON 文件 | `{kind: "norm_source_import", source_id, name, clauses_loaded, source_type, revision}`；`source_type` 为已废弃旧值时自动映射并附 `deprecation_warning` / `legacy_source_type`（§2.9） |
 | `ingest <file> --name ...` | txt/md/docx/pdf | 同上，附 `ingest_format`；PDF 依赖本机 `pdftotext` |
-| `export <name>` | 标识 | 完整 `NormSource` JSON |
+| `export <name> [--metadata-only]` | 标识 | 完整 `NormSource` JSON（见下） |
+| `delete <name>` | 标识 | `{kind: "norm_source_delete", ok, id, name, clauses_deleted, revisions_deleted}` |
+| `history <name>` | 标识 | `{kind: "norm_source_history", id, name, revision_count, revisions[]}` |
+| `diff <name> [--from N --to M]` | 标识 | `{kind: "norm_source_diff", from, to, changed, *_count, added[], removed[], modified[]}` |
+
+每次 `import` / `ingest` 成功都会向 `norm_source_revisions`（§2.4）写入一份
+规范化 payload 快照，`revision` 从 1 递增；快照使 `rebuild-clean --norm` 在
+原文件丢失时仍可重建，并支撑 `history` / `diff`。
+
+- `history` 的 `revisions[]` 每项含 `revision` / `created_at` / `clause_count`
+  / `source_hash`。
+- `diff` 默认比较**最新快照 vs 当前库内容**（`from` 为 revision 号、`to` 为
+  `"current"`）；`--from` / `--to` 须成对传入以比较两个历史 revision。
+  条款按 position 对齐比较，输出增 / 删 / 改计数与条款号清单。规范无任何
+  快照时返回 `error: "no_revisions"`；revision 不存在返回
+  `error: "revision_not_found"`（均 exit 1）；只传 `--from` / `--to` 之一
+  为参数错误（exit 2）。
+- `delete` 连带删除条款、快照与检索索引（FTS），无交互确认；未命中 exit 1。
+- `export` 输出顶层固定带 `"sensitivity": "private"` 与 `"notice"` 防泄漏
+  提示（"私域规范数据，请勿上传公开仓库或外部服务"）；`--metadata-only`
+  只导出元数据与条款号 / 标题清单，`clauses[]` 不含条款正文 `text`。
 
 `norm ingest` 的来源元数据入口：
 
 | 参数 | 说明 |
 |------|------|
+| `--source-type <type>` | 来源类型，受控枚举（§2.9），默认 `internal_governance`；完全未知的值 exit 2 |
 | `--alias <name>` | 私域规范别名，可重复；用于后续 `norm clause` / `article` fallback 解析 |
 | `--metadata-json <json>` | 额外 metadata JSON object，与自动生成的 `metadata.ingest` 合并 |
 | `--metadata-file <file>` | 从 JSON object 文件读取额外 metadata，与 `--metadata-json` 可叠加 |
@@ -1690,6 +1770,11 @@ JSON 输出 schema：
 `items[].kind == "norm_source"` 时，明细字段为 `norm_source_id`、`clause_count_before`、
 `clause_count_after`、`clause_text_changed_count`、`clause_number_changed_count`。
 
+私域规范重建优先读 `metadata.ingest.path` 指向的原文件；原文件缺失或没有
+ingest 路径时，fallback 到 `norm_source_revisions`（§2.4）最新快照重建，
+item 带 `rebuild_source: "file" | "snapshot"` 标记；两者皆无才进入 `errors`
+通道。
+
 退出码：`ok=true` 时 0；指定 `--law` / `--norm` 未找到或存在重建错误时 1；参数错误时 2。
 
 ### 4.14 `verify-source <source>` (maintenance smoke)
@@ -1835,6 +1920,16 @@ CONTRACT 塞进上下文。MCP server 必须复用公开服务函数，不直接
 chinalaw-mcp --db ~/.chinalaw/chinalaw.db
 ```
 
+**私域规范默认不暴露**：不带 `--allow-private-norms` 启动时，
+`chinalaw_article` / `chinalaw_articles` 不做私域 fallback（等同 CLI 的
+`--no-norm-fallback`），`chinalaw_search` 的 `kind=all` 不返回 norm 命中，
+显式 `kind=norm` 返回错误（-32600）并提示该开关。确需通过 MCP 检索私域
+规范时显式开启：
+
+```bash
+chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
+```
+
 初始工具集限制为低上下文、稳定语义：
 
 | tool | 对应 CLI |
@@ -1941,7 +2036,7 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db
   "id": "lending-policy",                 // 可选，缺省由 name 派生
   "short_name": "放款要求",
   "aliases": ["甲方放款要求", "放款标准"],
-  "source_type": "lender_requirement",    // 必填，开放枚举
+  "source_type": "contractual_requirement",    // 受控枚举，见 §2.9；缺省 internal_governance
   "authority": "某甲方风控部",
   "binding_scope": "某融资项目放款审查",
   "jurisdiction": "CN",

@@ -37,6 +37,7 @@ from chinalaw import (
     discover as discover_mod,
 )
 from chinalaw import fetch as fetch_mod
+from chinalaw.contracts import NORM_SOURCE_TYPE_VALUES
 from chinalaw.db import DEFAULT_DB_PATH
 from chinalaw.sync import SYNC_SOURCES, sync_source
 
@@ -852,7 +853,12 @@ def _add_norm_parser(sub) -> None:
     p_norm_ingest.add_argument("--name", required=True, help="私域规范名称")
     p_norm_ingest.add_argument("--id", dest="source_id", help="私域规范稳定 ID")
     p_norm_ingest.add_argument("--short-name", help="简称")
-    p_norm_ingest.add_argument("--source-type", default="private_policy", help="规范来源类型")
+    p_norm_ingest.add_argument(
+        "--source-type",
+        default="internal_governance",
+        choices=sorted(NORM_SOURCE_TYPE_VALUES),
+        help="规范来源类型（受控枚举，默认 internal_governance）",
+    )
     p_norm_ingest.add_argument("--authority", help="制定主体")
     p_norm_ingest.add_argument("--binding-scope", help="约束范围")
     p_norm_ingest.add_argument("--jurisdiction", help="适用区域")
@@ -898,7 +904,32 @@ def _add_norm_parser(sub) -> None:
 
     p_norm_export = norm_sub.add_parser("export", help="导出私域规范 JSON")
     p_norm_export.add_argument("name", help="私域规范 id / 名称")
+    p_norm_export.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="仅导出元数据与条款号/标题清单，不含条款正文 text",
+    )
     _add_format_arg(p_norm_export)
+
+    p_norm_delete = norm_sub.add_parser(
+        "delete",
+        help="删除私域规范及其条款、快照与索引（无交互确认，慎用）",
+    )
+    p_norm_delete.add_argument("name", help="私域规范 id / 名称")
+    _add_format_arg(p_norm_delete)
+
+    p_norm_history = norm_sub.add_parser("history", help="查看私域规范快照修订历史")
+    p_norm_history.add_argument("name", help="私域规范 id / 名称")
+    _add_format_arg(p_norm_history)
+
+    p_norm_diff = norm_sub.add_parser(
+        "diff",
+        help="对比私域规范条款差异（默认最新快照 vs 当前库内容）",
+    )
+    p_norm_diff.add_argument("name", help="私域规范 id / 名称")
+    p_norm_diff.add_argument("--from", dest="from_revision", type=int, help="起始 revision")
+    p_norm_diff.add_argument("--to", dest="to_revision", type=int, help="目标 revision")
+    _add_format_arg(p_norm_diff)
 
 
 def _add_commentary_parser(sub) -> None:
@@ -2045,7 +2076,9 @@ def _handle_norm(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
         _emit(result, fmt, formatters.norm_source_import_to_markdown)
         return 0
     if args.norm_command == "export":
-        source = normsources.export_source(db_path, args.name)
+        source = normsources.export_source(
+            db_path, args.name, metadata_only=args.metadata_only
+        )
         if source is None:
             _emit(
                 {"found": False, "name": args.name},
@@ -2054,6 +2087,72 @@ def _handle_norm(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
             )
             return 1
         _emit(source, fmt, formatters.norm_source_to_markdown)
+        return 0
+    if args.norm_command == "delete":
+        result = normsources.delete_source(db_path, args.name)
+        if result is None:
+            _emit(
+                {
+                    "kind": "norm_source_delete",
+                    "ok": False,
+                    "found": False,
+                    "name": args.name,
+                },
+                fmt,
+                lambda _: formatters.norm_source_delete_to_markdown(None),
+            )
+            return 1
+        _emit(result, fmt, formatters.norm_source_delete_to_markdown)
+        return 0
+    if args.norm_command == "history":
+        payload = normsources.list_revisions(db_path, args.name)
+        if payload is None:
+            _emit(
+                {
+                    "kind": "norm_source_history",
+                    "found": False,
+                    "name": args.name,
+                },
+                fmt,
+                lambda _: formatters.norm_source_history_to_markdown(None),
+            )
+            return 1
+        _emit(payload, fmt, formatters.norm_source_history_to_markdown)
+        return 0
+    if args.norm_command == "diff":
+        try:
+            payload = normsources.diff_revisions(
+                db_path,
+                args.name,
+                from_revision=args.from_revision,
+                to_revision=args.to_revision,
+            )
+        except ValueError as exc:
+            _emit(
+                {
+                    "kind": "norm_source_diff",
+                    "error": exc.__class__.__name__,
+                    "message": str(exc),
+                },
+                fmt,
+                lambda m: f"! {m['error']}: {m['message']}\n",
+            )
+            return 2
+        if payload is None:
+            _emit(
+                {
+                    "kind": "norm_source_diff",
+                    "found": False,
+                    "name": args.name,
+                },
+                fmt,
+                lambda _: formatters.norm_source_diff_to_markdown(None),
+            )
+            return 1
+        if payload.get("error"):
+            _emit(payload, fmt, formatters.norm_source_diff_to_markdown)
+            return 1
+        _emit(payload, fmt, formatters.norm_source_diff_to_markdown)
         return 0
     parser.print_help()
     return 0

@@ -11,11 +11,12 @@ import re
 from datetime import date, datetime
 from urllib.parse import urlsplit
 
-from chinalaw.models import LawLevel, LawStatus
+from chinalaw.models import LawLevel, LawStatus, NormSourceType
 from chinalaw.service import normalize_article_number
 
 LAW_LEVEL_VALUES = frozenset(item.value for item in LawLevel)
 LAW_STATUS_VALUES = frozenset(item.value for item in LawStatus)
+NORM_SOURCE_TYPE_VALUES = frozenset(item.value for item in NormSourceType)
 
 _LOCAL_SOURCE_SCHEMES = {
     "file",
@@ -128,6 +129,24 @@ def _enum_text(payload: dict, field: str, allowed: frozenset[str]) -> str:
             f"{value!r}"
         )
     return value
+
+
+def validate_norm_source_type_value(value: object) -> str:
+    """Validate one private-norm source_type against the controlled enum.
+
+    Returns the cleaned value; raises ValueError on unknown values so bad
+    types fail loud at the ingest boundary instead of silently persisting.
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("norm source source_type must be a non-empty string")
+    cleaned = value.strip()
+    if cleaned not in NORM_SOURCE_TYPE_VALUES:
+        raise ValueError(
+            "norm source source_type must be one of "
+            f"{sorted(NORM_SOURCE_TYPE_VALUES)}: {cleaned!r}"
+        )
+    return cleaned
 
 
 def _validate_aliases(payload: dict) -> None:

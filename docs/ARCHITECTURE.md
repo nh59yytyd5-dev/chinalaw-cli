@@ -47,7 +47,7 @@ SQLite + FTS5
 | `src/chinalaw/loader.py` | JSON payload 幂等入库，维护 FTS |
 | `src/chinalaw/search_indexes.py` | 精确别名索引、FTS rowid 映射与重建 |
 | `src/chinalaw/db.py` | SQLite 连接、migration、meta |
-| `src/chinalaw/schema.py` | 当前 schema v11 DDL |
+| `src/chinalaw/schema.py` | 当前 schema v12 DDL |
 | `src/chinalaw/adapters/flk_npc.py` | 国家法律法规数据库 adapter |
 | `src/chinalaw/normsources.py` | 私域规范导入、导出、切条、检索 |
 | `src/chinalaw/normpacks.py` | 本地规范包导入、导出、展示、校验 |
@@ -55,7 +55,7 @@ SQLite + FTS5
 
 ## 3. 当前数据模型
 
-当前 schema 版本是 v11。
+当前 schema 版本是 v12。
 
 核心表：
 
@@ -64,6 +64,7 @@ SQLite + FTS5
 - `revisions`
 - `norm_sources`
 - `norm_clauses`
+- `norm_source_revisions`
 - `norm_packs`
 - `norm_pack_items`
 - `law_relations`
@@ -178,6 +179,20 @@ loader.load_payload(canonical_payload)
 - 保留约束范围。
 - 保留来源类型。
 - 输出时明确它不是国家法。
+
+已落地的分层与生命周期机制：
+
+- `source_type` 是受控枚举（CONTRACT §2.9），按约束力来源分类，导入时
+  fail loud 校验；私域规范之间不做绝对效力排序，输出层以 `binding_note`
+  附该类型的约束力定性提示，不做逐条语义冲突判断。
+- `article` fallback 私域条款时 `status` 固定为 `not_applicable` 并带
+  `via: "norm_fallback"`；`search` 同命中公开法与私域时顶层附加
+  `conflict_notice`；markdown 输出附醒目提示与中文类型名。
+- MCP 默认不暴露私域（`--allow-private-norms` 显式开启）；`norm export`
+  带 `sensitivity` / `notice` 防泄漏标注，支持 `--metadata-only`。
+- 每次导入写 `norm_source_revisions` 快照（schema v12），支撑
+  `norm history` / `norm diff` / `norm delete`，以及 `rebuild-clean --norm`
+  在原文件丢失时从快照重建。
 
 ## 9. 规范包
 

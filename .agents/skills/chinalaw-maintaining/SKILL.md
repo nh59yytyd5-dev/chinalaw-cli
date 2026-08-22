@@ -230,7 +230,7 @@ rsync -av ~/.chinalaw/ new-machine:~/.chinalaw/
 | `chinalaw sync --from-dir <path>` | 从目录批量入库（自定义 fixture） |
 | `chinalaw rebuild-clean [--dry-run] [--law <name>]` | 重建清洗 |
 | `chinalaw verify-source <source>` | 上游 smoke |
-| `chinalaw norm import / ingest / export` | 私域规范管理 |
+| `chinalaw norm import / ingest / export / delete / history / diff` | 私域规范管理 |
 | `chinalaw pack import / export` | 规范包管理 |
 | `chinalaw laws --level <level> --status <status>` | 浏览法规清单 |
 | `chinalaw search <kw> --kind law` | 按关键词找法规候选 |

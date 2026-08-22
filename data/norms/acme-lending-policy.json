@@ -1,0 +1,35 @@
+{
+  "kind": "norm_source",
+  "id": "acme-lending-policy",
+  "name": "甲方放款要求（虚构示例）",
+  "short_name": "放款要求",
+  "aliases": ["甲方放款要求", "放款标准"],
+  "source_type": "contractual_requirement",
+  "authority": "ACME 银行风控部（虚构机构）",
+  "binding_scope": "某虚构融资项目的放款审查",
+  "jurisdiction": "CN",
+  "effective_at": "2026-01-01",
+  "source_name": "local-file",
+  "metadata": {
+    "owner": "demo",
+    "theme": "lending",
+    "fictional": true
+  },
+  "clauses": [
+    {
+      "number": "第一条",
+      "number_display": "第一条",
+      "text": "借款主体应提交完整、真实、有效的工商登记及授权文件。"
+    },
+    {
+      "number": "第二条",
+      "number_display": "第二条",
+      "text": "涉及担保的，应确认担保审批程序、签署权限和担保物状态均已满足要求。"
+    },
+    {
+      "number": "2.1",
+      "number_display": "2.1",
+      "text": "如担保人为关联方，还应补充提交关联交易审批材料。"
+    }
+  ]
+}

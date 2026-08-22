@@ -211,9 +211,55 @@ Windows PowerShell：
 | `sync --fixtures` | 加载随仓库发布的公开规范基线 |
 | `ensure <law>` | 本地优先检查，缺失时尝试补全 |
 | `fetch <law>` | 从公开来源抓取、清洗、入库（preview） |
+| `norm <subcommand>` | 私域规范管理：list / show / clause / import / ingest / export / delete / history / diff |
+| `pack <subcommand>` | 规范包管理：list / show / add / import / export / validate |
+| `audit <target>` | 引用审查门禁（file / pack / norm / grounding） |
 | `doctor` / `status` | 本机健康检查 |
+| `rebuild-clean [--law\|--norm]` | 用当前 cleaning 规则重建已入库公开法规 / 私域规范（alpha） |
 
 默认输出 JSON。多数命令可加 `--format md` 得到人类可读输出。
+
+## 私域规范
+
+除公开法规外，本机还可以把私域规范（公司制度、甲方放款要求、内部合规手册、
+行业标准等）作为 first-class 数据入库检索。它们只存进本地 SQLite 库，
+不随包分发、不上传远端。
+
+**私域规范不是国家法规范，不具备法律渊源效力**，仅在合同 / 制度约定范围内
+约束。输出层始终带这一效力分层提示：检索结果中的私域命中带
+`hierarchy: "private_norm"` 与该类型约束力定性提示 `binding_note` 字段；
+`article` fallback 到私域条款时 `status` 为 `not_applicable`，markdown
+输出附醒目提示；`search` 同时命中公开法与私域规范时顶层附加
+`conflict_notice`。
+
+快速上手（`data/norms/acme-lending-policy.json` 是随仓库的虚构示例，
+仅演示文件格式，不含任何真实机构信息）：
+
+```bash
+chinalaw norm import data/norms/acme-lending-policy.json --format json
+chinalaw norm show 甲方放款要求 --format md
+chinalaw search 担保审批 --kind norm --format md
+```
+
+txt / md / docx / pdf 文件可直接切分入库：
+
+```bash
+chinalaw norm ingest path/to/policy.md \
+  --name "内部合规手册" --source-type internal_governance --format md
+```
+
+`--source-type` 是受控枚举（详见 [docs/CONTRACT.md](docs/CONTRACT.md) §2.9），
+按约束力来源分类：`contractual_requirement`（合同约定型）/
+`internal_governance`（内部治理型，默认）/ `standard`（标准型）/
+`trade_usage`（习惯惯例型）/ `other`。私域规范之间不提供绝对效力排序，
+输出层只附各类型的约束力定性提示（`binding_note`），不做逐条语义冲突判断。
+
+生命周期：`norm history` 查看每次导入的快照修订，`norm diff` 对比条款
+增删改，`norm delete` 删除规范及其快照与检索索引。`norm export` 输出带
+`sensitivity: "private"` 与防泄漏提示；加 `--metadata-only` 只导出元数据
+和条款号清单，不含条款正文。
+
+MCP 默认不暴露私域规范，详见下文 MCP 小节的 `--allow-private-norms`。
 
 ## Data And Sources
 
@@ -247,6 +293,15 @@ CLI 是主路径；仓库也提供轻量 MCP wrapper，方便偏 MCP 的 agent �
 
 ```bash
 chinalaw-mcp --db ~/.chinalaw/chinalaw.db
+```
+
+MCP 默认不暴露私域规范：`chinalaw_article` / `chinalaw_articles` 不做私域
+fallback，`chinalaw_search` 不返回 norm 命中（显式 `kind=norm` 会报错并
+提示该开关）。确需通过 MCP 检索私域规范时，显式加 `--allow-private-norms`
+启动：
+
+```bash
+chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
 ```
 
 MCP 只应作为 CLI 的薄封装，不应引入另一套法律判断逻辑。

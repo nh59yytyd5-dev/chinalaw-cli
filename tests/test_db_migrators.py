@@ -30,6 +30,7 @@ from chinalaw.schema import (
     SCHEMA_V8_SQL,
     SCHEMA_V9_SQL,
     SCHEMA_V10_SQL,
+    SCHEMA_V11_SQL,
     SCHEMA_VERSION,
 )
 
@@ -44,6 +45,7 @@ SCHEMA_SQL_BY_VERSION = {
     8: SCHEMA_V8_SQL,
     9: SCHEMA_V9_SQL,
     10: SCHEMA_V10_SQL,
+    11: SCHEMA_V11_SQL,
 }
 
 
@@ -62,6 +64,7 @@ class MigratorRegistryTests(unittest.TestCase):
         "articles_fts_rows",
         "norm_sources_fts_rows",
         "norm_clauses_fts_rows",
+        "norm_source_revisions",
     )
 
     def test_migrators_registry_complete(self) -> None:

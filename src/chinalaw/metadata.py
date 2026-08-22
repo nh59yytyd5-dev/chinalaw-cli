@@ -588,10 +588,13 @@ COMMAND_SPECS: dict[str, dict[str, Any]] = {
         output_kind="source_verify_result",
     ),
     "norm": _command(
-        "norm <list|show|clause|import|ingest|export>",
+        "norm <list|show|clause|import|ingest|export|delete|history|diff>",
         summary="Manage private norm sources and clauses.",
         risk="local-write",
-        side_effect="import/ingest write local database; list/show/clause/export are read-only",
+        side_effect=(
+            "import/ingest/delete write local database; "
+            "list/show/clause/export/history/diff are read-only"
+        ),
         positional=[_arg("norm_command", required=True)],
         flags=[_arg("--format", choices=["json", "md"])],
         output_kind="norm_source_result",
@@ -695,7 +698,9 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "title": "Get Chinese legal article",
         "description": (
             "Return one local article by law name/id and article number. "
-            "If not found, inspect diagnosis before citing. Risk: read."
+            "If not found, inspect diagnosis before citing. Private norm "
+            "fallback hits are excluded unless the server is started with "
+            "--allow-private-norms. Risk: read."
         ),
         "cli_equivalent": "chinalaw article <law> <number> --format json",
         "risk": "read",
@@ -715,7 +720,8 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "title": "Get multiple legal articles",
         "description": (
             "Return multiple local articles for one law using a comma/range "
-            "number spec. Risk: read."
+            "number spec. Private norm fallback hits are excluded unless the "
+            "server is started with --allow-private-norms. Risk: read."
         ),
         "cli_equivalent": "chinalaw articles <law> <numbers> --format json",
         "risk": "read",
@@ -735,7 +741,9 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "title": "Search Chinese law database",
         "description": (
             "Search local laws/articles/norms. Use kind=article for legal "
-            "basis discovery. Risk: read."
+            "basis discovery. By default private norm hits are excluded and "
+            "kind=norm is rejected unless the server is started with "
+            "--allow-private-norms. Risk: read."
         ),
         "cli_equivalent": "chinalaw search <query> --format json",
         "risk": "read",
