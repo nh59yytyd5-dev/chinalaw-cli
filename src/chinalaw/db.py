@@ -19,7 +19,7 @@ from pathlib import Path
 from chinalaw.schema import (
     SCHEMA_V11_DELTA_SQL,
     SCHEMA_V12_DELTA_SQL,
-    SCHEMA_V12_SQL,
+    SCHEMA_V13_SQL,
     SCHEMA_VERSION,
 )
 
@@ -513,6 +513,16 @@ def _migrate_v11_to_v12(conn: sqlite3.Connection) -> None:
     _execute_script(conn, SCHEMA_V12_DELTA_SQL)
 
 
+def _migrate_v12_to_v13(conn: sqlite3.Connection) -> None:
+    """``norm_clauses`` 新增 ``part`` 章/节路径列。详见 schema.py 注释。"""
+    columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(norm_clauses)")
+    }
+    if "part" not in columns:
+        conn.execute("ALTER TABLE norm_clauses ADD COLUMN part TEXT")
+
+
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """空 DB → 一次性落最新累积 DDL。
 
@@ -524,7 +534,7 @@ def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     在自身的 ``IF NOT EXISTS`` / ``PRAGMA table_info`` 守护下重复跑全部
     ALTER 无副作用。维护纪律见 docs/DEVELOPMENT_GUIDE.md §5。
     """
-    _execute_script(conn, SCHEMA_V12_SQL)
+    _execute_script(conn, SCHEMA_V13_SQL)
 
 
 # Migrator 注册表：``current_version`` → 把 schema 升一档的回调。
@@ -547,6 +557,7 @@ _MIGRATORS: dict[int, Callable[[sqlite3.Connection], None]] = {
     9: _migrate_v9_to_v10,
     10: _migrate_v10_to_v11,
     11: _migrate_v11_to_v12,
+    12: _migrate_v12_to_v13,
 }
 
 assert set(_MIGRATORS) == set(range(0, SCHEMA_VERSION)), (

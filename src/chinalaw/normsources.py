@@ -185,6 +185,39 @@ def _extract_bracketed_title(text: str) -> str | None:
     return match.group(1).strip() or None
 
 
+# 章程式「第N章 / 第N节」独立标题行。中文字符集与 ``_match_clause_heading``
+# 保持一致（含 〇 / 零 / 两）；末字 章 / 节 / 条 互不重叠，不会误吞条号行。
+# 不校验章/节序号连续性——私域文本跳号是常态，只切不报错。
+_PART_HEADING_RE = re.compile(
+    r"^第[一二三四五六七八九十百千万零〇两\d]+(?P<level>[章节])[　\s]*.*$"
+)
+
+
+def _match_part_heading(line: str) -> str | None:
+    """识别「第N章 / 第N节」独立标题行，返回 ``"chapter"`` / ``"section"``。"""
+
+    match = _PART_HEADING_RE.match(line)
+    if match is None:
+        return None
+    return "chapter" if match.group("level") == "章" else "section"
+
+
+def _normalize_part_heading(line: str) -> str:
+    """章/节标题行内全角空格与连续空白归一为单个半角空格。"""
+
+    return re.sub(r"\s+", " ", line).strip()
+
+
+def _format_part(chapter: str | None, section: str | None) -> str | None:
+    """层级路径格式仿公开法 ``articles.part``：非空级以单个半角空格连接。
+
+    例：``第三章 股份 第一节 股份发行``。
+    """
+
+    parts = [level for level in (chapter, section) if level]
+    return " ".join(parts) or None
+
+
 _MARKDOWN_PREFIX_RE = re.compile(r"^[\s#>*+\-]+")
 
 
@@ -208,6 +241,8 @@ def clauses_from_text(text: str) -> list[dict]:
     buffer: list[str] = []
     leading_buffer: list[str] = []
     saw_heading = False
+    chapter: str | None = None
+    section: str | None = None
 
     def flush() -> None:
         nonlocal current, buffer
@@ -224,6 +259,20 @@ def clauses_from_text(text: str) -> list[dict]:
         if not raw_line:
             continue
         candidate = _strip_markdown_prefix(raw_line)
+        part_heading = _match_part_heading(candidate) if candidate else None
+        if part_heading is not None:
+            # 章/节标题行不进入任何条款正文，只作为层级上下文挂到后续条款
+            # 的 part 字段；新章出现时清空节上下文。
+            if part_heading == "chapter":
+                chapter = _normalize_part_heading(candidate)
+                section = None
+            else:
+                section = _normalize_part_heading(candidate)
+            if current is None and not saw_heading:
+                # 兜底：全文若没有可识别条款号，章/节标题仍作为 preamble
+                # 保留在整段 fallback 文本中，不被静默吃掉。
+                leading_buffer.append(raw_line)
+            continue
         is_markdown_header = raw_line.startswith("#")
         heading = _match_clause_heading(candidate) if candidate else None
         if heading is not None:
@@ -233,6 +282,7 @@ def clauses_from_text(text: str) -> list[dict]:
             current = {
                 "number": number,
                 "number_display": number,
+                "part": _format_part(chapter, section),
             }
             title = _extract_bracketed_title(rest)
             if title:
@@ -251,7 +301,11 @@ def clauses_from_text(text: str) -> list[dict]:
                 # those lines must not become clause #0 once real clauses exist.
                 leading_buffer.append(raw_line)
                 continue
-            current = {"number": None, "number_display": None}
+            current = {
+                "number": None,
+                "number_display": None,
+                "part": _format_part(chapter, section),
+            }
         buffer.append(raw_line)
 
     flush()
@@ -260,7 +314,9 @@ def clauses_from_text(text: str) -> list[dict]:
     stripped = "\n".join(leading_buffer).strip() if leading_buffer else text.strip()
     if not stripped:
         raise ValueError("norm source text is empty")
-    return [{"number": None, "number_display": None, "text": stripped}]
+    return [
+        {"number": None, "number_display": None, "part": None, "text": stripped}
+    ]
 
 
 def analyze_split_quality(text: str, clauses: list[dict]) -> list[dict]:
@@ -368,6 +424,7 @@ def _normalize_clause(clause: dict, position: int, source_id: str) -> dict:
         "id": _clean_text(clause.get("id")) or _clause_id(source_id, position),
         "number": normalize_clause_number(clause.get("number")),
         "number_display": number_display,
+        "part": _clean_text(clause.get("part")),
         "title": _clean_text(clause.get("title")),
         "text": text,
         "position": position,
@@ -416,6 +473,7 @@ def _clause_row_to_dict(row: sqlite3.Row) -> dict:
         "norm_source_id": row["norm_source_id"],
         "number": row["number"],
         "number_display": row["number_display"],
+        "part": row["part"],
         "title": row["title"],
         "text": row["text"],
         "position": row["position"],
@@ -626,14 +684,15 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
         conn.execute(
             """
             INSERT INTO norm_clauses (
-                id, norm_source_id, number, number_display, title, text, position
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                id, norm_source_id, number, number_display, part, title, text, position
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 clause["id"],
                 source_id,
                 clause["number"],
                 clause["number_display"],
+                clause["part"],
                 clause["title"],
                 clause["text"],
                 clause["position"],
@@ -669,6 +728,7 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
             {
                 "number": clause["number"],
                 "number_display": clause["number_display"],
+                "part": clause["part"],
                 "title": clause["title"],
                 "text": clause["text"],
                 "position": clause["position"],
@@ -765,6 +825,7 @@ def import_text_source_file(
                     "position": index,
                     "number": clause.get("number"),
                     "number_display": clause.get("number_display"),
+                    "part": clause.get("part"),
                     "title": clause.get("title"),
                     "preview": text_body[:120],
                     "char_count": len(clause.get("text") or ""),
@@ -1087,6 +1148,7 @@ def compare_norm_clause_payloads(before: dict, after: dict) -> dict:
                     "number": normalize_clause_number(clause.get("number")),
                     "number_display": clause.get("number_display")
                     or clause.get("number"),
+                    "part": clause.get("part"),
                     "title": clause.get("title"),
                     "text": (clause.get("text") or "").strip(),
                     "position": position,
@@ -1120,6 +1182,8 @@ def compare_norm_clause_payloads(before: dict, after: dict) -> dict:
             before_clause["text"] != after_clause["text"]
             or (before_clause["number"], before_clause["number_display"])
             != (after_clause["number"], after_clause["number_display"])
+            or (before_clause.get("part") or "")
+            != (after_clause.get("part") or "")
             or (before_clause.get("title") or "")
             != (after_clause.get("title") or "")
         ):

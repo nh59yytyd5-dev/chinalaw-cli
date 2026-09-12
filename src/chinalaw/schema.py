@@ -9,7 +9,7 @@ v0.1 策略：
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 SCHEMA_V1_SQL = """
@@ -439,3 +439,20 @@ CREATE INDEX IF NOT EXISTS idx_norm_source_revisions_source
 
 
 SCHEMA_V12_SQL = SCHEMA_V11_SQL + SCHEMA_V12_DELTA_SQL
+
+
+# v13：``norm_clauses`` 新增 ``part`` 列（章/节路径，可空）。
+#
+# 私域章程 / 制度普遍是"章→（节）→条"结构（见
+# ``docs/research/2026-08-22-private-norm-structure-survey.md`` §1），切条器
+# 识别出的章/节标题需要挂到条款上（"本章/本节"回指依赖它）。格式仿公开法
+# ``articles.part``：非空层级以单个半角空格连接，如
+# ``第三章 股份 第一节 股份发行``。存量库经 ``_migrate_v12_to_v13``
+# ALTER TABLE 补列，既有行 part 为 NULL。
+SCHEMA_V13_SQL = SCHEMA_V12_SQL.replace(
+    "    position INTEGER NOT NULL,\n"
+    "    UNIQUE(norm_source_id, position)\n",
+    "    position INTEGER NOT NULL,\n"
+    "    part TEXT,\n"
+    "    UNIQUE(norm_source_id, position)\n",
+)

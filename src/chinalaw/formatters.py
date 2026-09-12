@@ -1586,6 +1586,8 @@ def norm_source_to_markdown(source: dict) -> str:
                 or f"第 {clause.get('position')} 项"
             )
             lines.append(f"### {label}")
+            if clause.get("part"):
+                lines.append(f"_位置：{clause.get('part')}_")
             lines.append("")
             lines.append(clause.get("text", "").strip())
             lines.append("")
@@ -1604,7 +1606,10 @@ def norm_clause_to_markdown(payload: dict) -> str:
     source = payload["source"]
     clause = payload["clause"]
     label = clause.get("number_display") or clause.get("number") or ""
-    lines = [f"## {source.get('name')} {label}", ""]
+    lines = [f"## {source.get('name')} {label}"]
+    if clause.get("part"):
+        lines.append(f"_位置：{clause.get('part')}_")
+    lines.append("")
     lines.append(f"> {clause.get('text', '').strip()}")
     lines.append("")
     lines.append("---")

@@ -41,6 +41,7 @@ from chinalaw.schema import (
     SCHEMA_V5_SQL,
     SCHEMA_V6_SQL,
     SCHEMA_V11_SQL,
+    SCHEMA_V12_SQL,
     SCHEMA_VERSION,
 )
 from chinalaw.service import normalize_article_number, normalize_law_identifier
@@ -98,6 +99,35 @@ EXTRA_NORM_SOURCE_FIXTURE = {
         {"number": "2.1", "number_display": "2.1", "text": "如担保人为关联方，还应补充提交关联交易审批材料。"},
     ],
 }
+
+
+# 仿真公司章程样本（虚构）：章→（节）→条结构，条号全文连续中文数字。
+# 覆盖形态：全角空格章名（"第一章　总　则"）、半角空格、章名字间空格
+# （"附 则"）、节标题、"第一百〇一条"的 〇 写法、跳号（不校验连续性）。
+CHARTER_SAMPLE_TEXT = """测试样例公司章程
+
+第一章　总　则
+
+第一条 为规范公司组织和行为，根据公司法制定本章程。
+
+第二条 公司系依法设立的有限责任公司。
+
+第三章 股份
+
+第一节 股份发行
+
+第一百条 公司发行的股票为记名股票。
+
+第一百〇一条 股票由法定代表人签名、公司盖章。
+
+第二节 股份转让
+
+第一百二十条 股东持有的股份可以依法转让。
+
+第十章 附 则
+
+第二百条 本章程自股东会通过之日起施行。
+"""
 
 
 def make_docx_bytes(paragraphs: list[dict]) -> bytes:
@@ -333,6 +363,40 @@ class SchemaTests(unittest.TestCase):
                 self.assertIn("norm_source_id", columns)
                 self.assertIn("revision", columns)
                 self.assertIn("snapshot_json", columns)
+
+    def test_migrate_from_v12_to_v13_adds_norm_clause_part(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "t.db"
+            with connect(db) as conn:
+                conn.executescript(SCHEMA_V12_SQL)
+                conn.execute("INSERT INTO meta(key, value) VALUES('schema_version', '12')")
+                # 存量数据：迁移后行保留、part 为 NULL
+                conn.execute(
+                    "INSERT INTO norm_sources (id, name, source_type, source_name, "
+                    "source_checked_at, source_hash) VALUES "
+                    "('legacy-charter', '旧版章程', 'internal_governance', "
+                    "'local-file', '2026-01-01T00:00:00+00:00', 'h')"
+                )
+                conn.execute(
+                    "INSERT INTO norm_clauses (id, norm_source_id, number, "
+                    "number_display, title, text, position) VALUES "
+                    "('legacy-charter:clause:1', 'legacy-charter', '1', '第一条', "
+                    "NULL, '存量正文。', 1)"
+                )
+                migrate(conn)
+                self.assertEqual(current_version(conn), SCHEMA_VERSION)
+                columns = {
+                    row[1]
+                    for row in conn.execute("PRAGMA table_info(norm_clauses)")
+                }
+                self.assertIn("part", columns)
+                row = conn.execute(
+                    "SELECT text, part FROM norm_clauses "
+                    "WHERE id = 'legacy-charter:clause:1'"
+                ).fetchone()
+                self.assertEqual(row["text"], "存量正文。")
+                self.assertIsNone(row["part"])
 
 
 class NumberNormalizationTests(unittest.TestCase):
@@ -5437,6 +5501,134 @@ class NormSourceTests(unittest.TestCase):
         self.assertIn("2．上市公司董事", clauses[1]["text"])
         self.assertNotIn("公布机关", clauses[0]["text"])
 
+    def test_clauses_from_text_tracks_charter_chapter_and_section(self):
+        clauses = normsources.clauses_from_text(CHARTER_SAMPLE_TEXT)
+
+        self.assertEqual(len(clauses), 6)
+        by_display = {c["number_display"]: c for c in clauses}
+        # 全角空格与字间空格归一为单个半角空格
+        self.assertEqual(by_display["第一条"]["part"], "第一章 总 则")
+        self.assertEqual(by_display["第二条"]["part"], "第一章 总 则")
+        self.assertEqual(by_display["第一百条"]["part"], "第三章 股份 第一节 股份发行")
+        self.assertEqual(by_display["第一百〇一条"]["part"], "第三章 股份 第一节 股份发行")
+        self.assertEqual(by_display["第一百二十条"]["part"], "第三章 股份 第二节 股份转让")
+        # 新章出现后节上下文重置
+        self.assertEqual(by_display["第二百条"]["part"], "第十章 附 则")
+        # 章/节标题行不混入任何条款正文
+        for clause in clauses:
+            self.assertNotIn("第一章", clause["text"])
+            self.assertNotIn("第三章", clause["text"])
+            self.assertNotIn("第十章", clause["text"])
+            self.assertNotIn("第一节", clause["text"])
+            self.assertNotIn("第二节", clause["text"])
+
+    def test_clauses_from_text_without_chapters_keeps_part_none(self):
+        clauses = normsources.clauses_from_text(
+            "第一条 借款主体应提交完整资料。\n第二条 担保应完成审批。"
+        )
+        self.assertEqual(len(clauses), 2)
+        self.assertEqual([c["part"] for c in clauses], [None, None])
+
+    def test_charter_part_persisted_through_import_snapshot_and_read(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            charter_file = Path(td) / "charter.md"
+            charter_file.write_text(CHARTER_SAMPLE_TEXT, encoding="utf-8")
+            imported = normsources.import_text_source_file(
+                db_path,
+                charter_file,
+                name="测试样例章程",
+                source_id="demo-charter",
+            )
+            shown = normsources.get_source(db_path, "测试样例章程")
+            clause = normsources.get_clause(db_path, "测试样例章程", "第一百〇一条")
+            exported = normsources.export_source(db_path, "测试样例章程")
+            exported_meta = normsources.export_source(
+                db_path, "测试样例章程", metadata_only=True
+            )
+            with connect(db_path) as conn:
+                snapshot = normsources.get_latest_revision_snapshot(conn, "demo-charter")
+
+        self.assertEqual(imported["clauses_loaded"], 6)
+        self.assertEqual(shown["clauses"][0]["part"], "第一章 总 则")
+        # 〇 写法条号归一命中，读出带 part
+        self.assertIsNotNone(clause["clause"])
+        self.assertEqual(clause["clause"]["number"], "101")
+        self.assertEqual(clause["clause"]["part"], "第三章 股份 第一节 股份发行")
+        self.assertEqual(exported["clauses"][2]["part"], "第三章 股份 第一节 股份发行")
+        # metadata_only 导出保留 part、剔除正文
+        self.assertEqual(
+            exported_meta["clauses"][2]["part"], "第三章 股份 第一节 股份发行"
+        )
+        self.assertNotIn("text", exported_meta["clauses"][2])
+        # 快照规范化 payload 带 part（rebuild 脱离原文件的事实来源）
+        self.assertIsNotNone(snapshot)
+        self.assertEqual(snapshot["clauses"][2]["part"], "第三章 股份 第一节 股份发行")
+
+    def test_rebuild_norm_repopulates_part_for_pre_v13_rows(self):
+        """v13 前入库的行 part 为 NULL；rebuild 重切后 part 变化应触发重建落库。"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            charter_file = Path(td) / "charter.md"
+            charter_file.write_text(CHARTER_SAMPLE_TEXT, encoding="utf-8")
+            normsources.import_text_source_file(
+                db_path,
+                charter_file,
+                name="重建章节测试章程",
+                source_id="rebuild-part-charter",
+            )
+            # 模拟 v12 时代入库的行：part 列为 NULL
+            with connect(db_path) as conn:
+                conn.execute(
+                    "UPDATE norm_clauses SET part = NULL "
+                    "WHERE norm_source_id = 'rebuild-part-charter'"
+                )
+            result = rebuild.rebuild_clean(db_path, norm="重建章节测试章程")
+            shown = normsources.get_source(db_path, "重建章节测试章程")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["items"][0]["rebuild_source"], "file")
+        self.assertTrue(result["items"][0]["changed"])
+        self.assertGreater(result["items"][0]["clause_part_changed_count"], 0)
+        self.assertEqual(shown["clauses"][0]["part"], "第一章 总 则")
+        self.assertEqual(
+            shown["clauses"][2]["part"], "第三章 股份 第一节 股份发行"
+        )
+
+    def test_rebuild_norm_from_snapshot_preserves_part(self):
+        """原文件丢失时 snapshot 重建路径同样恢复 part。"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            charter_file = Path(td) / "charter.md"
+            charter_file.write_text(CHARTER_SAMPLE_TEXT, encoding="utf-8")
+            normsources.import_text_source_file(
+                db_path,
+                charter_file,
+                name="快照章节测试章程",
+                source_id="snapshot-part-charter",
+            )
+            charter_file.unlink()
+            with connect(db_path) as conn:
+                conn.execute(
+                    "UPDATE norm_clauses SET part = NULL "
+                    "WHERE norm_source_id = 'snapshot-part-charter'"
+                )
+            result = rebuild.rebuild_clean(db_path, norm="快照章节测试章程")
+            shown = normsources.get_source(db_path, "快照章节测试章程")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["items"][0]["rebuild_source"], "snapshot")
+        self.assertTrue(result["items"][0]["changed"])
+        self.assertEqual(
+            shown["clauses"][2]["part"], "第三章 股份 第一节 股份发行"
+        )
+
     def test_rebuild_clean_norm_replays_original_ingest_source(self):
         text = "\n".join(
             [
@@ -7634,6 +7826,41 @@ class CliTests(unittest.TestCase):
         self.assertEqual(clause_code, 0)
         clause = json.loads(clause_out)
         self.assertEqual(clause["clause"]["number"], "2")
+
+    def test_cli_norm_ingest_charter_and_clause_part(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            charter_file = Path(td) / "charter.md"
+            charter_file.write_text(CHARTER_SAMPLE_TEXT, encoding="utf-8")
+            code, out = self._run(
+                [
+                    "norm",
+                    "ingest",
+                    str(charter_file),
+                    "--name",
+                    "CLI测试章程",
+                    "--source-type",
+                    "internal_governance",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["clauses_loaded"], 6)
+
+        clause_code, clause_out = self._run(
+            ["norm", "clause", "CLI测试章程", "第一百〇一条"]
+        )
+        self.assertEqual(clause_code, 0)
+        clause = json.loads(clause_out)
+        self.assertEqual(clause["clause"]["number"], "101")
+        self.assertEqual(clause["clause"]["part"], "第三章 股份 第一节 股份发行")
+
+        md_code, md_out = self._run(
+            ["norm", "clause", "CLI测试章程", "101", "--format", "md"]
+        )
+        self.assertEqual(md_code, 0)
+        self.assertIn("_位置：第三章 股份 第一节 股份发行_", md_out)
 
     def test_cli_norm_ingest_docx_json(self):
         import tempfile

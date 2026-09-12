@@ -177,15 +177,26 @@ CREATE TABLE norm_clauses (
     title TEXT,
     text TEXT NOT NULL,
     position INTEGER NOT NULL,
+    part TEXT,                            -- 章/节路径（可空，schema v13 新增）
     UNIQUE(norm_source_id, position)
 );
 ```
 
 **条款号规则**：
 
-- 中式编号（"第一条" / "第十四条之一"）→ 复用 `normalize_article_number`，归一为阿拉伯数字 / `<base>-<inserted>`。
+- 中式编号（"第一条" / "第十四条之一"）→ 复用 `normalize_article_number`，归一为阿拉伯数字 / `<base>-<inserted>`（兼容 `第一百〇一条` 的 〇 / 零写法）。
 - 数字编号（"2.1" / "3.2.1"）→ 保持原样。
 - `clause` 命令支持以上两种输入。
+
+**章/节路径（`part`）规则**：
+
+- 切条器识别独立成行的 `第N章` / `第N节` 标题（兼容全角 / 半角空格与章名
+  内字间空格），不进入条款正文，而是作为层级上下文挂到后续条款的 `part`。
+- 格式仿公开法 `articles.part`：非空级以单个半角空格连接，如
+  `第三章 股份 第一节 股份发行`；新章出现时重置节上下文。
+- 不校验章 / 节 / 条序号连续性——私域文本跳号是常态，只切不报错。
+- 无章节结构的文本 `part` 为 `null`；schema v13 前入库的存量行 `part` 为
+  NULL，可经 `rebuild-clean --norm` 重切补齐。
 
 ### 2.6 `norm_packs` / `norm_pack_items` — 规范包
 
@@ -970,6 +981,7 @@ Markdown 输出选项：
 
 `norm ingest` 切条器会识别 `第N条【标题】正文`、`N. 【标题】正文` 等标题结构；
 标题进入 `clauses[].title`，原始括号标题仍保留在 `clauses[].text` 里，便于人工复核。
+独立成行的 `第N章` / `第N节` 标题识别为层级上下文，挂到 `clauses[].part`（§2.5）。
 
 ### 4.8 `pack <subcommand>`
 
@@ -2051,6 +2063,7 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
     {
       "number": "第一条",
       "number_display": "第一条",
+      "part": null,                       // 可选，章/节路径；ingest 切条器自动识别（§2.5）
       "title": null,
       "text": "借款主体应提交完整、真实、有效的工商登记及授权文件。"
     },

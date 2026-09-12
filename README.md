@@ -248,6 +248,10 @@ chinalaw norm ingest path/to/policy.md \
   --name "内部合规手册" --source-type internal_governance --format md
 ```
 
+切条器按 `第N条` 切分；独立成行的 `第N章` / `第N节` 标题会识别为层级
+上下文，挂到条款的 `part` 字段（如 `第三章 股份 第一节 股份发行`），
+不混入条款正文。
+
 `--source-type` 是受控枚举（详见 [docs/CONTRACT.md](docs/CONTRACT.md) §2.9），
 按约束力来源分类：`contractual_requirement`（合同约定型）/
 `internal_governance`（内部治理型，默认）/ `standard`（标准型）/

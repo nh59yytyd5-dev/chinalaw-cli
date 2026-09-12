@@ -449,7 +449,7 @@ def _norm_clause_row_to_article_shape(row: sqlite3.Row, source_id: str) -> dict:
         "law_id": source_id,
         "number": row["number"],
         "number_display": row["number_display"],
-        "part": None,
+        "part": row["part"],
         "title": row["title"],
         "text": row["text"],
         "position": row["position"],

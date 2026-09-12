@@ -403,13 +403,14 @@ def _norm_payload_from_current_rows(conn: sqlite3.Connection, row: sqlite3.Row) 
         {
             "number": clause["number"],
             "number_display": clause["number_display"],
+            "part": clause["part"],
             "title": clause["title"],
             "text": clause["text"],
             "position": clause["position"],
         }
         for clause in conn.execute(
             """
-            SELECT number, number_display, title, text, position
+            SELECT number, number_display, part, title, text, position
             FROM norm_clauses
             WHERE norm_source_id = ?
             ORDER BY position ASC
@@ -507,6 +508,7 @@ def _normalized_norm_clauses(payload: dict) -> list[dict]:
             {
                 "number": normsources.normalize_clause_number(clause.get("number")),
                 "number_display": number_display,
+                "part": clause.get("part"),
                 "title": clause.get("title"),
                 "text": (clause.get("text") or "").strip(),
                 "position": position,
@@ -521,6 +523,7 @@ def _compare_norm_payloads(before: dict, after: dict) -> dict:
     max_len = max(len(before_clauses), len(after_clauses))
     clause_text_changed_count = 0
     clause_number_changed_count = 0
+    clause_part_changed_count = 0
     for index in range(max_len):
         before_clause = before_clauses[index] if index < len(before_clauses) else {}
         after_clause = after_clauses[index] if index < len(after_clauses) else {}
@@ -534,10 +537,15 @@ def _compare_norm_payloads(before: dict, after: dict) -> dict:
             after_clause.get("number_display"),
         ):
             clause_number_changed_count += 1
+        # part（章/节路径）变化也算 changed：v13 前入库的章程经 rebuild
+        # 重切后需要重新导入才能落 part。
+        if (before_clause.get("part") or "") != (after_clause.get("part") or ""):
+            clause_part_changed_count += 1
     changed = (
         len(before_clauses) != len(after_clauses)
         or clause_text_changed_count > 0
         or clause_number_changed_count > 0
+        or clause_part_changed_count > 0
     )
     return {
         "changed": changed,
@@ -545,6 +553,7 @@ def _compare_norm_payloads(before: dict, after: dict) -> dict:
         "clause_count_after": len(after_clauses),
         "clause_text_changed_count": clause_text_changed_count,
         "clause_number_changed_count": clause_number_changed_count,
+        "clause_part_changed_count": clause_part_changed_count,
     }
 
 

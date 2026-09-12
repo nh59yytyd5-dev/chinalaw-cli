@@ -19,6 +19,13 @@
   `norm delete`（连带删除条款、快照与检索索引）、`norm history`、
   `norm diff [--from N --to M]`；`rebuild-clean --norm` 在原文件丢失时
   fallback 最新快照重建，item 标 `rebuild_source: "snapshot"`。
+- 私域切条器支持公司章程式"章→（节）→条"结构：schema v13 起
+  `norm_clauses` 新增 `part` 列；切条器识别独立成行的 `第N章` / `第N节`
+  标题（兼容全角 / 半角空格、章名字间空格与 `第一百〇一条` 的 〇 写法，
+  不校验序号连续性），挂为条款的章/节路径（格式仿公开法，如
+  `第三章 股份 第一节 股份发行`），不再混入条款正文；`show` / `clause` /
+  `export` / 快照与 markdown 输出均带 `part`，`rebuild-clean --norm`
+  可为存量行补齐。
 - `norm export` 输出顶层带 `sensitivity: "private"` 与 `notice` 防泄漏
   提示；新增 `--metadata-only`，只导出元数据与条款号 / 标题清单。
 - `chinalaw-mcp` 新增 `--allow-private-norms` 开关（默认关闭，见下）。
