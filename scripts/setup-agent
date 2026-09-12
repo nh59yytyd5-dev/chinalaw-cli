@@ -14,22 +14,29 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # fixtures 加载策略：auto（默认，仅在数据库不存在/为空时加载）| always | never
 SYNC_FIXTURES=auto
 COPY_SKILLS=0
+INSTALL_SKILLS=0
 DRY_RUN=0
 
 usage() {
     cat <<'EOF'
 Usage: scripts/setup-agent [options]
 
-Install/update the global chinalaw command, install agent skills, load bundled
-public fixtures on first run (empty database), then run chinalaw doctor.
+Install/update the global chinalaw command, load bundled public fixtures on
+first run (empty database), then run chinalaw doctor.
+
+Skills are NOT installed by default: .claude/skills/ ships as usage
+documentation. Pass --install-skills to also load them into user-level
+skill directories.
 
 Options:
   --sync-fixtures     Always (re)load builtin fixture data, even if the local
                       database already has content.
   --no-sync-fixtures  Never load fixtures; leave the database untouched.
                       (Default: load only when the database is missing/empty.)
-  --copy-skills       Copy skills instead of symlinking them.
-  --dry-run           Preview skill installation only; install-local still runs.
+  --install-skills    Also install .claude/skills/* to user-level skill
+                      directories (opt-in; skills are docs by default).
+  --copy-skills       With --install-skills: copy instead of symlinking.
+  --dry-run           Preview only; install-local still runs.
   -h, --help          Show this help.
 EOF
 }
@@ -38,6 +45,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --sync-fixtures) SYNC_FIXTURES=always; shift ;;
         --no-sync-fixtures) SYNC_FIXTURES=never; shift ;;
+        --install-skills) INSTALL_SKILLS=1; shift ;;
         --copy-skills) COPY_SKILLS=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -65,17 +73,21 @@ db_is_empty() {
     [ "${laws:-0}" -eq 0 ] 2>/dev/null
 }
 
-skill_args=()
-if [ "$COPY_SKILLS" -eq 1 ]; then
-    skill_args+=(--copy)
+if [ "$INSTALL_SKILLS" -eq 1 ]; then
+    skill_args=()
+    if [ "$COPY_SKILLS" -eq 1 ]; then
+        skill_args+=(--copy)
+    fi
+    if [ "$DRY_RUN" -eq 1 ]; then
+        skill_args+=(--dry-run)
+    fi
+    # NOTE: bash 3.2（macOS 自带）在 `set -u` 下把 "${empty_array[@]}" 视为 unbound
+    # 并报错，仅靠 `skill_args=()` 初始化不足以规避。用 ${arr[@]+"${arr[@]}"} 惯用法
+    # 同时兼容空数组与非空数组，且跨 bash 3.2 → 5.x 可移植。切勿简化回 "${skill_args[@]}"。
+    "${REPO_ROOT}/scripts/install-skills" ${skill_args[@]+"${skill_args[@]}"}
+else
+    echo "==> 跳过 skills 安装（默认仅作文档；如需装载到用户级目录，加 --install-skills）" >&2
 fi
-if [ "$DRY_RUN" -eq 1 ]; then
-    skill_args+=(--dry-run)
-fi
-# NOTE: bash 3.2（macOS 自带）在 `set -u` 下把 "${empty_array[@]}" 视为 unbound
-# 并报错，仅靠 `skill_args=()` 初始化不足以规避。用 ${arr[@]+"${arr[@]}"} 惯用法
-# 同时兼容空数组与非空数组，且跨 bash 3.2 → 5.x 可移植。切勿简化回 "${skill_args[@]}"。
-"${REPO_ROOT}/scripts/install-skills" ${skill_args[@]+"${skill_args[@]}"}
 
 case "$SYNC_FIXTURES" in
     always)

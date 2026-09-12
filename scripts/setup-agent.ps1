@@ -1,6 +1,7 @@
 Param(
     [switch]$SyncFixtures,
     [switch]$NoSyncFixtures,
+    [switch]$InstallSkills,
     [switch]$DryRun
 )
 
@@ -27,7 +28,16 @@ function Test-DbIsEmpty {
 }
 
 & (Join-Path $PSScriptRoot "install-local.ps1")
-& (Join-Path $PSScriptRoot "install-skills.ps1") -DryRun:$DryRun
+
+# Skills are NOT installed by default: .claude/skills/ ships as usage
+# documentation. Pass -InstallSkills to opt in. (install-skills.ps1 always
+# copies; there is no symlink mode on Windows.)
+if ($InstallSkills) {
+    & (Join-Path $PSScriptRoot "install-skills.ps1") -DryRun:$DryRun
+}
+else {
+    Write-Host "==> skipping skills install (docs by default; pass -InstallSkills to load them)"
+}
 
 if ($SyncFixtures) {
     & $Chinalaw sync --fixtures --format md

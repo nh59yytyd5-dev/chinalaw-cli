@@ -3,7 +3,7 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.5.1] — 2026-09-12
 
 ### 新增
 
@@ -39,6 +39,14 @@
 
 ### 变更（行为 / 兼容性）
 
+- **Skills 不再默认装载（改为文档化定位）。** `.claude/skills/` 仅作为
+  agent 工作流使用说明随仓库分发；`setup-agent` / `update-local`（含
+  PowerShell 版）默认不再执行 `install-skills`，需以 `--install-skills` /
+  `--skills` 显式开启；`doctor` 的 `skills_installed` 检查在未安装用户级
+  skills 时由 `warn` 降为 `skip`，status 输出的 `skills_stale` notice 由
+  warning 降为 info（key 不变）。`scripts/install-skills` 保留为手动
+  opt-in 工具（含 `--uninstall`）。理由：当前模型的指令遵循与工具调用
+  能力已足够可靠，无需常驻重 skill 驱动检索纪律。
 - **MCP 默认行为变化：`chinalaw-mcp` 默认不再暴露私域规范。**
   `chinalaw_article` / `chinalaw_articles` 不再 fallback 私域条款，
   `chinalaw_search` 的 `kind=all` 不再返回 norm 命中，显式 `kind=norm`

@@ -143,10 +143,12 @@ def _collect_skill_notice(notices: dict[str, dict], repo_root: Path) -> None:
         if all((target / name / "SKILL.md").exists() for name in expected):
             complete_targets.append(target)
     if not complete_targets:
+        # 0.5.1 起 skills 不默认安装（仓库副本仅作使用说明），未装属正常状态，
+        # 仅提示可选安装路径；key 沿用契约中的 skills_stale（CONTRACT.md notice keys）。
         notices["skills_stale"] = _notice(
-            "未检测到完整用户级 chinalaw skills；agent 可能不知道检索纪律。",
+            "用户级 chinalaw skills 未安装（可选；仓库 .claude/skills 仅作使用说明）。",
             _script_command("install-skills"),
-            severity="warning",
+            severity="info",
         )
 
 

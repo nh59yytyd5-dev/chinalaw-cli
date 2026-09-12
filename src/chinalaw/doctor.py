@@ -282,12 +282,17 @@ def _check_skills(checks: list[dict[str, Any]]) -> None:
             data={"expected": expected, "present": present},
         )
     else:
+        # 0.5.1 起 skills 不默认安装：仓库 .claude/skills/ 仅作使用说明，
+        # 未装到用户级目录是正常状态，不再告警。
         _add(
             checks,
             "skills_installed",
-            "warn",
-            "未检测到用户级 chinalaw skills",
-            hint=f"{_script_hint('install-skills')}让 Claude Code / Codex / OpenCode 全局加载。",
+            "skip",
+            "未安装用户级 chinalaw skills（可选；仓库 .claude/skills 仅作使用说明）",
+            hint=(
+                f"如需让 Claude Code / Codex / OpenCode 全局加载，"
+                f"{_script_hint('install-skills')}"
+            ),
             data={"expected": expected, "targets": [str(t) for t in targets]},
         )
 

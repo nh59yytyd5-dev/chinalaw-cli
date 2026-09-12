@@ -9,7 +9,7 @@
 shell 的 agent，在写合同审查、法律备忘录、引用核对或制度分析时，应先查本机规范
 来源，而不是凭模型记忆编法条。
 
-当前状态：`v0.5.0`。核心检索命令可用；fetch / 多源补全按具体来源持续迭代。
+当前状态：`v0.5.1`。核心检索命令可用；fetch / 多源补全按具体来源持续迭代。
 
 ## Why
 
@@ -185,7 +185,10 @@ fixture 进入公开发布集。
 应按诊断信息补全或明确告知本地数据不足。
 ```
 
-仓库内置 `.claude/skills/`，可作为 agent 工作流说明参考。安装到用户级 skills 目录：
+仓库内置 `.claude/skills/`，**仅作为使用说明（文档）**，默认不安装、不装载到
+任何 agent 框架——现代模型的工具调用与指令遵循已足够可靠，无需常驻重 skill。
+如仍想让 Claude Code / Codex / Cursor / OpenCode 全局加载这些工作流说明，
+可手动安装（opt-in）：
 
 ```bash
 scripts/install-skills --copy
@@ -195,6 +198,12 @@ Windows PowerShell：
 
 ```powershell
 .\scripts\install-skills.ps1
+```
+
+不再需要时同样可以卸载（只删指向本仓库的条目，不动用户自建 skill）：
+
+```bash
+scripts/install-skills --uninstall
 ```
 
 ## Core Commands

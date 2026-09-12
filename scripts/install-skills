@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Install / update chinalaw-cli skills into the user-level skill directories.
 #
+# OPT-IN since 0.5.1: setup-agent / update-local no longer call this script
+# by default — .claude/skills/ ships as usage documentation only. Run this
+# manually (or pass --install-skills / --skills to the wrappers) to load
+# the skills into agent frameworks.
+#
 # Default: symlink each skill under .claude/skills/ to:
 #   - ~/.claude/skills/<name>            (Claude Code / Cursor / Cline)
 #   - ~/.agents/skills/<name>            (superpowers / Codex CLI ecosystem)
