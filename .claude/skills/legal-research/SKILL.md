@@ -81,7 +81,7 @@ chinalaw article <法规名> <条号> --format card
 7. 如果用户给出内部制度、甲方要求、项目规则：
 
 ```bash
-chinalaw norm ingest <文件路径> --name <规范名称> --source-type private_policy --format json
+chinalaw norm ingest <文件路径> --name <规范名称> --source-type internal_governance --format json
 chinalaw norm clause <规范名称> <条款号> --format json
 ```
 

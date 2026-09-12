@@ -126,8 +126,8 @@ PYTHONPATH=src python3 -m chinalaw pack validate <pack-name>
 ### 4.3 改私域规范导入模板
 
 - 私域规范不应提交真实客户内容；测试用材料必须化名、脱敏，并明确标注用途。
-- `source_type` 推荐用受控集合：`private_policy` / `lender_requirement` /
-  `internal_compliance` / `industry_standard`。
+- `source_type` 推荐用受控集合：`contractual_requirement` / `internal_governance` /
+  `standard` / `trade_usage` / `other`。
 
 ### 4.4 改协议（CONTRACT.md / schema / CLI 契约）
 

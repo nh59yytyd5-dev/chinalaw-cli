@@ -78,6 +78,15 @@ DECIMAL_ARTICLE_RE = re.compile(
 NUMBERED_ITEM_RE = re.compile(
     r"^(?P<number>\d{1,3})[.．]\s*(?P<body>[\u4e00-\u9fff].*)$"
 )
+TITLED_NUMBERED_ITEM_RE = re.compile(
+    r"^(?P<number>\d{1,3})(?P<dot>[.．])[　\s]*【(?P<title>[^】]{1,80})】(?P<body>.*)$"
+)
+MINUTES_SUBSECTION_HEADING_RE = re.compile(
+    r"^（(?P<ordinal>[〇零一二三四五六七八九十]{1,3})）"
+    r"(?P<body>[\u4e00-\u9fff（）()《》·“”‘’、]{2,30})$"
+)
+TOC_ENTRY_SENTENCE_PUNCT_RE = re.compile(r"[。！？；：]")
+TOC_ENTRY_MAX_CHARS = 30
 STRUCTURAL_HEADING_RE = re.compile(
     r"^(第[〇零一二三四五六七八九十百千万两0-9]+(?:编|章|节|分编).+|附则)$"
 )
@@ -550,6 +559,259 @@ def parse_numbered_items_from_text(text: str, *, min_items: int = 2) -> list[dic
     if len(articles) < min_items:
         return []
     return articles
+
+
+def parse_titled_numbered_items_from_text(text: str, *, min_items: int = 2) -> list[dict]:
+    """Parse minutes/policy documents organized as ``N.【标题】正文`` items.
+
+    司法会议纪要等文档不使用"第N条"条号，而以 ``1.【标题】`` 连续编号条目展开
+    （实测：九民纪要 130 条均为此形态）。本函数是该**形态**的通用解析器，
+    不绑定任何单一文档：
+
+    - 条目行：``N.【标题】正文``（点号 ``.`` / 全角 ``．`` 均可，允许空白间隔）；
+      ``number`` 归一为阿拉伯数字串，``number_display`` 保留原文形态
+      （如 ``1.``），``title`` 取【】内容，``text`` 为】之后的条目正文；
+    - 结构：``一、`` 枚举标题与 ``（一）`` 小节标题识别为 ``part`` 上下文。
+      条目区域内枚举标题序号严格递增；首个条目之前的前言区域允许序号
+      从"一、"重新开始（印发通知自带的"一、二、三、"与纪要正文同级标题并存）；
+    - 目录块：``目录`` 标记之后、首个条目之前的短标题行视为目录条目剔除；
+      枚举序号在目录块内重新出现时判定目录块结束（目录与正文标题相邻时不误吞）；
+    - 前言（文号、印发通知、主送机关、引言等）汇成 symbolic ``序言`` 条目
+      置于首位（与宪法 fixture 的 preamble 惯例一致），无前言则不生成；
+    - 标题之后、下一条目之前的无编号段落视为节导语，并入下一条目开头；
+      其余无编号段落按既有惯例并入上一条目续段。
+
+    Fail loud：首个命中条目编号必须为 1（之前的散装编号行留在前言），其后
+    编号严格连续 +1；编号断档 / 重复 / 重启、条目正文为空均抛 ValueError——
+    切分异常不得静默退化为单条全文。形态不存在（无匹配行）或命中条目数少于
+    ``min_items`` 时返回 ``[]``，由调用方决定回退路径。
+    """
+
+    lines = _titled_item_source_lines(text)
+
+    candidates: list[tuple[int, re.Match[str]]] = []
+    for index, line in enumerate(lines):
+        match = TITLED_NUMBERED_ITEM_RE.match(line)
+        if match:
+            candidates.append((index, match))
+    if not candidates:
+        return []
+
+    start = next(
+        (
+            pos
+            for pos, (_, match) in enumerate(candidates)
+            if int(match.group("number")) == 1
+        ),
+        None,
+    )
+    if start is None:
+        return []
+    candidates = candidates[start:]
+    for expected, (index, match) in enumerate(candidates, start=1):
+        actual = int(match.group("number"))
+        if actual != expected:
+            raise ValueError(
+                "titled numbered items sequence broken: "
+                f"expected item {expected}, got {actual} "
+                f"(line: {lines[index][:40]!r})"
+            )
+    if len(candidates) < min_items:
+        return []
+
+    first_item_index = candidates[0][0]
+    context: dict[str, str | int | None] = {
+        "section": None,
+        "section_ordinal": 0,
+        "subsection": None,
+        "subsection_ordinal": 0,
+    }
+
+    preamble: list[str] = []
+    for line in lines[:first_item_index]:
+        _track_minutes_preamble_heading(line, context)
+        preamble.append(line)
+
+    items: list[dict] = []
+    current: dict | None = None
+    pending_leadin: list[str] = []
+    saw_heading = False
+
+    for line in lines[first_item_index:]:
+        item_match = TITLED_NUMBERED_ITEM_RE.match(line)
+        if item_match is not None:
+            if current is not None:
+                items.append(current)
+            body = item_match.group("body").strip()
+            parts = [part for part in (*pending_leadin, body) if part]
+            current = {
+                "number": str(int(item_match.group("number"))),
+                "number_display": f"{item_match.group('number')}{item_match.group('dot')}",
+                "title": item_match.group("title").strip() or None,
+                "text": "\n".join(parts),
+                "part": _minutes_part_label(context),
+                "position": len(items) + 1,
+            }
+            pending_leadin = []
+            saw_heading = False
+            continue
+        if _update_minutes_heading_context(line, context):
+            saw_heading = True
+            continue
+        if saw_heading and current is not None:
+            pending_leadin.append(line)
+        elif current is not None:
+            _append_article_text(current, line)
+
+    if current is not None:
+        for line in pending_leadin:
+            _append_article_text(current, line)
+        items.append(current)
+
+    for item in items:
+        if not item.get("text"):
+            raise ValueError(
+                f"titled numbered item {item['number']!r} produced empty text"
+            )
+
+    preamble_text = "\n".join(preamble).strip()
+    if not preamble_text:
+        return items
+    return [
+        {
+            "number": "序言",
+            "number_display": "序言",
+            "text": preamble_text,
+            "part": None,
+            "position": 1,
+        },
+        *items,
+    ]
+
+
+def _titled_item_source_lines(text: str) -> list[str]:
+    """Clean source lines and drop a bare ``目录`` block before the first item.
+
+    与既有文本解析器同型地做行清洗和 TOC 噪声剔除；额外处理"目录块"：
+    ``目录`` 标记后连续的短标题行（无句读、无页码、非条目）是目录条目，
+    若当作结构标题会污染 part 上下文（实测九民纪要目录逐行列出十二个节标题）。
+    目录块内枚举序号重新出现（正文第一节标题与目录末项相邻）时判定块结束。
+    首个 ``N.【标题】`` 条目出现之后不再进入目录块模式。
+    """
+
+    lines: list[str] = []
+    in_toc_block = False
+    toc_ordinals: set[int] = set()
+    item_seen = False
+    for raw_line in text.splitlines():
+        line = _clean_text(raw_line.strip().lstrip("#").strip())
+        if not line:
+            continue
+        if not in_toc_block and not item_seen and TOC_MARKER_RE.fullmatch(line):
+            in_toc_block = True
+            toc_ordinals = set()
+            continue
+        if in_toc_block:
+            ordinal = _enum_heading_ordinal(line)
+            is_restart = ordinal is not None and ordinal in toc_ordinals
+            if _is_toc_entry_line(line) and not is_restart:
+                if ordinal is not None:
+                    toc_ordinals.add(ordinal)
+                continue
+            in_toc_block = False
+        if _is_toc_line(line):
+            continue
+        if TITLED_NUMBERED_ITEM_RE.match(line):
+            item_seen = True
+        lines.append(line)
+    return lines
+
+
+def _is_toc_entry_line(line: str) -> bool:
+    """目录条目形态：短、无句读、非编号条目（无页码的裸目录行）。"""
+
+    if TITLED_NUMBERED_ITEM_RE.match(line):
+        return False
+    if len(line) > TOC_ENTRY_MAX_CHARS:
+        return False
+    return not TOC_ENTRY_SENTENCE_PUNCT_RE.search(line)
+
+
+def _subsection_heading_ordinal(text: str) -> int | None:
+    match = MINUTES_SUBSECTION_HEADING_RE.match(text)
+    if not match:
+        return None
+    normalized = normalize_article_number(f"第{match.group('ordinal')}条")
+    if not normalized.isdigit():
+        return None
+    return int(normalized)
+
+
+def _track_minutes_preamble_heading(
+    line: str,
+    context: dict[str, str | int | None],
+) -> None:
+    """前言区域结构标题跟踪：只更新 part 初始上下文，行文本保留在序言里。
+
+    印发通知的"一、二、三、"与纪要正文的"一、…"在同一段前言里并存，
+    因此允许序号 restart（ordinal == 1）；后出现的同名层级覆盖前者，
+    首个条目的 part 落到正文第一节标题上。
+    """
+
+    ordinal = _enum_heading_ordinal(line)
+    if ordinal is not None:
+        previous = int(context.get("section_ordinal") or 0)
+        if previous == 0 or ordinal == previous + 1 or ordinal == 1:
+            context["section"] = line
+            context["section_ordinal"] = ordinal
+            context["subsection"] = None
+            context["subsection_ordinal"] = 0
+        return
+    sub_ordinal = _subsection_heading_ordinal(line)
+    if sub_ordinal is not None:
+        previous_sub = int(context.get("subsection_ordinal") or 0)
+        if previous_sub == 0 or sub_ordinal == previous_sub + 1 or sub_ordinal == 1:
+            context["subsection"] = line
+            context["subsection_ordinal"] = sub_ordinal
+
+
+def _update_minutes_heading_context(
+    line: str,
+    context: dict[str, str | int | None],
+) -> bool:
+    """条目区域结构标题识别：枚举节标题严格 +1，小节标题允许随新节 restart。
+
+    序号校验失败的标题形行不当标题消费（返回 False），按普通行并入条目
+    文本或节导语，保证内容不丢。
+    """
+
+    ordinal = _enum_heading_ordinal(line)
+    if ordinal is not None:
+        if ordinal != int(context.get("section_ordinal") or 0) + 1:
+            return False
+        context["section"] = line
+        context["section_ordinal"] = ordinal
+        context["subsection"] = None
+        context["subsection_ordinal"] = 0
+        return True
+    sub_ordinal = _subsection_heading_ordinal(line)
+    if sub_ordinal is not None:
+        previous_sub = int(context.get("subsection_ordinal") or 0)
+        if sub_ordinal != 1 and sub_ordinal != previous_sub + 1:
+            return False
+        context["subsection"] = line
+        context["subsection_ordinal"] = sub_ordinal
+        return True
+    return False
+
+
+def _minutes_part_label(context: dict[str, str | int | None]) -> str | None:
+    values = [
+        str(value)
+        for value in (context.get("section"), context.get("subsection"))
+        if value
+    ]
+    return " ".join(values) if values else None
 
 
 def parse_public_document_articles(text: str) -> list[dict]:

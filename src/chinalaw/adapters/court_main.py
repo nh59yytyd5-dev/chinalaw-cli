@@ -555,6 +555,12 @@ def _single_body_article(text: str) -> list[dict]:
 def _policy_item_articles(level: str, text: str) -> list[dict]:
     if level not in {"judicial_policy", "judicial_meeting_minutes"}:
         return []
+    # 纪要类文档（如九民纪要）以 ``N.【标题】`` 连续编号条目展开；该形态优先于
+    # 无标题的 ``N. 正文`` 项解析。编号断档等切分异常由 cleaning 层 ValueError
+    # 直接抛出（fail loud），不得静默退化为单条全文。
+    titled_items = cleaning.parse_titled_numbered_items_from_text(text)
+    if titled_items:
+        return titled_items
     return cleaning.parse_numbered_items_from_text(text)
 
 

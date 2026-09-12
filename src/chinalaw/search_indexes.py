@@ -279,6 +279,22 @@ def delete_norm_clause_search_indexes(
     )
 
 
+def delete_norm_source_search_index(
+    conn: sqlite3.Connection,
+    source_id: str,
+) -> None:
+    """删除单个私域规范在 ``norm_sources_fts`` 中的索引行（``norm delete`` 用）。"""
+    _delete_mapped_fts_rows(
+        conn,
+        fts_table="norm_sources_fts",
+        map_table="norm_sources_fts_rows",
+        map_key="norm_source_id",
+        value=source_id,
+        legacy_column="norm_source_id",
+        expected_count=1,
+    )
+
+
 def insert_norm_clause_search_index(
     conn: sqlite3.Connection,
     *,

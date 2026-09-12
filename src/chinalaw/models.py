@@ -51,6 +51,83 @@ class LawStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
+class NormSourceType(str, Enum):
+    """私域规范来源类型（受控枚举，按约束力来源分类）。
+
+    私域规范不是国家法规范、不具备法律渊源效力；本枚举只区分其约束力来源：
+
+    - ``contractual_requirement``：合同约定型（放款条件、交易相对方要求）
+    - ``internal_governance``：内部治理型（公司制度、合规手册、HR 制度；缺省值）
+    - ``standard``：标准型（国标 / 行标 / 团标）
+    - ``trade_usage``：习惯惯例型（交易习惯、行业惯例）
+    - ``other``：兜底类型；枚举外的历史存量值在输出层按此处理
+
+    各类型的约束力定性见 ``NORM_SOURCE_TYPE_BINDING_NOTES``；私域规范之间
+    不提供绝对效力排序。分层语义见 docs/CONTRACT.md §2.9。
+    """
+
+    CONTRACTUAL_REQUIREMENT = "contractual_requirement"
+    INTERNAL_GOVERNANCE = "internal_governance"
+    STANDARD = "standard"
+    TRADE_USAGE = "trade_usage"
+    OTHER = "other"
+
+
+# 各类型的约束力定性提示（binding note），只用于输出层提示，说明该类型的
+# 约束力来源与边界；私域规范之间不存在线性效力高低，不做绝对排序。
+NORM_SOURCE_TYPE_BINDING_NOTES: dict[str, str] = {
+    NormSourceType.CONTRACTUAL_REQUIREMENT.value: (
+        "合同约定型规范：仅经合同约定产生约束力，属合同义务范畴。"
+    ),
+    NormSourceType.INTERNAL_GOVERNANCE.value: (
+        "内部治理型规范：对内约束；劳动法语境下规章制度需经民主程序并公示"
+        "才对员工生效（参见《劳动合同法》第4条）。"
+    ),
+    NormSourceType.STANDARD.value: (
+        "标准型规范：强制性标准必须执行，推荐性标准经合同援引方有约束力"
+        "（参见《标准化法》第2条、第10条）。"
+    ),
+    NormSourceType.TRADE_USAGE.value: (
+        "习惯惯例型规范：《民法典》第10条意义上的习惯，作为法源补充。"
+    ),
+    NormSourceType.OTHER.value: (
+        "其他私域规范：约束力来源需个案判断。"
+    ),
+}
+
+# 已废弃的旧枚举值 → 现行枚举值。导入侧遇旧值自动映射并附 deprecation_warning；
+# 存量库中的旧值不做数据迁移，输出层归一为新值并附 legacy_source_type 原值。
+LEGACY_NORM_SOURCE_TYPE_MAP: dict[str, str] = {
+    "lender_requirement": NormSourceType.CONTRACTUAL_REQUIREMENT.value,
+    "internal_compliance": NormSourceType.INTERNAL_GOVERNANCE.value,
+    "private_policy": NormSourceType.INTERNAL_GOVERNANCE.value,
+    "industry_standard": NormSourceType.STANDARD.value,
+}
+
+
+def normalize_norm_source_type(source_type: str | None) -> tuple[str, str | None]:
+    """归一化私域规范来源类型，返回 ``(新值, 原值或 None)``。
+
+    现行枚举值原样返回；已废弃的旧值按 ``LEGACY_NORM_SOURCE_TYPE_MAP`` 映射；
+    其余历史存量值（含空值）兜底为 ``other``。发生过映射 / 兜底时第二个
+    返回值是原值，供输出层附 ``legacy_source_type``。
+    """
+
+    cleaned = (source_type or "").strip()
+    if cleaned in NORM_SOURCE_TYPE_BINDING_NOTES:
+        return cleaned, None
+    mapped = LEGACY_NORM_SOURCE_TYPE_MAP.get(cleaned)
+    if mapped is not None:
+        return mapped, cleaned
+    return NormSourceType.OTHER.value, cleaned or None
+
+
+def norm_source_type_binding_note(source_type: str | None) -> str:
+    """返回来源类型的约束力定性提示；旧值 / 枚举外值先归一再取提示。"""
+    normalized, _ = normalize_norm_source_type(source_type)
+    return NORM_SOURCE_TYPE_BINDING_NOTES[normalized]
+
+
 @dataclass
 class Law:
     id: str

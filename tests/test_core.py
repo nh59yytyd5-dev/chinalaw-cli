@@ -21,6 +21,7 @@ from chinalaw import (
     cleaning,
     formatters,
     loader,
+    mcp,
     netio,
     normpacks,
     normsources,
@@ -29,9 +30,9 @@ from chinalaw import (
     snapshots,
     sources,
 )
-from chinalaw.adapters import court_gongbao, flk_npc, spp_gov_cn
+from chinalaw.adapters import court_gongbao, court_main, flk_npc, spp_gov_cn
 from chinalaw.db import connect, current_version, get_meta, migrate, set_meta
-from chinalaw.models import LawLevel
+from chinalaw.models import LEGACY_NORM_SOURCE_TYPE_MAP, NORM_SOURCE_TYPE_BINDING_NOTES, LawLevel
 from chinalaw.schema import (
     SCHEMA_V1_SQL,
     SCHEMA_V2_SQL,
@@ -39,6 +40,8 @@ from chinalaw.schema import (
     SCHEMA_V4_SQL,
     SCHEMA_V5_SQL,
     SCHEMA_V6_SQL,
+    SCHEMA_V11_SQL,
+    SCHEMA_V12_SQL,
     SCHEMA_VERSION,
 )
 from chinalaw.service import normalize_article_number, normalize_law_identifier
@@ -83,7 +86,7 @@ EXTRA_NORM_SOURCE_FIXTURE = {
     "name": "甲方放款要求（示例）",
     "short_name": "放款要求",
     "aliases": ["甲方放款要求", "放款标准"],
-    "source_type": "lender_requirement",
+    "source_type": "contractual_requirement",
     "authority": "某甲方风控部",
     "binding_scope": "某融资项目放款审查",
     "jurisdiction": "CN",
@@ -96,6 +99,35 @@ EXTRA_NORM_SOURCE_FIXTURE = {
         {"number": "2.1", "number_display": "2.1", "text": "如担保人为关联方，还应补充提交关联交易审批材料。"},
     ],
 }
+
+
+# 仿真公司章程样本（虚构）：章→（节）→条结构，条号全文连续中文数字。
+# 覆盖形态：全角空格章名（"第一章　总　则"）、半角空格、章名字间空格
+# （"附 则"）、节标题、"第一百〇一条"的 〇 写法、跳号（不校验连续性）。
+CHARTER_SAMPLE_TEXT = """测试样例公司章程
+
+第一章　总　则
+
+第一条 为规范公司组织和行为，根据公司法制定本章程。
+
+第二条 公司系依法设立的有限责任公司。
+
+第三章 股份
+
+第一节 股份发行
+
+第一百条 公司发行的股票为记名股票。
+
+第一百〇一条 股票由法定代表人签名、公司盖章。
+
+第二节 股份转让
+
+第一百二十条 股东持有的股份可以依法转让。
+
+第十章 附 则
+
+第二百条 本章程自股东会通过之日起施行。
+"""
 
 
 def make_docx_bytes(paragraphs: list[dict]) -> bytes:
@@ -307,6 +339,64 @@ class SchemaTests(unittest.TestCase):
                 }
                 self.assertIn("law_relations", names)
                 self.assertIn("applicability_rules", names)
+
+    def test_migrate_from_v11_to_v12_adds_norm_source_revisions(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "t.db"
+            with connect(db) as conn:
+                conn.executescript(SCHEMA_V11_SQL)
+                conn.execute("INSERT INTO meta(key, value) VALUES('schema_version', '11')")
+                migrate(conn)
+                self.assertEqual(current_version(conn), SCHEMA_VERSION)
+                names = {
+                    r[0]
+                    for r in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual')"
+                    )
+                }
+                self.assertIn("norm_source_revisions", names)
+                columns = {
+                    row[1]
+                    for row in conn.execute("PRAGMA table_info(norm_source_revisions)")
+                }
+                self.assertIn("norm_source_id", columns)
+                self.assertIn("revision", columns)
+                self.assertIn("snapshot_json", columns)
+
+    def test_migrate_from_v12_to_v13_adds_norm_clause_part(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "t.db"
+            with connect(db) as conn:
+                conn.executescript(SCHEMA_V12_SQL)
+                conn.execute("INSERT INTO meta(key, value) VALUES('schema_version', '12')")
+                # 存量数据：迁移后行保留、part 为 NULL
+                conn.execute(
+                    "INSERT INTO norm_sources (id, name, source_type, source_name, "
+                    "source_checked_at, source_hash) VALUES "
+                    "('legacy-charter', '旧版章程', 'internal_governance', "
+                    "'local-file', '2026-01-01T00:00:00+00:00', 'h')"
+                )
+                conn.execute(
+                    "INSERT INTO norm_clauses (id, norm_source_id, number, "
+                    "number_display, title, text, position) VALUES "
+                    "('legacy-charter:clause:1', 'legacy-charter', '1', '第一条', "
+                    "NULL, '存量正文。', 1)"
+                )
+                migrate(conn)
+                self.assertEqual(current_version(conn), SCHEMA_VERSION)
+                columns = {
+                    row[1]
+                    for row in conn.execute("PRAGMA table_info(norm_clauses)")
+                }
+                self.assertIn("part", columns)
+                row = conn.execute(
+                    "SELECT text, part FROM norm_clauses "
+                    "WHERE id = 'legacy-charter:clause:1'"
+                ).fetchone()
+                self.assertEqual(row["text"], "存量正文。")
+                self.assertIsNone(row["part"])
 
 
 class NumberNormalizationTests(unittest.TestCase):
@@ -2099,6 +2189,82 @@ class LawLevelEnumTests(unittest.TestCase):
         }
         declared = {e.value for e in LawLevel}
         self.assertTrue(legacy.issubset(declared))
+
+
+class TitledNumberedItemsParseTests(unittest.TestCase):
+    """纪要类文档 ``N.【标题】`` 编号条目的通用解析器测试。
+
+    实测样本：九民纪要（法〔2019〕254号，court_main 详情页 zixun/xiangqing/199691），
+    正文 130 个 ``N.【标题】`` 条目，前有印发通知、目录块与引言。
+    """
+
+    SAMPLE = (
+        "法〔2019〕254号\n"
+        "最高人民法院\n"
+        "关于印发《某审判工作会议纪要》的通知\n"
+        "各省、自治区、直辖市高级人民法院：\n"
+        "一、充分认识《会议纪要》出台的意义\n"
+        "二、及时组织学习培训\n"
+        "某审判工作会议纪要\n"
+        "目录\n"
+        "一、关于总则适用的法律衔接\n"
+        "二、关于公司纠纷案件的审理\n"
+        "引言\n"
+        "为贯彻会议精神，最高人民法院召开了审判工作会议。\n"
+        "一、关于总则适用的法律衔接\n"
+        "1.【民法总则与民法通则的关系及其适用】民法通则既规定了民法的一些基本制度，"
+        "民法总则基本吸收并作补充。\n"
+        "2.【民法总则与合同法的关系及其适用】合同法不再保留，相关纠纷原则上适用合同法的规定。\n"
+        "二、关于公司纠纷案件的审理\n"
+        "3.【与目标公司“对赌”】投资方与目标公司订立的“对赌协议”不存在法定无效事由的，"
+        "人民法院不予支持无效主张。\n"
+    )
+
+    def test_parses_items_with_preamble_and_parts(self):
+        items = cleaning.parse_titled_numbered_items_from_text(self.SAMPLE)
+        self.assertEqual(len(items), 4)  # 序言 + 3 条
+        self.assertEqual(items[0]["number"], "序言")
+        self.assertIn("法〔2019〕254号", items[0]["text"])
+        first = items[1]
+        self.assertEqual(first["number"], "1")
+        self.assertEqual(first["number_display"], "1.")
+        self.assertEqual(first["title"], "民法总则与民法通则的关系及其适用")
+        self.assertEqual(first["part"], "一、关于总则适用的法律衔接")
+        third = items[3]
+        self.assertEqual(third["number"], "3")
+        self.assertEqual(third["part"], "二、关于公司纠纷案件的审理")
+        self.assertTrue(all(item["text"] for item in items))
+
+    def test_full_width_dot_variant(self):
+        text = "1．【标题一】正文一。\n2．【标题二】正文二。\n"
+        items = cleaning.parse_titled_numbered_items_from_text(text)
+        self.assertEqual([item["number"] for item in items], ["1", "2"])
+        self.assertEqual(items[0]["number_display"], "1．")
+
+    def test_broken_sequence_fails_loud(self):
+        text = "1.【标题一】正文一。\n3.【标题三】正文三。\n"
+        with self.assertRaises(ValueError):
+            cleaning.parse_titled_numbered_items_from_text(text)
+
+    def test_empty_item_body_fails_loud(self):
+        text = "1.【标题一】\n2.【标题二】正文二。\n"
+        with self.assertRaises(ValueError):
+            cleaning.parse_titled_numbered_items_from_text(text)
+
+    def test_sequence_without_item_one_returns_empty(self):
+        text = "2.【标题二】正文二。\n3.【标题三】正文三。\n"
+        self.assertEqual(cleaning.parse_titled_numbered_items_from_text(text), [])
+
+    def test_statute_style_text_not_matched(self):
+        text = "第一条 为了保护民事主体的合法权益，制定本法。\n第二条 民法调整平等主体之间的人身关系和财产关系。\n"
+        self.assertEqual(cleaning.parse_titled_numbered_items_from_text(text), [])
+
+    def test_policy_item_articles_prefers_titled_items(self):
+        items = court_main._policy_item_articles("judicial_meeting_minutes", self.SAMPLE)
+        self.assertEqual(len(items), 4)
+        self.assertEqual(items[1]["title"], "民法总则与民法通则的关系及其适用")
+        # 非纪要/政策层级不启用该解析路径。
+        self.assertEqual(court_main._policy_item_articles("law", self.SAMPLE), [])
 
 
 class CourtGongbaoProbeTests(unittest.TestCase):
@@ -4903,7 +5069,7 @@ class NormSourceTests(unittest.TestCase):
         self.assertEqual(shown["clauses"][0]["number"], "1")
         self.assertIsNotNone(clause)
         self.assertEqual(clause["clause"]["number"], "2")
-        self.assertEqual(exported["source_type"], "lender_requirement")
+        self.assertEqual(exported["source_type"], "contractual_requirement")
         self.assertEqual(report["norm_sources"], 1)
         self.assertEqual(report["norm_clauses"], 3)
 
@@ -4928,7 +5094,7 @@ class NormSourceTests(unittest.TestCase):
             "name": "未编号制度",
             "short_name": "未编号制度",
             "aliases": [],
-            "source_type": "private_policy",
+            "source_type": "internal_governance",
             "authority": "测试",
             "binding_scope": "测试",
             "jurisdiction": "CN",
@@ -5065,6 +5231,178 @@ class NormSourceTests(unittest.TestCase):
                 sections["甲方放款要求"]["result"].get("via"), "norm_fallback"
             )
 
+    def test_import_rejects_unknown_source_type(self):
+        import tempfile
+
+        bad_payload = dict(EXTRA_NORM_SOURCE_FIXTURE, source_type="bogus_type")
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn, self.assertRaises(ValueError):
+                normsources.import_source_from_dict(conn, bad_payload)
+
+    def test_import_maps_legacy_source_type_with_deprecation_warning(self):
+        import tempfile
+
+        payload = dict(EXTRA_NORM_SOURCE_FIXTURE, source_type="lender_requirement")
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                result = normsources.import_source_from_dict(conn, payload)
+            shown = normsources.get_source(db_path, "放款要求")
+
+        self.assertEqual(result["source_type"], "contractual_requirement")
+        self.assertEqual(result["legacy_source_type"], "lender_requirement")
+        self.assertIn("lender_requirement", result["deprecation_warning"])
+        self.assertIn("contractual_requirement", result["deprecation_warning"])
+        # 入库的是归一后的新值，读取侧无需再映射
+        self.assertIsNotNone(shown)
+        self.assertEqual(shown["source_type"], "contractual_requirement")
+        self.assertNotIn("legacy_source_type", shown)
+
+    def test_legacy_source_type_map_covers_all_deprecated_values(self):
+        self.assertEqual(
+            LEGACY_NORM_SOURCE_TYPE_MAP,
+            {
+                "lender_requirement": "contractual_requirement",
+                "internal_compliance": "internal_governance",
+                "private_policy": "internal_governance",
+                "industry_standard": "standard",
+            },
+        )
+
+    def test_legacy_source_type_in_db_is_normalized_on_output(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+                # 模拟存量库中残留的已废弃旧值（绕过导入侧校验直接写库）
+                conn.execute(
+                    "UPDATE norm_sources SET source_type = ? WHERE id = ?",
+                    ("private_policy", EXTRA_NORM_SOURCE_FIXTURE["id"]),
+                )
+            shown = normsources.get_source(db_path, "放款要求")
+            hits = service.search(db_path, "担保")
+
+        self.assertIsNotNone(shown)
+        self.assertEqual(shown["source_type"], "internal_governance")
+        self.assertEqual(shown["legacy_source_type"], "private_policy")
+        clause_hit = hits["norm_clause_hits"][0]
+        self.assertEqual(clause_hit["norm_source_type"], "internal_governance")
+        self.assertEqual(clause_hit["legacy_norm_source_type"], "private_policy")
+        self.assertEqual(
+            clause_hit["binding_note"],
+            NORM_SOURCE_TYPE_BINDING_NOTES["internal_governance"],
+        )
+
+    def test_import_defaults_source_type_to_internal_governance(self):
+        import tempfile
+
+        payload = {
+            key: value
+            for key, value in EXTRA_NORM_SOURCE_FIXTURE.items()
+            if key != "source_type"
+        }
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                result = normsources.import_source_from_dict(conn, payload)
+            shown = normsources.get_source(db_path, "放款要求")
+
+        self.assertEqual(result["source_type"], "internal_governance")
+        self.assertIsNotNone(shown)
+        self.assertEqual(shown["source_type"], "internal_governance")
+
+    def test_norm_fallback_payload_marks_private_hierarchy(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, FIXTURES)
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+
+            payload = service.get_article(db_path, "甲方放款要求", "2")
+
+        self.assertEqual(payload.get("via"), "norm_fallback")
+        law = payload["law"]
+        self.assertEqual(law["status"], "not_applicable")
+        self.assertEqual(law["hierarchy"], "private_norm")
+        # 私域规范之间不做绝对效力排序：无 rank 字段，改为约束力定性提示
+        self.assertNotIn("norm_source_type_rank", law)
+        self.assertEqual(
+            law["binding_note"],
+            NORM_SOURCE_TYPE_BINDING_NOTES["contractual_requirement"],
+        )
+
+    def test_article_to_markdown_warns_for_norm_fallback(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, FIXTURES)
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+
+            norm_payload = service.get_article(db_path, "甲方放款要求", "2")
+            public_payload = service.get_article(db_path, "民法典", "143")
+
+        norm_md = formatters.article_to_markdown(norm_payload)
+        self.assertIn("私域规范条款", norm_md)
+        self.assertIn("不是国家法规范", norm_md)
+        public_md = formatters.article_to_markdown(public_payload)
+        self.assertNotIn("不是国家法规范", public_md)
+
+    def test_search_emits_conflict_notice_when_public_and_private_both_hit(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, FIXTURES)
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+
+            both = service.search(db_path, "担保")
+            only_public = service.search(db_path, "工作时间")
+
+        self.assertTrue(both["article_hits"])
+        self.assertTrue(both["norm_clause_hits"])
+        self.assertIn("conflict_notice", both)
+        self.assertIn("效力以公开法为准", both["conflict_notice"])
+        clause_hit = both["norm_clause_hits"][0]
+        self.assertEqual(clause_hit["hierarchy"], "private_norm")
+        # 私域规范之间不做绝对效力排序：无 rank 字段，改为约束力定性提示
+        self.assertNotIn("norm_source_type_rank", clause_hit)
+        self.assertEqual(
+            clause_hit["binding_note"],
+            NORM_SOURCE_TYPE_BINDING_NOTES["contractual_requirement"],
+        )
+
+        # markdown 在私域小节前渲染同一提示，类型翻译为中文名
+        md = formatters.search_to_markdown(both)
+        self.assertIn("效力以公开法为准", md)
+        self.assertIn("类型：合同约定型", md)
+
+        # 仅命中公开法时不出现提示
+        self.assertTrue(only_public["article_hits"])
+        self.assertFalse(only_public["norm_clause_hits"])
+        self.assertNotIn("conflict_notice", only_public)
+
+    def test_search_omits_conflict_notice_when_only_private_hit(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+
+            only_private = service.search(db_path, "担保")
+
+        self.assertTrue(only_private["norm_clause_hits"])
+        self.assertFalse(only_private["article_hits"])
+        self.assertNotIn("conflict_notice", only_private)
+
     def test_import_text_source_file_splits_numbered_clauses(self):
         import tempfile
 
@@ -5083,7 +5421,7 @@ class NormSourceTests(unittest.TestCase):
                 db_path,
                 text_file,
                 name="文本放款要求",
-                source_type="lender_requirement",
+                source_type="contractual_requirement",
             )
             shown = normsources.get_source(db_path, "文本放款要求")
             clause = normsources.get_clause(db_path, "文本放款要求", "2.1")
@@ -5163,6 +5501,134 @@ class NormSourceTests(unittest.TestCase):
         self.assertIn("2．上市公司董事", clauses[1]["text"])
         self.assertNotIn("公布机关", clauses[0]["text"])
 
+    def test_clauses_from_text_tracks_charter_chapter_and_section(self):
+        clauses = normsources.clauses_from_text(CHARTER_SAMPLE_TEXT)
+
+        self.assertEqual(len(clauses), 6)
+        by_display = {c["number_display"]: c for c in clauses}
+        # 全角空格与字间空格归一为单个半角空格
+        self.assertEqual(by_display["第一条"]["part"], "第一章 总 则")
+        self.assertEqual(by_display["第二条"]["part"], "第一章 总 则")
+        self.assertEqual(by_display["第一百条"]["part"], "第三章 股份 第一节 股份发行")
+        self.assertEqual(by_display["第一百〇一条"]["part"], "第三章 股份 第一节 股份发行")
+        self.assertEqual(by_display["第一百二十条"]["part"], "第三章 股份 第二节 股份转让")
+        # 新章出现后节上下文重置
+        self.assertEqual(by_display["第二百条"]["part"], "第十章 附 则")
+        # 章/节标题行不混入任何条款正文
+        for clause in clauses:
+            self.assertNotIn("第一章", clause["text"])
+            self.assertNotIn("第三章", clause["text"])
+            self.assertNotIn("第十章", clause["text"])
+            self.assertNotIn("第一节", clause["text"])
+            self.assertNotIn("第二节", clause["text"])
+
+    def test_clauses_from_text_without_chapters_keeps_part_none(self):
+        clauses = normsources.clauses_from_text(
+            "第一条 借款主体应提交完整资料。\n第二条 担保应完成审批。"
+        )
+        self.assertEqual(len(clauses), 2)
+        self.assertEqual([c["part"] for c in clauses], [None, None])
+
+    def test_charter_part_persisted_through_import_snapshot_and_read(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            charter_file = Path(td) / "charter.md"
+            charter_file.write_text(CHARTER_SAMPLE_TEXT, encoding="utf-8")
+            imported = normsources.import_text_source_file(
+                db_path,
+                charter_file,
+                name="测试样例章程",
+                source_id="demo-charter",
+            )
+            shown = normsources.get_source(db_path, "测试样例章程")
+            clause = normsources.get_clause(db_path, "测试样例章程", "第一百〇一条")
+            exported = normsources.export_source(db_path, "测试样例章程")
+            exported_meta = normsources.export_source(
+                db_path, "测试样例章程", metadata_only=True
+            )
+            with connect(db_path) as conn:
+                snapshot = normsources.get_latest_revision_snapshot(conn, "demo-charter")
+
+        self.assertEqual(imported["clauses_loaded"], 6)
+        self.assertEqual(shown["clauses"][0]["part"], "第一章 总 则")
+        # 〇 写法条号归一命中，读出带 part
+        self.assertIsNotNone(clause["clause"])
+        self.assertEqual(clause["clause"]["number"], "101")
+        self.assertEqual(clause["clause"]["part"], "第三章 股份 第一节 股份发行")
+        self.assertEqual(exported["clauses"][2]["part"], "第三章 股份 第一节 股份发行")
+        # metadata_only 导出保留 part、剔除正文
+        self.assertEqual(
+            exported_meta["clauses"][2]["part"], "第三章 股份 第一节 股份发行"
+        )
+        self.assertNotIn("text", exported_meta["clauses"][2])
+        # 快照规范化 payload 带 part（rebuild 脱离原文件的事实来源）
+        self.assertIsNotNone(snapshot)
+        self.assertEqual(snapshot["clauses"][2]["part"], "第三章 股份 第一节 股份发行")
+
+    def test_rebuild_norm_repopulates_part_for_pre_v13_rows(self):
+        """v13 前入库的行 part 为 NULL；rebuild 重切后 part 变化应触发重建落库。"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            charter_file = Path(td) / "charter.md"
+            charter_file.write_text(CHARTER_SAMPLE_TEXT, encoding="utf-8")
+            normsources.import_text_source_file(
+                db_path,
+                charter_file,
+                name="重建章节测试章程",
+                source_id="rebuild-part-charter",
+            )
+            # 模拟 v12 时代入库的行：part 列为 NULL
+            with connect(db_path) as conn:
+                conn.execute(
+                    "UPDATE norm_clauses SET part = NULL "
+                    "WHERE norm_source_id = 'rebuild-part-charter'"
+                )
+            result = rebuild.rebuild_clean(db_path, norm="重建章节测试章程")
+            shown = normsources.get_source(db_path, "重建章节测试章程")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["items"][0]["rebuild_source"], "file")
+        self.assertTrue(result["items"][0]["changed"])
+        self.assertGreater(result["items"][0]["clause_part_changed_count"], 0)
+        self.assertEqual(shown["clauses"][0]["part"], "第一章 总 则")
+        self.assertEqual(
+            shown["clauses"][2]["part"], "第三章 股份 第一节 股份发行"
+        )
+
+    def test_rebuild_norm_from_snapshot_preserves_part(self):
+        """原文件丢失时 snapshot 重建路径同样恢复 part。"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            charter_file = Path(td) / "charter.md"
+            charter_file.write_text(CHARTER_SAMPLE_TEXT, encoding="utf-8")
+            normsources.import_text_source_file(
+                db_path,
+                charter_file,
+                name="快照章节测试章程",
+                source_id="snapshot-part-charter",
+            )
+            charter_file.unlink()
+            with connect(db_path) as conn:
+                conn.execute(
+                    "UPDATE norm_clauses SET part = NULL "
+                    "WHERE norm_source_id = 'snapshot-part-charter'"
+                )
+            result = rebuild.rebuild_clean(db_path, norm="快照章节测试章程")
+            shown = normsources.get_source(db_path, "快照章节测试章程")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["items"][0]["rebuild_source"], "snapshot")
+        self.assertTrue(result["items"][0]["changed"])
+        self.assertEqual(
+            shown["clauses"][2]["part"], "第三章 股份 第一节 股份发行"
+        )
+
     def test_rebuild_clean_norm_replays_original_ingest_source(self):
         text = "\n".join(
             [
@@ -5185,7 +5651,7 @@ class NormSourceTests(unittest.TestCase):
             stale_payload = {
                 "id": "norm-disclosure-rule",
                 "name": "上市公司信息披露管理办法",
-                "source_type": "csrc_rule",
+                "source_type": "other",
                 "source_name": str(source_file),
                 "source_checked_at": "2026-05-17T00:00:00+00:00",
                 "source_hash": "sha256-test",
@@ -5232,7 +5698,7 @@ class NormSourceTests(unittest.TestCase):
                 name="金融审判纪要征求意见稿",
                 source_id="private-finance-draft",
                 short_name="金融审判纪要",
-                source_type="unofficial_draft_reprint",
+                source_type="other",
                 aliases=["金融审判会议纪要", "金融审判纪要"],
                 source_name="第三方转载",
                 source_checked_at="2026-05-01T00:00:00+08:00",
@@ -5300,6 +5766,370 @@ class NormSourceTests(unittest.TestCase):
 
         self.assertIn("第一条", text)
         run.assert_called_once()
+
+    def test_export_source_marks_sensitivity_and_notice(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+            exported = normsources.export_source(db_path, "甲方放款要求")
+
+        self.assertEqual(exported["sensitivity"], "private")
+        self.assertEqual(exported["notice"], normsources.NORM_EXPORT_NOTICE)
+        # 默认导出仍含条款正文
+        self.assertIn("担保", exported["clauses"][1]["text"])
+        # markdown 输出带同一行防泄漏提示
+        md = formatters.norm_source_to_markdown(exported)
+        self.assertIn(normsources.NORM_EXPORT_NOTICE, md)
+
+    def test_export_source_metadata_only_omits_clause_text(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+            exported = normsources.export_source(
+                db_path, "甲方放款要求", metadata_only=True
+            )
+
+        self.assertEqual(exported["sensitivity"], "private")
+        self.assertEqual(exported["notice"], normsources.NORM_EXPORT_NOTICE)
+        self.assertEqual(len(exported["clauses"]), 3)
+        for clause in exported["clauses"]:
+            self.assertNotIn("text", clause)
+            self.assertTrue(clause.get("number") or clause.get("number_display"))
+
+    def test_mcp_search_hides_private_norm_hits_by_default(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, FIXTURES)
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+
+            response = mcp.handle_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "chinalaw_search",
+                        "arguments": {"query": "担保"},
+                    },
+                },
+                db_path=db_path,
+            )
+
+        result = response["result"]
+        self.assertFalse(result["isError"])
+        payload = result["structuredContent"]
+        self.assertTrue(payload["article_hits"])
+        self.assertEqual(payload["norm_clause_hits"], [])
+        self.assertEqual(payload["norm_source_hits"], [])
+        self.assertNotIn("conflict_notice", payload)
+
+    def test_mcp_search_norm_kind_rejected_by_default(self):
+        response = mcp.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "chinalaw_search",
+                    "arguments": {"query": "担保", "kind": "norm"},
+                },
+            },
+        )
+
+        result = response["result"]
+        self.assertTrue(result["isError"])
+        payload = result["structuredContent"]
+        self.assertEqual(payload["kind"], "chinalaw_mcp_error")
+        self.assertEqual(payload["code"], -32600)
+        self.assertIn("--allow-private-norms", payload["message"])
+
+    def test_mcp_search_includes_private_norm_hits_when_allowed(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, FIXTURES)
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+
+            norm_only = mcp.handle_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "chinalaw_search",
+                        "arguments": {"query": "担保", "kind": "norm"},
+                    },
+                },
+                db_path=db_path,
+                allow_private_norms=True,
+            )
+            kind_all = mcp.handle_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "chinalaw_search",
+                        "arguments": {"query": "担保"},
+                    },
+                },
+                db_path=db_path,
+                allow_private_norms=True,
+            )
+
+        norm_payload = norm_only["result"]["structuredContent"]
+        self.assertFalse(norm_only["result"]["isError"])
+        self.assertTrue(norm_payload["norm_clause_hits"])
+        all_payload = kind_all["result"]["structuredContent"]
+        self.assertTrue(all_payload["norm_clause_hits"])
+        # 公开法与私域同时命中时冲突提示恢复出现
+        self.assertIn("conflict_notice", all_payload)
+
+    def test_mcp_article_skips_norm_fallback_by_default(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, FIXTURES)
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+
+            request = {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {
+                    "name": "chinalaw_article",
+                    "arguments": {"law": "甲方放款要求", "number": "2"},
+                },
+            }
+            denied = mcp.handle_request(request, db_path=db_path)
+            allowed = mcp.handle_request(
+                request, db_path=db_path, allow_private_norms=True
+            )
+
+        denied_payload = denied["result"]["structuredContent"]
+        self.assertFalse(denied["result"]["isError"])
+        self.assertFalse(denied_payload["found"])
+        self.assertNotIn("via", denied_payload)
+
+        allowed_payload = allowed["result"]["structuredContent"]
+        self.assertTrue(allowed_payload["found"])
+        self.assertEqual(allowed_payload.get("via"), "norm_fallback")
+        self.assertEqual(
+            allowed_payload["law"]["hierarchy"], "private_norm"
+        )
+
+    def test_import_records_revision_snapshot_and_increments(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                first = normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+                self.assertEqual(first["revision"], 1)
+                # 再导入一次（同 id），revision 应递增且保留旧快照
+                second = normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+                self.assertEqual(second["revision"], 2)
+
+                rows = conn.execute(
+                    "SELECT revision, snapshot_json FROM norm_source_revisions "
+                    "WHERE norm_source_id = ? ORDER BY revision",
+                    (EXTRA_NORM_SOURCE_FIXTURE["id"],),
+                ).fetchall()
+                self.assertEqual([row["revision"] for row in rows], [1, 2])
+                snapshot = json.loads(rows[0]["snapshot_json"])
+                self.assertEqual(snapshot["id"], EXTRA_NORM_SOURCE_FIXTURE["id"])
+                self.assertEqual(snapshot["name"], EXTRA_NORM_SOURCE_FIXTURE["name"])
+                self.assertEqual(snapshot["source_type"], "contractual_requirement")
+                self.assertEqual(len(snapshot["clauses"]), 3)
+                self.assertEqual(snapshot["clauses"][0]["number"], "1")
+                self.assertIn("text", snapshot["clauses"][0])
+                self.assertEqual(snapshot["clauses"][0]["position"], 1)
+
+    def test_rebuild_norm_falls_back_to_snapshot_when_source_file_gone(self):
+        import tempfile
+
+        text = "第一条　借款主体应提交完整资料。\n第二条　担保应完成审批。\n"
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            source_file = Path(td) / "policy.md"
+            source_file.write_text(text, encoding="utf-8")
+            imported = normsources.import_text_source_file(
+                db_path,
+                source_file,
+                name="快照回退测试制度",
+                source_id="snapshot-fallback-policy",
+            )
+            self.assertEqual(imported["revision"], 1)
+            # 删掉原文件：rebuild 应走 snapshot 而不是报错
+            source_file.unlink()
+            result = rebuild.rebuild_clean(db_path, norm="快照回退测试制度")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["error_count"], 0)
+        self.assertEqual(result["norm_count"], 1)
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0]["rebuild_source"], "snapshot")
+
+    def test_rebuild_norm_prefers_original_file_when_present(self):
+        import tempfile
+
+        text = "第一条　借款主体应提交完整资料。\n第二条　担保应完成审批。\n"
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            source_file = Path(td) / "policy.md"
+            source_file.write_text(text, encoding="utf-8")
+            normsources.import_text_source_file(
+                db_path,
+                source_file,
+                name="原文件优先测试制度",
+                source_id="file-preferred-policy",
+            )
+            result = rebuild.rebuild_clean(db_path, norm="原文件优先测试制度")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["items"][0]["rebuild_source"], "file")
+
+    def test_delete_source_removes_rows_revisions_and_fts(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+            source_id = EXTRA_NORM_SOURCE_FIXTURE["id"]
+
+            result = normsources.delete_source(db_path, "放款要求")
+            self.assertIsNotNone(result)
+            self.assertEqual(result["kind"], "norm_source_delete")
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["name"], EXTRA_NORM_SOURCE_FIXTURE["name"])
+            self.assertEqual(result["clauses_deleted"], 3)
+            self.assertEqual(result["revisions_deleted"], 1)
+
+            # 再删一次：未命中
+            self.assertIsNone(normsources.delete_source(db_path, "放款要求"))
+
+            with connect(db_path) as conn:
+                table_key = {
+                    "norm_sources": "id",
+                    "norm_clauses": "norm_source_id",
+                    "norm_source_revisions": "norm_source_id",
+                    "norm_sources_fts_rows": "norm_source_id",
+                    "norm_clauses_fts_rows": "norm_source_id",
+                }
+                for table, column in table_key.items():
+                    count = conn.execute(
+                        f"SELECT COUNT(*) FROM {table} WHERE {column} = ?",
+                        (source_id,),
+                    ).fetchone()[0]
+                    self.assertEqual(count, 0, f"{table} 仍有残留")
+                # FTS 虚表无残留（trigram 匹配任意子串，直接按 UNINDEXED 列查）
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM norm_sources_fts "
+                        "WHERE norm_source_id = ?",
+                        (source_id,),
+                    ).fetchone()[0],
+                    0,
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM norm_clauses_fts "
+                        "WHERE norm_source_id = ?",
+                        (source_id,),
+                    ).fetchone()[0],
+                    0,
+                )
+
+            self.assertEqual(normsources.list_sources(db_path), [])
+            self.assertIsNone(normsources.get_source(db_path, "放款要求"))
+            search = service.search(db_path, "担保", kind="norm")
+            self.assertEqual(search.get("norm_clause_hits"), [])
+            self.assertEqual(search.get("norm_source_hits"), [])
+
+    def test_history_lists_revisions_with_counts(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+                updated = dict(EXTRA_NORM_SOURCE_FIXTURE)
+                updated["clauses"] = EXTRA_NORM_SOURCE_FIXTURE["clauses"] + [
+                    {"number": "第三条", "number_display": "第三条", "text": "新增条款。"}
+                ]
+                normsources.import_source_from_dict(conn, updated)
+
+            history = normsources.list_revisions(db_path, "放款要求")
+
+        self.assertIsNotNone(history)
+        self.assertEqual(history["kind"], "norm_source_history")
+        self.assertEqual(history["revision_count"], 2)
+        self.assertEqual(
+            [r["revision"] for r in history["revisions"]],
+            [1, 2],
+        )
+        self.assertEqual(history["revisions"][0]["clause_count"], 3)
+        self.assertEqual(history["revisions"][1]["clause_count"], 4)
+        self.assertTrue(history["revisions"][0]["source_hash"])
+        self.assertTrue(history["revisions"][0]["created_at"])
+        self.assertIsNone(normsources.list_revisions(db_path, "不存在的规范"))
+
+    def test_diff_detects_modified_and_added_clauses(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                normsources.import_source_from_dict(conn, EXTRA_NORM_SOURCE_FIXTURE)
+                updated = dict(EXTRA_NORM_SOURCE_FIXTURE)
+                updated["clauses"] = [
+                    dict(EXTRA_NORM_SOURCE_FIXTURE["clauses"][0]),
+                    dict(
+                        EXTRA_NORM_SOURCE_FIXTURE["clauses"][1],
+                        text="涉及担保的，应确认担保审批程序、签署权限、担保物状态和登记均已满足要求。",
+                    ),
+                    dict(EXTRA_NORM_SOURCE_FIXTURE["clauses"][2]),
+                    {"number": "第三条", "number_display": "第三条", "text": "新增条款。"},
+                ]
+                normsources.import_source_from_dict(conn, updated)
+
+            # 显式 --from/--to：比两个历史 revision
+            diff = normsources.diff_revisions(
+                db_path, "放款要求", from_revision=1, to_revision=2
+            )
+            self.assertTrue(diff["changed"])
+            self.assertEqual(diff["added_count"], 1)
+            self.assertEqual(diff["removed_count"], 0)
+            self.assertEqual(diff["modified_count"], 1)
+            self.assertEqual(diff["added"], ["第三条"])
+            self.assertEqual(diff["modified"], ["第二条"])
+
+            # 默认：最新 revision vs 当前库内容（刚导入完，应无差异）
+            no_diff = normsources.diff_revisions(db_path, "放款要求")
+            self.assertEqual(no_diff["from"], 2)
+            self.assertEqual(no_diff["to"], "current")
+            self.assertFalse(no_diff["changed"])
+
+            # revision 不存在走 error payload；未命中规范返回 None
+            missing = normsources.diff_revisions(
+                db_path, "放款要求", from_revision=1, to_revision=99
+            )
+            self.assertEqual(missing["error"], "revision_not_found")
+            self.assertIsNone(normsources.diff_revisions(db_path, "不存在的规范"))
 
 
 class ApplicabilityTests(unittest.TestCase):
@@ -5517,7 +6347,7 @@ class AuditTests(unittest.TestCase):
         norm_payload = {
             "id": "audit-norm",
             "name": "审查私域规范",
-            "source_type": "company_policy",
+            "source_type": "internal_governance",
             "source_name": "test",
             "source_checked_at": "2026-05-01T00:00:00+08:00",
             "clauses": [
@@ -5820,6 +6650,21 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(code, 1)
         self.assertIn("未找到", out)
+
+    def test_cli_norm_ingest_rejects_unknown_source_type(self):
+        with self.assertRaises(SystemExit) as ctx:
+            self._run(
+                [
+                    "norm",
+                    "ingest",
+                    "dummy.txt",
+                    "--name",
+                    "测试制度",
+                    "--source-type",
+                    "bogus_type",
+                ]
+            )
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_cli_article_law_missing_emits_diagnosis(self):
         """法规整体不在 DB → reason=law_missing + 完整 fetch 命令。"""
@@ -6982,6 +7827,41 @@ class CliTests(unittest.TestCase):
         clause = json.loads(clause_out)
         self.assertEqual(clause["clause"]["number"], "2")
 
+    def test_cli_norm_ingest_charter_and_clause_part(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            charter_file = Path(td) / "charter.md"
+            charter_file.write_text(CHARTER_SAMPLE_TEXT, encoding="utf-8")
+            code, out = self._run(
+                [
+                    "norm",
+                    "ingest",
+                    str(charter_file),
+                    "--name",
+                    "CLI测试章程",
+                    "--source-type",
+                    "internal_governance",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["clauses_loaded"], 6)
+
+        clause_code, clause_out = self._run(
+            ["norm", "clause", "CLI测试章程", "第一百〇一条"]
+        )
+        self.assertEqual(clause_code, 0)
+        clause = json.loads(clause_out)
+        self.assertEqual(clause["clause"]["number"], "101")
+        self.assertEqual(clause["clause"]["part"], "第三章 股份 第一节 股份发行")
+
+        md_code, md_out = self._run(
+            ["norm", "clause", "CLI测试章程", "101", "--format", "md"]
+        )
+        self.assertEqual(md_code, 0)
+        self.assertIn("_位置：第三章 股份 第一节 股份发行_", md_out)
+
     def test_cli_norm_ingest_docx_json(self):
         import tempfile
 
@@ -7003,7 +7883,7 @@ class CliTests(unittest.TestCase):
                     "--name",
                     "CLI导入放款制度",
                     "--source-type",
-                    "lender_requirement",
+                    "contractual_requirement",
                 ]
             )
         self.assertEqual(code, 0)
@@ -7039,7 +7919,7 @@ class CliTests(unittest.TestCase):
                     "--name",
                     "九民纪要预览",
                     "--source-type",
-                    "court_meeting_minutes",
+                    "other",
                     "--dry-run",
                 ]
             )
@@ -7101,7 +7981,7 @@ class CliTests(unittest.TestCase):
                     "--name",
                     "正常切分文档",
                     "--source-type",
-                    "court_meeting_minutes",
+                    "other",
                 ]
             )
         self.assertEqual(code, 0)
@@ -7144,7 +8024,7 @@ class CliTests(unittest.TestCase):
                     "--short-name",
                     "金融审判纪要测试",
                     "--source-type",
-                    "unofficial_draft_reprint",
+                    "other",
                     "--alias",
                     "金融审判会议纪要测试",
                     "--source-name",
@@ -7173,6 +8053,151 @@ class CliTests(unittest.TestCase):
         self.assertEqual(exported["source_checked_at"], "2026-05-01T00:00:00+08:00")
         self.assertEqual(exported["metadata"]["verification"]["human_checked"], True)
         self.assertEqual(exported["clauses"][0]["title"], "供应链金融平台纠纷案件的审理要点")
+
+    def test_cli_norm_export_metadata_only(self):
+        code, out = self._run(["norm", "export", "放款要求", "--metadata-only"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["sensitivity"], "private")
+        self.assertIn("私域规范数据", payload["notice"])
+        self.assertTrue(payload["clauses"])
+        for clause in payload["clauses"]:
+            self.assertNotIn("text", clause)
+            self.assertTrue(clause.get("number") or clause.get("number_display"))
+
+        # 默认导出保留正文，且 md 输出带防泄漏提示
+        code, out = self._run(["norm", "export", "放款要求"])
+        self.assertEqual(code, 0)
+        self.assertIn("text", json.loads(out)["clauses"][0])
+        code, out = self._run(["norm", "export", "放款要求", "--format", "md"])
+        self.assertEqual(code, 0)
+        self.assertIn("私域规范数据，请勿上传公开仓库或外部服务", out)
+
+    def test_cli_norm_delete(self):
+        # 用专用 fixture（中性条款文本，避免污染共享 DB 中其他检索用例）
+        with connect(self.db_path) as conn:
+            normsources.import_source_from_dict(
+                conn,
+                {
+                    "id": "cli-delete-me",
+                    "name": "待删除规范（CLI 测试）",
+                    "source_type": "internal_governance",
+                    "source_name": "local-file",
+                    "clauses": [
+                        {"number": "第一条", "number_display": "第一条", "text": "月度报表应于次月五日前提交。"},
+                        {"number": "第二条", "number_display": "第二条", "text": "印章使用须登记台账。"},
+                    ],
+                },
+            )
+        code, out = self._run(["norm", "delete", "待删除规范（CLI 测试）"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["kind"], "norm_source_delete")
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["clauses_deleted"], 2)
+        self.assertEqual(payload["revisions_deleted"], 1)
+
+        # 再删一次：未命中退出码 1
+        code, out = self._run(["norm", "delete", "待删除规范（CLI 测试）"])
+        self.assertEqual(code, 1)
+        payload = json.loads(out)
+        self.assertFalse(payload["found"])
+
+        code, out = self._run(["norm", "delete", "完全不存在的规范", "--format", "md"])
+        self.assertEqual(code, 1)
+        self.assertIn("未找到", out)
+
+    def test_cli_norm_history(self):
+        history_fixture = {
+            "id": "cli-history-norm",
+            "name": "历史快照规范（CLI 测试）",
+            "source_type": "internal_governance",
+            "source_name": "local-file",
+            "clauses": [
+                {"number": "第一条", "number_display": "第一条", "text": "月度报表应于次月五日前提交。"},
+                {"number": "第二条", "number_display": "第二条", "text": "印章使用须登记台账。"},
+            ],
+        }
+        with connect(self.db_path) as conn:
+            normsources.import_source_from_dict(conn, history_fixture)
+            normsources.import_source_from_dict(conn, history_fixture)
+        code, out = self._run(["norm", "history", "历史快照规范（CLI 测试）"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["kind"], "norm_source_history")
+        self.assertEqual(payload["revision_count"], 2)
+        self.assertEqual([r["revision"] for r in payload["revisions"]], [1, 2])
+        self.assertEqual(payload["revisions"][0]["clause_count"], 2)
+
+        code, out = self._run(
+            ["norm", "history", "历史快照规范（CLI 测试）", "--format", "md"]
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("revision 1", out)
+
+        code, out = self._run(["norm", "history", "完全不存在的规范"])
+        self.assertEqual(code, 1)
+        self.assertFalse(json.loads(out)["found"])
+
+    def test_cli_norm_diff(self):
+        fixture_v1 = {
+            "id": "cli-diff-norm",
+            "name": "差异对比规范（CLI 测试）",
+            "source_type": "internal_governance",
+            "source_name": "local-file",
+            "clauses": [
+                {"number": "第一条", "number_display": "第一条", "text": "月度报表应于次月五日前提交。"},
+                {"number": "第二条", "number_display": "第二条", "text": "印章使用须登记台账。"},
+            ],
+        }
+        fixture_v2 = dict(fixture_v1)
+        fixture_v2["clauses"] = [
+            dict(fixture_v1["clauses"][0]),
+            dict(fixture_v1["clauses"][1], text="印章使用须登记台账并由专人保管。"),
+        ]
+        with connect(self.db_path) as conn:
+            normsources.import_source_from_dict(conn, fixture_v1)
+            normsources.import_source_from_dict(conn, fixture_v2)
+
+        code, out = self._run(
+            ["norm", "diff", "差异对比规范（CLI 测试）", "--from", "1", "--to", "2"]
+        )
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["kind"], "norm_source_diff")
+        self.assertTrue(payload["changed"])
+        self.assertEqual(payload["modified_count"], 1)
+        self.assertEqual(payload["modified"], ["第二条"])
+
+        # 默认：最新快照 vs 当前库内容（刚导入完，无差异）
+        code, out = self._run(["norm", "diff", "差异对比规范（CLI 测试）"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["to"], "current")
+        self.assertFalse(payload["changed"])
+
+        code, out = self._run(
+            [
+                "norm",
+                "diff",
+                "差异对比规范（CLI 测试）",
+                "--from",
+                "1",
+                "--to",
+                "2",
+                "--format",
+                "md",
+            ]
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("修改条款", out)
+
+        # 未命中退出码 1
+        code, out = self._run(["norm", "diff", "完全不存在的规范"])
+        self.assertEqual(code, 1)
+        # 参数错（只给 --from）退出码 2
+        code, out = self._run(["norm", "diff", "差异对比规范（CLI 测试）", "--from", "1"])
+        self.assertEqual(code, 2)
 
     def test_cli_search_norm_json(self):
         with connect(self.db_path) as conn:

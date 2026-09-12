@@ -43,10 +43,17 @@ class FramingError(ValueError):
         self.recoverable = recoverable
 
 
+class PrivateNormsDisabledError(ValueError):
+    """A tool request needs private norm data but the server hides it by default."""
+
+    code = -32600
+
+
 def handle_request(
     request: object,
     *,
     db_path: Path | str = DEFAULT_DB_PATH,
+    allow_private_norms: bool = False,
     error_stream: TextIO | None = None,
 ) -> dict[str, Any] | None:
     """Validate and dispatch one JSON-RPC request.
@@ -54,6 +61,9 @@ def handle_request(
     A missing ``id`` key denotes a notification. Notifications are dispatched,
     but never produce a response, including when validation or tool execution
     fails. An explicit ``"id": null`` remains a request and receives a response.
+
+    ``allow_private_norms`` gates private norm (私域规范) exposure: by default
+    article lookups skip the norm fallback and searches skip norm hits.
     """
 
     notification = isinstance(request, dict) and "id" not in request
@@ -112,6 +122,7 @@ def handle_request(
             name,
             arguments,
             db_path=db_path,
+            allow_private_norms=allow_private_norms,
             error_stream=error_stream,
         )
     elif method == "ping":
@@ -232,10 +243,16 @@ def _call_tool(
     arguments: dict[str, Any],
     *,
     db_path: Path | str,
+    allow_private_norms: bool = False,
     error_stream: TextIO | None = None,
 ) -> dict[str, Any]:
     try:
-        payload = _tool_payload(name, arguments, db_path=db_path)
+        payload = _tool_payload(
+            name,
+            arguments,
+            db_path=db_path,
+            allow_private_norms=allow_private_norms,
+        )
         return _tool_result(payload, is_error=False)
     except ValueError as exc:
         payload = {
@@ -243,6 +260,8 @@ def _call_tool(
             "error": exc.__class__.__name__,
             "message": str(exc),
         }
+        if isinstance(getattr(exc, "code", None), int):
+            payload["code"] = exc.code
         return _tool_result(payload, is_error=True)
     except Exception as exc:
         _log_exception(error_stream, f"tool {name!r} failed", exc)
@@ -262,7 +281,13 @@ def _tool_result(payload: dict[str, Any], *, is_error: bool) -> dict[str, Any]:
     }
 
 
-def _tool_payload(name: str, arguments: dict[str, Any], *, db_path: Path | str) -> dict:
+def _tool_payload(
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    db_path: Path | str,
+    allow_private_norms: bool = False,
+) -> dict:
     if name == "chinalaw_resolve":
         return service.resolve(db_path, _required(arguments, "name"))
     if name == "chinalaw_article":
@@ -270,9 +295,13 @@ def _tool_payload(name: str, arguments: dict[str, Any], *, db_path: Path | str) 
         number = _required(arguments, "number")
         as_of = _optional(arguments, "as_of")
         payload = (
-            service.get_article_as_of(db_path, law, number, as_of)
+            service.get_article_as_of(
+                db_path, law, number, as_of, include_norm=allow_private_norms
+            )
             if as_of
-            else service.get_article(db_path, law, number)
+            else service.get_article(
+                db_path, law, number, include_norm=allow_private_norms
+            )
         )
         if payload is None or payload.get("article") is None:
             diagnosis = (
@@ -294,14 +323,23 @@ def _tool_payload(name: str, arguments: dict[str, Any], *, db_path: Path | str) 
         law = _required(arguments, "law")
         numbers = _required(arguments, "numbers")
         as_of = _optional(arguments, "as_of")
-        return service.get_articles(db_path, law, numbers, as_of=as_of)
+        return service.get_articles(
+            db_path, law, numbers, as_of=as_of, include_norm=allow_private_norms
+        )
     if name == "chinalaw_search":
+        kind = _optional(arguments, "kind") or "all"
+        if kind == "norm" and not allow_private_norms:
+            raise PrivateNormsDisabledError(
+                "kind=norm 检索的是私域规范；本服务器默认不暴露私域规范，"
+                "如需使用请以 --allow-private-norms 启动 chinalaw-mcp。"
+            )
         return service.search(
             db_path,
             _required(arguments, "query"),
             limit=_integer(arguments, "limit", default=10),
-            kind=_optional(arguments, "kind") or "all",
+            kind=kind,
             in_laws=_optional(arguments, "in_laws"),
+            include_norm=allow_private_norms,
         )
     if name == "chinalaw_applicable":
         return service.applicable(
@@ -600,6 +638,7 @@ def serve_streams(
     error_stream: TextIO,
     *,
     db_path: Path | str = DEFAULT_DB_PATH,
+    allow_private_norms: bool = False,
 ) -> None:
     """Serve a continuous MCP session over injectable binary streams."""
 
@@ -623,6 +662,7 @@ def serve_streams(
             response = handle_request(
                 request,
                 db_path=db_path,
+                allow_private_norms=allow_private_norms,
                 error_stream=error_stream,
             )
         except Exception as exc:
@@ -645,8 +685,18 @@ def _log_exception(error_stream: TextIO | None, context: str, exc: BaseException
     traceback.print_exception(type(exc), exc, exc.__traceback__, file=stream)
 
 
-def serve_stdio(*, db_path: Path | str = DEFAULT_DB_PATH) -> None:
-    serve_streams(sys.stdin.buffer, sys.stdout.buffer, sys.stderr, db_path=db_path)
+def serve_stdio(
+    *,
+    db_path: Path | str = DEFAULT_DB_PATH,
+    allow_private_norms: bool = False,
+) -> None:
+    serve_streams(
+        sys.stdin.buffer,
+        sys.stdout.buffer,
+        sys.stderr,
+        db_path=db_path,
+        allow_private_norms=allow_private_norms,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -659,8 +709,16 @@ def main(argv: list[str] | None = None) -> int:
         default=str(DEFAULT_DB_PATH),
         help=f"SQLite DB path (default {DEFAULT_DB_PATH})",
     )
+    parser.add_argument(
+        "--allow-private-norms",
+        action="store_true",
+        help=(
+            "expose private norm sources (article norm_fallback and search "
+            "kind=norm / norm hits); hidden by default"
+        ),
+    )
     args = parser.parse_args(argv)
-    serve_stdio(db_path=Path(args.db))
+    serve_stdio(db_path=Path(args.db), allow_private_norms=args.allow_private_norms)
     return 0
 
 

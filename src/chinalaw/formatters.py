@@ -9,9 +9,31 @@ import json
 import re
 from typing import Any
 
+from chinalaw.models import norm_source_type_binding_note, normalize_norm_source_type
+
 
 def to_json(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+_NORM_SOURCE_TYPE_LABELS = {
+    "contractual_requirement": "合同约定型",
+    "internal_governance": "内部治理型",
+    "standard": "标准型",
+    "trade_usage": "习惯惯例型",
+    "other": "其他",
+}
+
+
+def _norm_source_type_label(source_type: object) -> str:
+    """私域规范来源类型的中文名；已废弃旧值 / 枚举外值先归一再取名。"""
+    normalized, _ = normalize_norm_source_type(str(source_type or "").strip())
+    return _NORM_SOURCE_TYPE_LABELS[normalized]
+
+
+def _norm_binding_note_line(source_type: object) -> str:
+    """类型行后附的一行约束力定性提示。"""
+    return f"- 约束力提示：{norm_source_type_binding_note(str(source_type or ''))}"
 
 
 def _law_label(law: dict) -> str:
@@ -116,15 +138,28 @@ def search_to_markdown(result: dict) -> str:
             lines.append(f"- **{label}** — {h.get('status')}　[来源]({h.get('source_url')})")
             lines.append("")
 
+    # 公开法与私域规范同时命中时，在首个私域小节前渲染同一冲突提示。
+    conflict_notice = result.get("conflict_notice")
+    hierarchy_note = (
+        "_私域规范不是国家法规范，不具备法律渊源效力，"
+        "仅在合同/制度约定范围内约束。_"
+    )
+
     norm_source_hits = result.get("norm_source_hits", [])
     if norm_source_hits:
+        if conflict_notice:
+            lines.append(f"> **{conflict_notice}**")
+            lines.append("")
+            conflict_notice = None
         lines.append(f"## 匹配私域规范（{len(norm_source_hits)}）")
+        lines.append(hierarchy_note)
         for h in norm_source_hits:
             name = h.get("name")
             short = h.get("short_name")
             label = f"{name}" + (f"（{short}）" if short else "")
             lines.append(
-                f"- **{label}** — {h.get('source_type')} / {h.get('authority') or 'authority 未知'}"
+                f"- **{label}** — {_norm_source_type_label(h.get('source_type'))}"
+                f" / {h.get('authority') or 'authority 未知'}"
             )
         lines.append("")
 
@@ -149,7 +184,11 @@ def search_to_markdown(result: dict) -> str:
 
     norm_clause_hits = result.get("norm_clause_hits", [])
     if norm_clause_hits:
+        if conflict_notice:
+            lines.append(f"> **{conflict_notice}**")
+            lines.append("")
         lines.append(f"## 匹配私域规范条款（{len(norm_clause_hits)}）")
+        lines.append(hierarchy_note)
         for h in norm_clause_hits:
             title = h.get("norm_source_name")
             num = h.get("number_display") or h.get("number") or "未编号条款"
@@ -159,7 +198,7 @@ def search_to_markdown(result: dict) -> str:
             lines.append(f"> {text}")
             lines.append("")
             lines.append(
-                f"- 类型：{h.get('norm_source_type')}"
+                f"- 类型：{_norm_source_type_label(h.get('norm_source_type'))}"
                 f"　（距上次核查：{h.get('freshness_days')} 天）"
             )
             lines.append("")
@@ -287,12 +326,19 @@ def rebuild_clean_to_markdown(report: dict) -> str:
         for item in items:
             mark = "changed" if item.get("changed") else "unchanged"
             if item.get("kind") == "norm_source":
+                rebuild_source = item.get("rebuild_source")
+                source_mark = {
+                    "file": "原文件",
+                    "snapshot": "快照",
+                }.get(rebuild_source, rebuild_source)
+                source_note = f"; 来源={source_mark}" if source_mark else ""
                 lines.append(
                     f"- {item.get('title')} (`{item.get('norm_source_id')}`) — {mark}; "
                     f"clauses {item.get('clause_count_before', 0)}"
                     f"→{item.get('clause_count_after', 0)}; "
                     f"text_changed={item.get('clause_text_changed_count', 0)}; "
                     f"number_changed={item.get('clause_number_changed_count', 0)}"
+                    f"{source_note}"
                 )
             else:
                 lines.append(
@@ -481,6 +527,11 @@ def article_to_markdown(
         if article_title:
             title_suffix = f" 【{article_title}】"
     lines.append(f"## {_law_label(law)} {num}{title_suffix}")
+    if law.get("via") == "norm_fallback":
+        lines.append("")
+        lines.append(
+            "**注意：以下为私域规范条款，不是国家法规范，不具备法律渊源效力。**"
+        )
     lines.append("")
     lines.append(f"> {article.get('text', '').strip()}")
 
@@ -1496,7 +1547,8 @@ def norm_source_list_to_markdown(sources: list[dict]) -> str:
     for source in sources:
         summary = source.get("binding_scope") or "适用范围未填写"
         lines.append(
-            f"- **{source.get('name')}** — {source.get('source_type')} — "
+            f"- **{source.get('name')}** — "
+            f"{_norm_source_type_label(source.get('source_type'))} — "
             f"{source.get('clause_count', 0)} 条 — {summary}"
         )
     return "\n".join(lines) + "\n"
@@ -1506,8 +1558,12 @@ def norm_source_to_markdown(source: dict) -> str:
     if source is None:
         return "_未找到该私域规范。_\n"
     lines = [f"# 私域规范：{source.get('name')}", ""]
+    if source.get("notice"):
+        lines.append(f"> {source['notice']}")
+        lines.append("")
     lines.append(f"- ID：`{source.get('id')}`")
-    lines.append(f"- 类型：{source.get('source_type')}")
+    lines.append(f"- 类型：{_norm_source_type_label(source.get('source_type'))}")
+    lines.append(_norm_binding_note_line(source.get("source_type")))
     if source.get("authority"):
         lines.append(f"- 制定主体：{source.get('authority')}")
     if source.get("binding_scope"):
@@ -1530,6 +1586,8 @@ def norm_source_to_markdown(source: dict) -> str:
                 or f"第 {clause.get('position')} 项"
             )
             lines.append(f"### {label}")
+            if clause.get("part"):
+                lines.append(f"_位置：{clause.get('part')}_")
             lines.append("")
             lines.append(clause.get("text", "").strip())
             lines.append("")
@@ -1548,11 +1606,15 @@ def norm_clause_to_markdown(payload: dict) -> str:
     source = payload["source"]
     clause = payload["clause"]
     label = clause.get("number_display") or clause.get("number") or ""
-    lines = [f"## {source.get('name')} {label}", ""]
+    lines = [f"## {source.get('name')} {label}"]
+    if clause.get("part"):
+        lines.append(f"_位置：{clause.get('part')}_")
+    lines.append("")
     lines.append(f"> {clause.get('text', '').strip()}")
     lines.append("")
     lines.append("---")
-    lines.append(f"- 类型：{source.get('source_type')}")
+    lines.append(f"- 类型：{_norm_source_type_label(source.get('source_type'))}")
+    lines.append(_norm_binding_note_line(source.get("source_type")))
     if source.get("authority"):
         lines.append(f"- 制定主体：{source.get('authority')}")
     if source.get("binding_scope"):
@@ -1565,6 +1627,8 @@ def norm_source_import_to_markdown(payload: dict) -> str:
         f"已导入私域规范：{payload.get('name')} "
         f"（{payload.get('clauses_loaded', 0)} 条）"
     ]
+    if payload.get("deprecation_warning"):
+        lines.append(f"警告：{payload['deprecation_warning']}")
     warnings = payload.get("warnings") or []
     if warnings:
         lines.append("")
@@ -1572,6 +1636,59 @@ def norm_source_import_to_markdown(payload: dict) -> str:
         for warning in warnings:
             lines.append(f"- [{warning.get('code')}] {warning.get('message')}")
     return "\n".join(lines) + "\n"
+
+
+def norm_source_delete_to_markdown(payload: dict) -> str:
+    if payload is None:
+        return "_未找到该私域规范。_\n"
+    lines = [f"已删除私域规范：{payload.get('name')}（`{payload.get('id')}`）"]
+    lines.append(f"- 删除条款：{payload.get('clauses_deleted', 0)}")
+    lines.append(f"- 删除快照：{payload.get('revisions_deleted', 0)}")
+    return "\n".join(lines) + "\n"
+
+
+def norm_source_history_to_markdown(payload: dict) -> str:
+    if payload is None:
+        return "_未找到该私域规范。_\n"
+    revisions = payload.get("revisions") or []
+    lines = [f"# 私域规范修订历史：{payload.get('name')}", ""]
+    lines.append(f"- 快照数：{payload.get('revision_count', 0)}")
+    lines.append("")
+    if not revisions:
+        lines.append("_暂无快照记录。_")
+        return "\n".join(lines) + "\n"
+    for revision in revisions:
+        created = revision.get("created_at") or "时间未知"
+        source_hash = revision.get("source_hash") or ""
+        hash_note = f" — hash {source_hash[:12]}" if source_hash else ""
+        lines.append(
+            f"- revision {revision.get('revision')} — {created} — "
+            f"{revision.get('clause_count', 0)} 条{hash_note}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def norm_source_diff_to_markdown(payload: dict) -> str:
+    if payload is None:
+        return "_未找到该私域规范。_\n"
+    if payload.get("error"):
+        return f"! {payload.get('error')}: {payload.get('message')}\n"
+    lines = [f"# 私域规范条款差异：{payload.get('name')}", ""]
+    lines.append(f"- 对比：revision {payload.get('from')} → {payload.get('to')}")
+    lines.append(f"- 新增条款：{payload.get('added_count', 0)}")
+    lines.append(f"- 删除条款：{payload.get('removed_count', 0)}")
+    lines.append(f"- 修改条款：{payload.get('modified_count', 0)}")
+    for section, key in (("新增", "added"), ("删除", "removed"), ("修改", "modified")):
+        labels = payload.get(key) or []
+        if labels:
+            lines.append("")
+            lines.append(f"## {section}条款")
+            for label in labels:
+                lines.append(f"- {label}")
+    if not payload.get("changed"):
+        lines.append("")
+        lines.append("_条款无差异。_")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def norm_ingest_preview_to_markdown(payload: dict) -> str:

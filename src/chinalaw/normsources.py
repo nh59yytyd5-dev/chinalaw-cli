@@ -13,7 +13,13 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from chinalaw.contracts import validate_norm_source_type_value
 from chinalaw.db import connect, migrate
+from chinalaw.models import (
+    LEGACY_NORM_SOURCE_TYPE_MAP,
+    NormSourceType,
+    normalize_norm_source_type,
+)
 from chinalaw.resource_limits import (
     ensure_file_size,
     read_zip_member_limited,
@@ -22,6 +28,7 @@ from chinalaw.resource_limits import (
 )
 from chinalaw.search_indexes import (
     delete_norm_clause_search_indexes,
+    delete_norm_source_search_index,
     insert_norm_clause_search_index,
     replace_norm_source_search_index,
 )
@@ -178,6 +185,39 @@ def _extract_bracketed_title(text: str) -> str | None:
     return match.group(1).strip() or None
 
 
+# 章程式「第N章 / 第N节」独立标题行。中文字符集与 ``_match_clause_heading``
+# 保持一致（含 〇 / 零 / 两）；末字 章 / 节 / 条 互不重叠，不会误吞条号行。
+# 不校验章/节序号连续性——私域文本跳号是常态，只切不报错。
+_PART_HEADING_RE = re.compile(
+    r"^第[一二三四五六七八九十百千万零〇两\d]+(?P<level>[章节])[　\s]*.*$"
+)
+
+
+def _match_part_heading(line: str) -> str | None:
+    """识别「第N章 / 第N节」独立标题行，返回 ``"chapter"`` / ``"section"``。"""
+
+    match = _PART_HEADING_RE.match(line)
+    if match is None:
+        return None
+    return "chapter" if match.group("level") == "章" else "section"
+
+
+def _normalize_part_heading(line: str) -> str:
+    """章/节标题行内全角空格与连续空白归一为单个半角空格。"""
+
+    return re.sub(r"\s+", " ", line).strip()
+
+
+def _format_part(chapter: str | None, section: str | None) -> str | None:
+    """层级路径格式仿公开法 ``articles.part``：非空级以单个半角空格连接。
+
+    例：``第三章 股份 第一节 股份发行``。
+    """
+
+    parts = [level for level in (chapter, section) if level]
+    return " ".join(parts) or None
+
+
 _MARKDOWN_PREFIX_RE = re.compile(r"^[\s#>*+\-]+")
 
 
@@ -201,6 +241,8 @@ def clauses_from_text(text: str) -> list[dict]:
     buffer: list[str] = []
     leading_buffer: list[str] = []
     saw_heading = False
+    chapter: str | None = None
+    section: str | None = None
 
     def flush() -> None:
         nonlocal current, buffer
@@ -217,6 +259,20 @@ def clauses_from_text(text: str) -> list[dict]:
         if not raw_line:
             continue
         candidate = _strip_markdown_prefix(raw_line)
+        part_heading = _match_part_heading(candidate) if candidate else None
+        if part_heading is not None:
+            # 章/节标题行不进入任何条款正文，只作为层级上下文挂到后续条款
+            # 的 part 字段；新章出现时清空节上下文。
+            if part_heading == "chapter":
+                chapter = _normalize_part_heading(candidate)
+                section = None
+            else:
+                section = _normalize_part_heading(candidate)
+            if current is None and not saw_heading:
+                # 兜底：全文若没有可识别条款号，章/节标题仍作为 preamble
+                # 保留在整段 fallback 文本中，不被静默吃掉。
+                leading_buffer.append(raw_line)
+            continue
         is_markdown_header = raw_line.startswith("#")
         heading = _match_clause_heading(candidate) if candidate else None
         if heading is not None:
@@ -226,6 +282,7 @@ def clauses_from_text(text: str) -> list[dict]:
             current = {
                 "number": number,
                 "number_display": number,
+                "part": _format_part(chapter, section),
             }
             title = _extract_bracketed_title(rest)
             if title:
@@ -244,7 +301,11 @@ def clauses_from_text(text: str) -> list[dict]:
                 # those lines must not become clause #0 once real clauses exist.
                 leading_buffer.append(raw_line)
                 continue
-            current = {"number": None, "number_display": None}
+            current = {
+                "number": None,
+                "number_display": None,
+                "part": _format_part(chapter, section),
+            }
         buffer.append(raw_line)
 
     flush()
@@ -253,7 +314,9 @@ def clauses_from_text(text: str) -> list[dict]:
     stripped = "\n".join(leading_buffer).strip() if leading_buffer else text.strip()
     if not stripped:
         raise ValueError("norm source text is empty")
-    return [{"number": None, "number_display": None, "text": stripped}]
+    return [
+        {"number": None, "number_display": None, "part": None, "text": stripped}
+    ]
 
 
 def analyze_split_quality(text: str, clauses: list[dict]) -> list[dict]:
@@ -312,7 +375,7 @@ def build_source_from_text(
     name: str,
     source_id: str | None = None,
     short_name: str | None = None,
-    source_type: str = "private_policy",
+    source_type: str = "internal_governance",
     authority: str | None = None,
     binding_scope: str | None = None,
     jurisdiction: str | None = None,
@@ -361,6 +424,7 @@ def _normalize_clause(clause: dict, position: int, source_id: str) -> dict:
         "id": _clean_text(clause.get("id")) or _clause_id(source_id, position),
         "number": normalize_clause_number(clause.get("number")),
         "number_display": number_display,
+        "part": _clean_text(clause.get("part")),
         "title": _clean_text(clause.get("title")),
         "text": text,
         "position": position,
@@ -378,13 +442,15 @@ def _source_row_to_dict(row: sqlite3.Row) -> dict:
         metadata = json.loads(metadata_json) if metadata_json else {}
     except json.JSONDecodeError:
         metadata = {}
-    return {
+    # 存量库可能残留已废弃的旧 source_type：输出归一后的新值并附原值。
+    source_type, legacy_source_type = normalize_norm_source_type(row["source_type"])
+    item = {
         "kind": "norm_source",
         "id": row["id"],
         "name": row["name"],
         "short_name": row["short_name"],
         "aliases": aliases,
-        "source_type": row["source_type"],
+        "source_type": source_type,
         "authority": row["authority"],
         "binding_scope": row["binding_scope"],
         "jurisdiction": row["jurisdiction"],
@@ -396,6 +462,9 @@ def _source_row_to_dict(row: sqlite3.Row) -> dict:
         "source_hash": row["source_hash"],
         "metadata": metadata,
     }
+    if legacy_source_type is not None:
+        item["legacy_source_type"] = legacy_source_type
+    return item
 
 
 def _clause_row_to_dict(row: sqlite3.Row) -> dict:
@@ -404,6 +473,7 @@ def _clause_row_to_dict(row: sqlite3.Row) -> dict:
         "norm_source_id": row["norm_source_id"],
         "number": row["number"],
         "number_display": row["number_display"],
+        "part": row["part"],
         "title": row["title"],
         "text": row["text"],
         "position": row["position"],
@@ -449,6 +519,63 @@ def _resolve_source_row(conn: sqlite3.Connection, identifier: str) -> sqlite3.Ro
     ).fetchone()
 
 
+def _record_norm_revision(
+    conn: sqlite3.Connection,
+    source_id: str,
+    snapshot: dict,
+) -> int:
+    """把一次成功导入的规范化 payload 落入 ``norm_source_revisions``。
+
+    快照是 rebuild 脱离原文件、history / diff 的唯一事实来源；写入失败必须
+    fail loud（同事务回滚导入），不允许静默吞掉。返回新 revision 号。
+    """
+
+    row = conn.execute(
+        "SELECT COALESCE(MAX(revision), 0) FROM norm_source_revisions "
+        "WHERE norm_source_id = ?",
+        (source_id,),
+    ).fetchone()
+    next_revision = int(row[0]) + 1
+    conn.execute(
+        """
+        INSERT INTO norm_source_revisions (
+            norm_source_id, revision, snapshot_json
+        ) VALUES (?, ?, ?)
+        """,
+        (
+            source_id,
+            next_revision,
+            json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
+        ),
+    )
+    return next_revision
+
+
+def get_latest_revision_snapshot(
+    conn: sqlite3.Connection,
+    source_id: str,
+) -> dict | None:
+    """取某私域规范最新 revision 的规范化 payload；无快照或快照损坏返回 None。"""
+
+    row = conn.execute(
+        """
+        SELECT snapshot_json
+        FROM norm_source_revisions
+        WHERE norm_source_id = ?
+        ORDER BY revision DESC
+        LIMIT 1
+        """,
+        (source_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        payload = json.loads(row["snapshot_json"])
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
     migrate(conn)
     name = _clean_text(payload.get("name"))
@@ -458,6 +585,19 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
     clauses = payload.get("clauses")
     if not isinstance(clauses, list):
         raise ValueError("norm source requires clauses list")
+    # source_type 是受控枚举：已废弃的旧值按 LEGACY 映射归一并继续导入
+    # （返回 payload 附 deprecation_warning），完全未知的值 fail loud，
+    # 缺省落 internal_governance。
+    source_type = _clean_text(payload.get("source_type"))
+    legacy_source_type: str | None = None
+    if source_type is not None:
+        mapped = LEGACY_NORM_SOURCE_TYPE_MAP.get(source_type)
+        if mapped is not None:
+            legacy_source_type = source_type
+            source_type = mapped
+        source_type = validate_norm_source_type_value(source_type)
+    else:
+        source_type = NormSourceType.INTERNAL_GOVERNANCE.value
     aliases = _clean_string_list(payload.get("aliases"), field="aliases")
     normalized_clauses = [
         _normalize_clause(clause, position, source_id)
@@ -469,6 +609,8 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
     source_checked_at = _clean_text(payload.get("source_checked_at")) or datetime.now(
         timezone.utc
     ).isoformat()
+    source_name = _clean_text(payload.get("source_name")) or "local-file"
+    source_url_value = _clean_text(payload.get("source_url"))
     source_hash = _clean_text(payload.get("source_hash")) or _content_hash(
         {
             "name": name,
@@ -514,14 +656,14 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
             name,
             _clean_text(payload.get("short_name")),
             json.dumps(aliases, ensure_ascii=False),
-            _clean_text(payload.get("source_type")) or "private_policy",
+            source_type,
             _clean_text(payload.get("authority")),
             _clean_text(payload.get("binding_scope")),
             _clean_text(payload.get("jurisdiction")),
             _clean_text(payload.get("effective_at")),
             _clean_text(payload.get("repealed_at")),
-            _clean_text(payload.get("source_url")),
-            _clean_text(payload.get("source_name")) or "local-file",
+            source_url_value,
+            source_name,
             source_checked_at,
             source_hash,
             json.dumps(metadata, ensure_ascii=False, separators=(",", ":")),
@@ -542,14 +684,15 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
         conn.execute(
             """
             INSERT INTO norm_clauses (
-                id, norm_source_id, number, number_display, title, text, position
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                id, norm_source_id, number, number_display, part, title, text, position
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 clause["id"],
                 source_id,
                 clause["number"],
                 clause["number_display"],
+                clause["part"],
                 clause["title"],
                 clause["text"],
                 clause["position"],
@@ -564,13 +707,54 @@ def import_source_from_dict(conn: sqlite3.Connection, payload: dict) -> dict:
             text=clause["text"],
         )
 
-    return {
+    # 同事务落全量规范化快照：rebuild 脱离原文件、history/diff 的事实来源。
+    snapshot = {
+        "id": source_id,
+        "name": name,
+        "short_name": _clean_text(payload.get("short_name")),
+        "aliases": aliases,
+        "source_type": source_type,
+        "authority": _clean_text(payload.get("authority")),
+        "binding_scope": _clean_text(payload.get("binding_scope")),
+        "jurisdiction": _clean_text(payload.get("jurisdiction")),
+        "effective_at": _clean_text(payload.get("effective_at")),
+        "repealed_at": _clean_text(payload.get("repealed_at")),
+        "source_url": source_url_value,
+        "source_name": source_name,
+        "source_checked_at": source_checked_at,
+        "source_hash": source_hash,
+        "metadata": metadata,
+        "clauses": [
+            {
+                "number": clause["number"],
+                "number_display": clause["number_display"],
+                "part": clause["part"],
+                "title": clause["title"],
+                "text": clause["text"],
+                "position": clause["position"],
+            }
+            for clause in normalized_clauses
+        ],
+    }
+    revision = _record_norm_revision(conn, source_id, snapshot)
+
+    result = {
         "kind": "norm_source_import",
         "source_id": source_id,
         "name": name,
         "clauses_loaded": len(normalized_clauses),
-        "source_type": _clean_text(payload.get("source_type")) or "private_policy",
+        "source_type": source_type,
+        "revision": revision,
     }
+    if legacy_source_type is not None:
+        # fail loud 精神：旧值映射显式告知，不静默吞掉。
+        result["legacy_source_type"] = legacy_source_type
+        result["deprecation_warning"] = (
+            f"source_type 旧值 {legacy_source_type!r} 已废弃，"
+            f"已自动映射为 {source_type!r}；"
+            "请改用新受控枚举值（见 docs/CONTRACT.md §2.9）。"
+        )
+    return result
 
 
 def import_source_file(db_path: Path | str, path: Path | str) -> dict:
@@ -588,7 +772,7 @@ def import_text_source_file(
     name: str,
     source_id: str | None = None,
     short_name: str | None = None,
-    source_type: str = "private_policy",
+    source_type: str = "internal_governance",
     authority: str | None = None,
     binding_scope: str | None = None,
     jurisdiction: str | None = None,
@@ -641,6 +825,7 @@ def import_text_source_file(
                     "position": index,
                     "number": clause.get("number"),
                     "number_display": clause.get("number_display"),
+                    "part": clause.get("part"),
                     "title": clause.get("title"),
                     "preview": text_body[:120],
                     "char_count": len(clause.get("text") or ""),
@@ -781,12 +966,30 @@ def get_clause(db_path: Path | str, identifier: str, number: str) -> dict | None
         }
 
 
-def export_source(db_path: Path | str, identifier: str) -> dict | None:
+NORM_EXPORT_NOTICE = "私域规范数据，请勿上传公开仓库或外部服务"
+
+
+def export_source(
+    db_path: Path | str,
+    identifier: str,
+    *,
+    metadata_only: bool = False,
+) -> dict | None:
+    """导出私域规范。``metadata_only=True`` 时仅导出元数据与条款号/标题清单，
+    不含条款正文 text。"""
     source = get_source(db_path, identifier)
     if source is None:
         return None
+    clauses = source.get("clauses", [])
+    if metadata_only:
+        clauses = [
+            {key: value for key, value in clause.items() if key != "text"}
+            for clause in clauses
+        ]
     return {
         "kind": "norm_source",
+        "sensitivity": "private",
+        "notice": NORM_EXPORT_NOTICE,
         "id": source["id"],
         "name": source["name"],
         "short_name": source.get("short_name"),
@@ -802,5 +1005,268 @@ def export_source(db_path: Path | str, identifier: str) -> dict | None:
         "source_checked_at": source.get("source_checked_at"),
         "source_hash": source.get("source_hash"),
         "metadata": source.get("metadata", {}),
-        "clauses": source.get("clauses", []),
+        "clauses": clauses,
     }
+
+
+def delete_source(db_path: Path | str, identifier: str) -> dict | None:
+    """删除一个私域规范及其 clauses / 快照 / FTS 索引。
+
+    无交互确认（仓库先例）；调用方负责确认。未命中返回 None。
+    删除顺序：clause FTS → source FTS → ``DELETE FROM norm_sources``
+    （ON DELETE CASCADE 连带清理 norm_clauses / norm_source_revisions /
+    *_fts_rows 映射行）。
+    """
+
+    with connect(db_path) as conn:
+        migrate(conn)
+        row = _resolve_source_row(conn, identifier)
+        if row is None:
+            return None
+        source_id = row["id"]
+        clauses_deleted = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM norm_clauses WHERE norm_source_id = ?",
+                (source_id,),
+            ).fetchone()[0]
+        )
+        revisions_deleted = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM norm_source_revisions WHERE norm_source_id = ?",
+                (source_id,),
+            ).fetchone()[0]
+        )
+        delete_norm_clause_search_indexes(conn, source_id)
+        delete_norm_source_search_index(conn, source_id)
+        conn.execute("DELETE FROM norm_sources WHERE id = ?", (source_id,))
+        return {
+            "kind": "norm_source_delete",
+            "ok": True,
+            "id": source_id,
+            "name": row["name"],
+            "clauses_deleted": clauses_deleted,
+            "revisions_deleted": revisions_deleted,
+        }
+
+
+def _revision_row_to_item(row: sqlite3.Row) -> dict:
+    snapshot: dict = {}
+    try:
+        decoded = json.loads(row["snapshot_json"])
+        if isinstance(decoded, dict):
+            snapshot = decoded
+    except json.JSONDecodeError:
+        snapshot = {}
+    return {
+        "revision": row["revision"],
+        "created_at": row["created_at"],
+        "clause_count": len(snapshot.get("clauses") or []),
+        "source_hash": snapshot.get("source_hash"),
+    }
+
+
+def list_revisions(db_path: Path | str, identifier: str) -> dict | None:
+    """列出一个私域规范的全部快照 revision（norm history）。"""
+
+    with connect(db_path) as conn:
+        migrate(conn)
+        row = _resolve_source_row(conn, identifier)
+        if row is None:
+            return None
+        revisions = [
+            _revision_row_to_item(revision_row)
+            for revision_row in conn.execute(
+                """
+                SELECT revision, snapshot_json, created_at
+                FROM norm_source_revisions
+                WHERE norm_source_id = ?
+                ORDER BY revision ASC
+                """,
+                (row["id"],),
+            ).fetchall()
+        ]
+        return {
+            "kind": "norm_source_history",
+            "id": row["id"],
+            "name": row["name"],
+            "revision_count": len(revisions),
+            "revisions": revisions,
+        }
+
+
+def _load_revision_snapshot(
+    conn: sqlite3.Connection,
+    source_id: str,
+    revision: int,
+) -> dict | None:
+    row = conn.execute(
+        """
+        SELECT snapshot_json
+        FROM norm_source_revisions
+        WHERE norm_source_id = ? AND revision = ?
+        """,
+        (source_id, revision),
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        payload = json.loads(row["snapshot_json"])
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _current_source_payload(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    payload = _source_row_to_dict(row)
+    payload["clauses"] = [
+        _clause_row_to_dict(clause)
+        for clause in conn.execute(
+            """
+            SELECT *
+            FROM norm_clauses
+            WHERE norm_source_id = ?
+            ORDER BY position ASC
+            """,
+            (row["id"],),
+        ).fetchall()
+    ]
+    return payload
+
+
+def compare_norm_clause_payloads(before: dict, after: dict) -> dict:
+    """按 position 对齐比较两份规范化 norm payload 的条款差异。
+
+    与 ``rebuild._compare_norm_payloads`` 同一对齐语义（位置即事实），但输出
+    面向 ``norm diff``：增 / 删 / 改计数 + 变更条款号清单。
+    """
+
+    def _clauses(payload: dict) -> list[dict]:
+        out: list[dict] = []
+        for position, clause in enumerate(payload.get("clauses") or [], start=1):
+            out.append(
+                {
+                    "number": normalize_clause_number(clause.get("number")),
+                    "number_display": clause.get("number_display")
+                    or clause.get("number"),
+                    "part": clause.get("part"),
+                    "title": clause.get("title"),
+                    "text": (clause.get("text") or "").strip(),
+                    "position": position,
+                }
+            )
+        return out
+
+    def _label(clause: dict) -> str:
+        return (
+            clause.get("number_display")
+            or clause.get("number")
+            or f"第 {clause.get('position')} 项"
+        )
+
+    before_clauses = _clauses(before)
+    after_clauses = _clauses(after)
+    max_len = max(len(before_clauses), len(after_clauses))
+    added: list[str] = []
+    removed: list[str] = []
+    modified: list[str] = []
+    for index in range(max_len):
+        before_clause = before_clauses[index] if index < len(before_clauses) else None
+        after_clause = after_clauses[index] if index < len(after_clauses) else None
+        if before_clause is None:
+            added.append(_label(after_clause))
+            continue
+        if after_clause is None:
+            removed.append(_label(before_clause))
+            continue
+        if (
+            before_clause["text"] != after_clause["text"]
+            or (before_clause["number"], before_clause["number_display"])
+            != (after_clause["number"], after_clause["number_display"])
+            or (before_clause.get("part") or "")
+            != (after_clause.get("part") or "")
+            or (before_clause.get("title") or "")
+            != (after_clause.get("title") or "")
+        ):
+            modified.append(_label(after_clause))
+    return {
+        "changed": bool(added or removed or modified),
+        "clause_count_before": len(before_clauses),
+        "clause_count_after": len(after_clauses),
+        "added_count": len(added),
+        "removed_count": len(removed),
+        "modified_count": len(modified),
+        "added": added,
+        "removed": removed,
+        "modified": modified,
+    }
+
+
+def diff_revisions(
+    db_path: Path | str,
+    identifier: str,
+    *,
+    from_revision: int | None = None,
+    to_revision: int | None = None,
+) -> dict | None:
+    """``norm diff``：默认比最新 revision 与当前库内容；显式 --from/--to 则比两个
+    历史 revision。未命中规范返回 None；revision 不存在返回带 error 的 payload。"""
+
+    with connect(db_path) as conn:
+        migrate(conn)
+        row = _resolve_source_row(conn, identifier)
+        if row is None:
+            return None
+        source_id = row["id"]
+
+        base = {
+            "kind": "norm_source_diff",
+            "id": source_id,
+            "name": row["name"],
+        }
+        if from_revision is None and to_revision is None:
+            latest = conn.execute(
+                """
+                SELECT revision
+                FROM norm_source_revisions
+                WHERE norm_source_id = ?
+                ORDER BY revision DESC
+                LIMIT 1
+                """,
+                (source_id,),
+            ).fetchone()
+            if latest is None:
+                return {
+                    **base,
+                    "error": "no_revisions",
+                    "message": "该私域规范没有任何快照，无法 diff",
+                }
+            before = _load_revision_snapshot(conn, source_id, int(latest["revision"]))
+            after = _current_source_payload(conn, row)
+            from_label: str | int = int(latest["revision"])
+            to_label: str | int = "current"
+        else:
+            if from_revision is None or to_revision is None:
+                raise ValueError("norm diff requires both --from and --to")
+            before = _load_revision_snapshot(conn, source_id, int(from_revision))
+            after = _load_revision_snapshot(conn, source_id, int(to_revision))
+            if before is None or after is None:
+                missing = [
+                    str(rev)
+                    for rev, snap in ((from_revision, before), (to_revision, after))
+                    if snap is None
+                ]
+                return {
+                    **base,
+                    "error": "revision_not_found",
+                    "message": f"revision 不存在：{', '.join(missing)}",
+                }
+            from_label = int(from_revision)
+            to_label = int(to_revision)
+
+        comparison = compare_norm_clause_payloads(before, after)
+        return {
+            **base,
+            "from": from_label,
+            "to": to_label,
+            **comparison,
+        }

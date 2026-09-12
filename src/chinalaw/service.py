@@ -16,9 +16,17 @@ from pathlib import Path
 
 from chinalaw.aliases import display_short_title, merge_law_aliases
 from chinalaw.db import connect, connect_readonly, current_version, migrate
+from chinalaw.models import norm_source_type_binding_note, normalize_norm_source_type
 from chinalaw.schema import SCHEMA_VERSION
 
 # ---------- 辅助 ----------
+
+# 公开法与私域规范同时命中时的顶层提示：JSON ``conflict_notice`` 字段与
+# markdown 私域小节前渲染的都是这同一段文字。
+NORM_CONFLICT_NOTICE = (
+    "公开法与私域规范均命中，效力以公开法为准；"
+    "私域规范仅在合同/制度约定范围内约束。"
+)
 
 _CHINESE_NUMERALS = {
     "零": 0, "〇": 0,
@@ -318,12 +326,17 @@ def _row_to_norm_source(row: sqlite3.Row) -> dict:
         metadata = json.loads(metadata_json) if metadata_json else {}
     except json.JSONDecodeError:
         metadata = {}
-    return {
+    # 存量库可能残留已废弃的旧 source_type：输出归一后的新值并附原值。
+    source_type, legacy_source_type = normalize_norm_source_type(row["source_type"])
+    payload = {
         "id": row["id"],
         "name": row["name"],
         "short_name": row["short_name"],
         "aliases": aliases_list,
-        "source_type": row["source_type"],
+        "source_type": source_type,
+        # 私域规范之间不做绝对效力排序，只附该类型的约束力定性提示。
+        "binding_note": norm_source_type_binding_note(source_type),
+        "hierarchy": "private_norm",
         "authority": row["authority"],
         "binding_scope": row["binding_scope"],
         "jurisdiction": row["jurisdiction"],
@@ -336,6 +349,9 @@ def _row_to_norm_source(row: sqlite3.Row) -> dict:
         "metadata": metadata,
         "freshness_days": _freshness_days(row["source_checked_at"]),
     }
+    if legacy_source_type is not None:
+        payload["legacy_source_type"] = legacy_source_type
+    return payload
 
 
 def _resolve_norm_source_row(
@@ -396,13 +412,19 @@ def _norm_source_row_to_law_shape(row: sqlite3.Row) -> dict:
         aliases = []
     name = row["name"]
     short_name = row["short_name"] or name
-    return {
+    # 存量库可能残留已废弃的旧 source_type：输出归一后的新值并附原值。
+    source_type, legacy_source_type = normalize_norm_source_type(row["source_type"])
+    payload = {
         "id": row["id"],
         "title": name,
         "short_title": short_name,
         "aliases": aliases,
-        "level": row["source_type"] or "norm_source",
-        "status": "active",
+        "level": source_type or "norm_source",
+        # 私域规范没有国家法的"现行状态"语义，不用 current/active 之类的假值。
+        "status": "not_applicable",
+        # 私域规范之间不做绝对效力排序，只附该类型的约束力定性提示。
+        "binding_note": norm_source_type_binding_note(source_type),
+        "hierarchy": "private_norm",
         "issuing_body": row["authority"],
         "document_number": None,
         "released_at": row["effective_at"],
@@ -415,6 +437,9 @@ def _norm_source_row_to_law_shape(row: sqlite3.Row) -> dict:
         "freshness_days": _freshness_days(row["source_checked_at"]),
         "via": "norm_fallback",
     }
+    if legacy_source_type is not None:
+        payload["legacy_source_type"] = legacy_source_type
+    return payload
 
 
 def _norm_clause_row_to_article_shape(row: sqlite3.Row, source_id: str) -> dict:
@@ -424,7 +449,7 @@ def _norm_clause_row_to_article_shape(row: sqlite3.Row, source_id: str) -> dict:
         "law_id": source_id,
         "number": row["number"],
         "number_display": row["number_display"],
-        "part": None,
+        "part": row["part"],
         "title": row["title"],
         "text": row["text"],
         "position": row["position"],
@@ -1347,11 +1372,18 @@ def _search_laws(
 
 
 def _norm_clause_hit_from_row(row: sqlite3.Row) -> dict:
-    return {
+    # 存量库可能残留已废弃的旧 source_type：输出归一后的新值并附原值。
+    source_type, legacy_source_type = normalize_norm_source_type(
+        row["norm_source_type"]
+    )
+    payload = {
         "norm_source_id": row["norm_source_id"],
         "norm_source_name": row["norm_source_name"],
         "norm_source_short_name": row["norm_source_short_name"],
-        "norm_source_type": row["norm_source_type"],
+        "norm_source_type": source_type,
+        # 私域规范之间不做绝对效力排序，只附该类型的约束力定性提示。
+        "binding_note": norm_source_type_binding_note(source_type),
+        "hierarchy": "private_norm",
         "number": row["number"],
         "number_display": row["number_display"],
         "title": row["title"],
@@ -1360,6 +1392,9 @@ def _norm_clause_hit_from_row(row: sqlite3.Row) -> dict:
         "freshness_days": _freshness_days(row["norm_source_checked_at"]),
         "score": row["score"],
     }
+    if legacy_source_type is not None:
+        payload["legacy_norm_source_type"] = legacy_source_type
+    return payload
 
 
 def _search_norm_clauses(
@@ -1507,6 +1542,8 @@ def search(
     kind: str = "all",
     in_laws: list[str] | str | None = None,
     in_part: str | None = None,
+    *,
+    include_norm: bool = True,
 ) -> dict:
     """混合检索：同时在 articles_fts 与 laws_fts 上跑 FTS5 查询。
 
@@ -1515,6 +1552,9 @@ def search(
 
     ``in_part`` 仅作用于 article_hits（章节字段在条文表上），用于在长法
     （如民法典 1260 条）内按编/章/节文本进一步限定检索。
+
+    ``include_norm=False`` 时完全跳过私域规范命中分支（kind="all" 退化为
+    公开法检索）；MCP 默认以此方式调用，避免私域数据经 stdio 外泄。
     """
     query = query.strip()
     in_part = in_part.strip() if in_part else None
@@ -1555,7 +1595,7 @@ def search(
             if kind in ("law", "all") and not in_part
             else []
         )
-        if kind in ("norm", "all") and law_filter is None and not in_part:
+        if include_norm and kind in ("norm", "all") and law_filter is None and not in_part:
             norm_clause_hits = _search_norm_clauses(
                 conn,
                 query=query,
@@ -1574,7 +1614,7 @@ def search(
             norm_clause_hits = []
             norm_source_hits = []
 
-    return _with_search_counts(
+    result = _with_search_counts(
         {
             "query": query,
             "kind": kind,
@@ -1587,6 +1627,10 @@ def search(
             "norm_source_hits": norm_source_hits,
         }
     )
+    # 公开法与私域规范同时命中时给出顶层冲突提示（不做逐条语义判断）。
+    if (article_hits or law_hits) and (norm_clause_hits or norm_source_hits):
+        result["conflict_notice"] = NORM_CONFLICT_NOTICE
+    return result
 
 
 def get_law(db_path: Path | str, identifier: str) -> dict | None:

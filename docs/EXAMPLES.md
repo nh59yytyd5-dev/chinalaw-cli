@@ -214,12 +214,12 @@ PYTHONPATH=src python3 -m chinalaw norm clause 放款要求 第二条 --format j
 ```bash
 PYTHONPATH=src python3 -m chinalaw norm ingest ./authorized/lending-policy.txt \
   --name 甲方放款要求文本版 \
-  --source-type lender_requirement \
+  --source-type contractual_requirement \
   --alias 放款标准 \
   --metadata-json '{"verification":{"note":"内部制度原件清洗"}}'
 PYTHONPATH=src python3 -m chinalaw norm ingest company-policy.pdf \
   --name 公司制度 \
-  --source-type company_policy \
+  --source-type internal_governance \
   --source-checked-at 2026-05-01T00:00:00+08:00
 ```
 

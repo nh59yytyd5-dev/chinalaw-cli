@@ -11,6 +11,7 @@
 | 时间效力线索 | `data/applicability/*.json` | `relation/applicable` 使用的线索数据，不是完整法律结论。 |
 | 推荐安装清单 | `data/recommended_corpus.json` | 按领域列出建议补全的规范。它是 manifest，不是权威文本。 |
 | 来源覆盖事实表 | `data/source_coverage.json` | 说明每个 source 的覆盖层级、命令能力、成熟度和公开 v0.2 迁移状态。它是规划/契约数据，不是法律权威文本。 |
+| 私域规范虚构示例 | `data/norms/*.json` | `norm import` 的文件格式示例（如 `acme-lending-policy.json`，机构与项目均为虚构）。只随仓库分发、不打进 wheel / sdist，也不受 `check-public-fixtures` 门禁约束；真实私域规范一律只入本机库，不得提交进仓库。 |
 
 CI / 发布前必须运行：
 
@@ -102,7 +103,7 @@ scripts/check-public-fixtures
 
 ## 5. 不纳入随包数据
 
-- 用户本机私域材料。
+- 用户本机私域材料（真实私域规范只入本机 SQLite 库；`data/norms/` 仅放虚构示例）。
 - 商业数据库内容、编注本、裁判要旨、专家点评。
 - 地方性法规全量、行业规则全量、案例库。
 - 官方源尚不能稳定抓取或无法确认版本状态的规范全文。
