@@ -457,18 +457,32 @@ class AgentSetupScriptTests(unittest.TestCase):
         self.assertIn("scripts/setup-agent", readme)
         self.assertIn(".\\scripts\\setup-agent.ps1", readme)
 
-    def test_update_local_refreshes_skills_and_doctor(self) -> None:
+    def test_update_local_skill_install_is_opt_in(self) -> None:
+        # 0.5.1 起 skills 默认不安装（仓库副本仅作使用说明），--skills 显式开启。
         script = (REPO_ROOT / "scripts" / "update-local").read_text(encoding="utf-8")
         windows_script = (REPO_ROOT / "scripts" / "update-local.ps1").read_text(encoding="utf-8")
 
-        self.assertIn("scripts/install-skills", script)
+        self.assertIn("SKILLS=0", script)
+        self.assertIn("--skills", script)
+        self.assertNotIn("--no-skills", script)
         self.assertIn("chinalaw doctor --format md", script)
-        self.assertIn("--no-skills", script)
         self.assertIn("--no-doctor", script)
+        self.assertIn("[switch]$Skills", windows_script)
         self.assertIn("install-skills.ps1", windows_script)
         self.assertIn("doctor --format md", windows_script)
-        self.assertIn("NoSkills", windows_script)
         self.assertIn("NoDoctor", windows_script)
+        self.assertNotIn("NoSkills", windows_script)
+
+    def test_setup_agent_skill_install_is_opt_in(self) -> None:
+        # 0.5.1 起 setup-agent 不再默认调用 install-skills，--install-skills 显式开启。
+        script = (REPO_ROOT / "scripts" / "setup-agent").read_text(encoding="utf-8")
+        windows_script = (REPO_ROOT / "scripts" / "setup-agent.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("INSTALL_SKILLS=0", script)
+        self.assertIn("--install-skills", script)
+        self.assertIn('[ "$INSTALL_SKILLS" -eq 1 ]', script)
+        self.assertIn("[switch]$InstallSkills", windows_script)
+        self.assertIn("install-skills.ps1", windows_script)
 
     def test_setup_agent_uses_portable_empty_array_expansion(self) -> None:
         # issue #3：bash 3.2（macOS 自带）在 set -u 下 "${empty[@]}" 会 unbound。

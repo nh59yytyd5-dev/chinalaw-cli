@@ -261,7 +261,7 @@ class PlatformScriptTests(unittest.TestCase):
             env["TEST_SKILL_LOG"] = str(log)
 
             completed = subprocess.run(
-                [bash, str(scripts / "update-local"), "--no-doctor"],
+                [bash, str(scripts / "update-local"), "--no-doctor", "--skills"],
                 cwd=root,
                 env=env,
                 capture_output=True,
@@ -273,6 +273,49 @@ class PlatformScriptTests(unittest.TestCase):
 
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertEqual("0", logged_args)
+
+    def test_update_local_skips_skills_by_default(self) -> None:
+        # 0.5.1 起 skills 默认不安装：不传 --skills 时不得调用 install-skills。
+        bash = shutil.which("bash")
+        if bash is None:
+            self.skipTest("bash is unavailable")
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "checkout"
+            scripts = root / "scripts"
+            bin_dir = Path(td) / "bin"
+            scripts.mkdir(parents=True)
+            bin_dir.mkdir()
+            shutil.copy2(REPO_ROOT / "scripts" / "update-local", scripts / "update-local")
+            (scripts / "update-local").chmod(0o755)
+            log = Path(td) / "skill-args.txt"
+            _write_executable(scripts / "install-local", "#!/usr/bin/env bash\nexit 0\n")
+            _write_executable(
+                scripts / "install-skills",
+                '#!/usr/bin/env bash\nprintf "%s" "$#" > "$TEST_SKILL_LOG"\n',
+            )
+            _write_executable(
+                bin_dir / "git",
+                "#!/usr/bin/env bash\n"
+                "if [ \"${1:-}\" = rev-parse ]; then exit 1; fi\n"
+                "exit 0\n",
+            )
+            env = os.environ.copy()
+            env["PATH"] = os.pathsep.join((str(bin_dir), env.get("PATH", "")))
+            env["TEST_SKILL_LOG"] = str(log)
+
+            completed = subprocess.run(
+                [bash, str(scripts / "update-local"), "--no-doctor"],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            called = log.exists()
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertFalse(called)
 
     def test_windows_cmd_shim_delegates_without_embedded_absolute_paths(self) -> None:
         script = (REPO_ROOT / "scripts" / "install-local.ps1").read_text(encoding="utf-8")

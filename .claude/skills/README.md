@@ -1,7 +1,12 @@
 # chinalaw skills
 
-> 给 agent（Claude Code / Codex / Cursor / Cline / OpenCode 等）的可复用法律
-> 工作流 skill。每个 skill = 一个目录 + `SKILL.md`（含 YAML frontmatter）。
+> chinalaw 的 agent 工作流**使用说明**（文档优先）。每个 skill = 一个目录 +
+> `SKILL.md`（含 YAML frontmatter）。
+>
+> **0.5.1 起默认不安装**：这些 SKILL.md 留在仓库里作使用说明参考，
+> `setup-agent` / `update-local` 不再把它们装载到用户级 skill 目录——
+> 现代模型的指令遵循与工具调用已足够可靠，常驻重 skill 收益不再。
+> 需要全局加载时手动执行 `scripts/install-skills`（opt-in）。
 
 ## 目录约定
 
@@ -57,15 +62,17 @@ Cursor 等主流 agent 框架识别（OpenCode 在
 `contract-review`（流程） + `chinalaw-checking`（核对方法） +
 `chinalaw-fetching`（缺条文时补全）。
 
-## 安装到用户级
+## 安装到用户级（opt-in）
 
 `scripts/install-skills` 把仓库内 `.claude/skills/*` symlink 到 `~/.claude/skills/`
-+ `~/.agents/skills/`，更新仓库时自动跟进：
++ `~/.agents/skills/`（自 0.5.1 起需手动执行，不再随 `setup-agent` /
+`update-local` 自动运行）：
 
 ```bash
-scripts/install-skills          # 安装（symlink）
-scripts/install-skills --dry-run # 只打印将要做的操作
-scripts/install-skills --copy   # 用 copy 替代 symlink（Windows / WSL 友好）
+scripts/install-skills            # 安装（symlink）
+scripts/install-skills --dry-run  # 只打印将要做的操作
+scripts/install-skills --copy     # 用 copy 替代 symlink（Windows / WSL 友好）
+scripts/install-skills --uninstall # 移除指向本仓库的安装（不动用户自建 skill）
 ```
 
 ## 使用方式

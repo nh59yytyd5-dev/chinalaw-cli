@@ -1,6 +1,6 @@
 Param(
     [switch]$SyncFixtures,
-    [switch]$NoSkills,
+    [switch]$Skills,
     [switch]$NoDoctor
 )
 
@@ -26,7 +26,9 @@ finally {
 
 & (Join-Path $PSScriptRoot "install-local.ps1")
 
-if (-not $NoSkills) {
+# Skills are NOT refreshed by default (.claude/skills/ ships as usage
+# documentation); pass -Skills to opt in. (install-skills.ps1 always copies.)
+if ($Skills) {
     & (Join-Path $PSScriptRoot "install-skills.ps1")
 }
 

@@ -94,12 +94,15 @@ Claude Code / OpenCode / Codex CLI / Cursor / Cline / superpowers 都自动识�
 
 这两类模板都是给 agent 的工作流约束，不属于 CLI 协议；如果命令字段变化，必须同步更新。
 
-把仓库内 skill symlink 到用户级 `~/.claude/skills/` + `~/.agents/skills/`：
+**0.5.1 起 skills 默认不装载**：以上 SKILL.md 留在仓库内作为使用说明，
+`setup-agent` / `update-local` 不会再自动安装它们。如需把仓库内 skill
+symlink 到用户级 `~/.claude/skills/` + `~/.agents/skills/`（opt-in）：
 
 ```bash
-scripts/install-skills          # 安装（symlink）
-scripts/install-skills --dry-run # 干跑预览
-scripts/install-skills --copy   # Windows / WSL 友好
+scripts/install-skills            # 安装（symlink）
+scripts/install-skills --dry-run  # 干跑预览
+scripts/install-skills --copy     # Windows / WSL 友好
+scripts/install-skills --uninstall # 移除指向本仓库的安装
 ```
 
 Windows PowerShell 原生环境使用复制安装：

@@ -13,20 +13,23 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 SYNC_FIXTURES=0
 COPY_SKILLS=0
-SKILLS=1
+SKILLS=0
 DOCTOR=1
 
 usage() {
     cat <<'EOF'
 Usage: scripts/update-local [options]
 
-Fast-forward the checkout, refresh the global chinalaw/chinalaw-mcp wrappers,
-refresh user-level skills, optionally load fixtures, then run doctor.
+Fast-forward the checkout, refresh the global chinalaw/chinalaw-mcp
+wrappers, optionally load fixtures, then run doctor.
+
+Skills are NOT refreshed by default (.claude/skills/ ships as usage
+documentation); pass --skills to also reinstall them user-level.
 
 Options:
   --sync-fixtures  Load builtin fixture data after updating.
-  --copy-skills    Copy skills instead of symlinking them.
-  --no-skills      Skip skills refresh.
+  --skills         Also refresh user-level skills (opt-in).
+  --copy-skills    With --skills: copy skills instead of symlinking.
   --no-doctor      Skip final chinalaw doctor.
   -h, --help       Show this help.
 EOF
@@ -35,8 +38,8 @@ EOF
 while [ $# -gt 0 ]; do
     case "$1" in
         --sync-fixtures) SYNC_FIXTURES=1; shift ;;
+        --skills) SKILLS=1; shift ;;
         --copy-skills) COPY_SKILLS=1; shift ;;
-        --no-skills) SKILLS=0; shift ;;
         --no-doctor) DOCTOR=0; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "error: unknown option: $1" >&2; usage >&2; exit 2 ;;
