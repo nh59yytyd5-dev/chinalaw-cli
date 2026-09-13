@@ -9,7 +9,8 @@
 shell 的 agent，在写合同审查、法律备忘录、引用核对或制度分析时，应先查本机规范
 来源，而不是凭模型记忆编法条。
 
-当前状态：`v0.5.1`。核心检索命令可用；fetch / 多源补全按具体来源持续迭代。
+当前开发版本：`v0.6.0a1`。新增可选资料库管理面板与单用户服务器；CLI、stdio MCP
+继续可用。上一正式版本为 `v0.5.1`，fetch / 多源补全按具体来源持续迭代。
 
 ## Why
 
@@ -32,6 +33,10 @@ shell 的 agent，在写合同审查、法律备忘录、引用核对或制度�
 - **Bundled public corpus**：随仓库提供 74 个完整可引用的公开规范 fixture，
   不是 seed、stub 或 demo 数据。
 - **Source metadata**：输出保留来源、核查时间、状态、版本和 `source_hash`。
+- **人工资料库管理**：浏览公开/私域目录、完整条文与版本，上传原件、预览差异后确认入库，
+  记录人工核对、任务与历史恢复。
+- **可选服务器**：所有者登录、只读 REST / MCP HTTP、可撤销令牌和 OAuth；可下载包含
+  原件的备份，在本机与服务器之间迁移。
 - **On-demand fetch**：可按需从公开官方来源补全文本，并统一清洗入库；覆盖效果取决于
   具体源适配器。
 
@@ -108,6 +113,18 @@ PYTHONPATH=src python3 -m chinalaw article 民法典 524 --format card
 ```
 
 ## Quick Start
+
+人工管理面板（可选，不改变 CLI 的零运行依赖安装）：
+
+```bash
+python -m pip install '.[server]'
+chinalaw-server init --with-fixtures
+chinalaw-server serve --open
+```
+
+启动后使用终端中的一次性配对链接。运行面板无需 Node.js 或模型额度。
+旧库升级前会自动保存数据库备份。完整操作、服务器部署与客户端说明见
+[资料库管理服务](docs/ADMIN_SERVER.md)。
 
 ```bash
 # 1. 初始化本地库：加载内置公开规范基线并运行健康检查

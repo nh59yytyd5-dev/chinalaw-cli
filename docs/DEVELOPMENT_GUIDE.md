@@ -76,7 +76,7 @@
 ## 5. Schema 规则
 
 当前 schema 以 `src/chinalaw/schema.py` 中的 `SCHEMA_VERSION` 为准；截至
-2026-08-06 为 v11。`docs/CONTRACT.md` 只记录外部可依赖的当前协议，不负责保留
+2026-09-13 为 v14。`docs/CONTRACT.md` 只记录外部可依赖的当前协议，不负责保留
 每次 migration 的历史细节。
 
 新增表、改字段、改约束前必须：

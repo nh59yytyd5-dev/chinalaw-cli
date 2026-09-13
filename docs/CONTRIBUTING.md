@@ -20,7 +20,7 @@
 
 ## 2. 准备开发环境
 
-需求：Python ≥ 3.11，仅依赖 stdlib。
+需求：Python ≥ 3.10。CLI 核心仅依赖 stdlib；可选管理服务需要 `.[server]`。
 
 ```bash
 git clone https://github.com/<your-fork>/chinalaw-cli.git
@@ -36,7 +36,7 @@ pip install -e .
 chinalaw --version
 ```
 
-> **不要**引入 pip 依赖。如必须新增（罕见），请先开 issue + ADR。
+> CLI 核心不引入运行依赖。管理服务使用经设计确认的可选 `server` 依赖；新增或扩大依赖范围仍需 issue / 设计记录。
 
 ## 3. 标准工作流
 
