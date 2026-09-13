@@ -37,12 +37,22 @@ tmp/
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
+*.sqlite3-wal
+*.sqlite3-shm
 
 # Cache
 .cache/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+node_modules/
+web/dist/
+playwright-report/
+test-results/
+*.server-state/
+*.assets/
+*.worker.lock
 
 # Test artifacts
 .coverage

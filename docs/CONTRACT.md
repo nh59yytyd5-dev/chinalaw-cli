@@ -2175,3 +2175,99 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
 | 引用元数据 | `source_url` / `source_name` / `source_checked_at` / `source_hash` |
 | as-of 查询 | 按指定日期获取当时有效版本 |
 | 引用追溯 | 任何输出都能回到来源 URL + 核查时间 + 内容指纹 |
+## 人工资料库管理服务（0.6 alpha）
+
+设计记录：`ADMIN_PANEL_PLAN20260913v1.md`。schema 14 增加
+`library_artifacts`、`library_drafts`、`library_operations`、`library_reviews`、
+`library_jobs`，以及 `meta.library_id`。管理记录与法律效力/修订语义分离，
+数据库中不存储 Web 登录凭据；普通资料迁移不携带登录会话。
+
+`db.read_only_operation()` 在当前请求上下文中强制嵌套公开 service 调用使用
+只读 SQLite 连接，既不创建数据库也不迁移旧 schema；不改变既有 CLI 默认行为。
+### HTTP 查询与权限
+
+基址 `/api/v1`。浏览器所有者使用 HttpOnly / SameSite=Strict 会话；服务器模式还设置 Secure。
+远程查询凭据必须包含 `chinalaw:public:read`，只有显式增加 `chinalaw:private:read` 才能读取私域。
+Bearer 头优先于 Cookie，查询令牌不能继承同一请求的所有者会话权限。
+
+| 方法 / 路径 | 参数 | 返回与边界 |
+| --- | --- | --- |
+| GET `/documents` | `kind=law/norm`、`q`、`category`、`status`、`source`、`page`、`page_size` | `items/total/pages/page/page_size`；每页 1–100，默认 24；名称后按 ID 稳定排序；来源筛选精确匹配 |
+| GET `/document` | `kind`、`id` | `document` 包含完整 `articles` / `clauses`、`fingerprint`；所有者还可见匹配当前版本的 `review/latest_operation`，查询令牌下二者为 null |
+| GET `/revisions` | `kind`、`id` | 既有法规 / 私域历史结构，不含正文快照 |
+| GET `/revision` | `kind`、`id`、`revision` | 指定版本的完整 `document`；快照缺失或损坏返回 409 |
+| GET `/search` | `q`、`kind=all/law/article/norm`、`limit` | 沿用现有搜索结果结构；私域权限作用于所有命中类型 |
+| GET `/options` | 无 | 现有类型/状态枚举、约束提示、来源列表和 PDF 文本提取能力 |
+| GET `/system` | 无 | 仅所有者：各统计口径、任务状态数、待确认数、库标识；不返回服务器数据库路径 |
+| GET `/openapi.json` | 无 | 仅所有者：当前服务的 OpenAPI 定义 |
+
+查询不会写入资料库、抓取缺失资料、初始化或迁移 schema。调用时间可以记录到独立认证存储。
+公开与私域类型沿用既有模型，人工核对状态不代表法律效力判断。
+
+### 人工维护
+
+所有下列路径都要求所有者会话；写请求还要求匹配配置的 `Origin` 和 `X-CSRF-Token`。
+请求只能选择受管 ID，不接收任意文件路径或可执行命令。
+
+| 方法 / 路径 | 行为 |
+| --- | --- |
+| POST `/uploads` | multipart `file`；返回受管附件 `id/filename/media_type/size/sha256`；最多 20 MiB |
+| GET `/artifacts/{id}`、`/artifacts/{id}/text` | 验证原件后下载 / 阅读 UTF-8 原文；二进制原件通过下载查看 |
+| POST `/sources/search` | `query/source`；只返回现有 adapter 的来源候选 |
+| POST `/jobs` | `action=import/fetch`、`arguments`；返回持久任务，HTTP 202；导入参数为 `artifact_id/kind/metadata`，抓取参数为 `query/source/prefer_id` |
+| GET `/jobs`、`/jobs/{id}` | 状态 `queued/running/awaiting_confirmation/completed/failed/cancelled/interrupted`，以及阶段、说明、结果、错误、关联草稿 |
+| POST `/jobs/{id}/cancel`、`/retry` | 取消尚未确认的工作；失败/中断/取消的任务可重试为带 `parent_id` 的新尝试 |
+| POST `/drafts` | `kind/payload`；直接 canonical JSON 的人工草稿入口 |
+| GET `/drafts`、`/drafts/{id}` | 待确认清单 / 完整冻结 `document/before/diff/origin/warnings`，以及指纹、冲突、过期和提交状态 |
+| POST `/drafts/{id}/commit` | `fingerprint` 必须匹配已预览内容；同事务重验当前版本、写入正文和索引并记录操作；重复提交返回同一 `operation_id`、`repeated=true` |
+| POST `/drafts/{id}/cancel` | 取消草稿并同步相关任务 |
+| POST `/reviews` | `kind/id/fingerprint/note`；记录对指定内容版本的人工核对，内容变化后不沿用旧标记 |
+| GET `/operations` | `kind/id`；返回最近 100 次人工维护记录，与法律修订分开 |
+| POST `/operations/{id}/restore` | `side=before/after`；生成恢复草稿，未直接改正文 |
+| POST `/revisions/restore` | `kind/id/revision`；从可用历史快照生成恢复草稿 |
+
+草稿 24 小时到期。队列中排队与运行工作合计最多 50 个；清单最多返回 100 个任务/待确认项。
+草稿 `fingerprint` 是对完整冻结 payload 的 SHA-256（包括显式提供的版本标识/标签/备注）；
+正文页与核对记录使用当前资料内容指纹。二者与既有 `source_hash`、原始附件字节 `sha256` 分工不同。
+公开 JSON 的分类关联及其父级定义会保留；未提供关联时沿用库内关联。导入不能静默改写已有共享分类定义，存在差异时返回 `category_conflict`。
+确认时也校验已绑定附件。任何并发更新、失效草稿、附件损坏或写入不一致都不能留下部分入库结果。
+
+### 登录、凭据与 OAuth
+
+`/auth/session` 返回 `authenticated/csrf_token/local_mode/password_configured`。
+`/auth/login` 接受 `password`；`/auth/pair` 接受本机一次性令牌（3 分钟）。
+`/auth/logout` 撤销当前会话；`/auth/password` 设置至少 12 字符的新密码并使旧会话与未消费配对令牌失效。
+
+所有者通过 `/auth/credentials` GET / POST 列出或生成只读凭据，POST 参数为 `name/scopes/days`。
+新令牌仅返回一次，列表不返回令牌或其摘要。DELETE `/auth/credentials/{id}` 撤销同一次授权的凭据。
+作用域必须包括公开只读且不超出公开/私域两个只读权限，有效期 1–365 天。
+
+MCP HTTP 地址 `/mcp` 使用官方 SDK，资源与授权服务元数据分别位于
+`/.well-known/oauth-protected-resource/mcp`、`/.well-known/oauth-authorization-server`。
+真实 `/register`、`/authorize`、`/token`、`/revoke` 端点配合所有者的
+`/api/v1/auth/consent/{id}` 完成 S256 PKCE、一次性授权码、刷新轮换和授权撤销。
+回调允许 HTTPS 或回环 HTTP；资源受众与所有者绑定必须匹配，注册应用不自动获得资料权限。
+
+远程只暴露 `chinalaw_resolve/search/article/list/document`。每个工具都检查私域权限并标为只读；
+`document` 使用 `offset>=0`、`limit=1..100` 分页（默认 50），返回总数与 `has_more`，条文本身不截短。
+旧 stdio MCP 不变。托管应用兼容性以实际验证记录为准，不能从协议支持推导为所有商业平台已可用。
+
+### 备份格式与恢复
+
+POST `/backups` 返回 ZIP 下载。格式 1 的 `manifest.json` 包含 `format=chinalaw-library`、
+`format_version/schema_version/app_version/library_id/created_at/counts/files`。
+文件列表逐项记录相对 `path/size/sha256`；数据库为 `library.sqlite3`，原件为 `blobs/{前两位}/{sha256}`。
+登录密码、OAuth 状态、会话与凭据保存在独立 `auth.db`，不进入普通备份。
+
+POST `/backups/restore/preview` 上传 ZIP，校验后返回 `id/fingerprint/base_fingerprint/current/incoming/artifact_count/expires_at`。
+GET `/backups/restore/{id}` 重新读取预览；POST `/backups/restore/{id}/commit` 接受确认的 `fingerprint`。
+上限为 512 MiB 压缩、2 GiB 展开、20,000 条目；预览有效期 24 小时。只接受当前 schema，拒绝损坏清单、
+越界路径、符号链接、重复/额外文件、缺失原件与不匹配数据库结构。
+
+恢复重新校验备份和目标库，使用原数据库文件上的单个写事务替换已知数据表、重建索引、检查关联。
+失败回滚，现有读连接保持一致快照。预览之后发生的数据变更返回 409；同一已成功恢复请求重复确认返回 `repeated=true`。
+未完成的旧排队/运行任务标为中断，不自动执行。目标认证存储保持独立，来源凭据不能随备份生效。
+
+已知业务错误使用 `kind=library_error/error/message`，附可选 `details`。
+常用 HTTP 状态：400 参数或文件无效，401 未认证，403 权限/同源校验失败，404 无对应资料，
+409 并发冲突/维护占用，410 草稿过期，413 超限，422 请求模型校验，429 队列/登录限流，503 存储或 worker 不可用。

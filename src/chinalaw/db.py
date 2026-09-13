@@ -12,14 +12,17 @@ from __future__ import annotations
 
 import sqlite3
 import time
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from chinalaw.schema import (
     SCHEMA_V11_DELTA_SQL,
     SCHEMA_V12_DELTA_SQL,
-    SCHEMA_V13_SQL,
+    SCHEMA_V14_DELTA_SQL,
+    SCHEMA_V14_SQL,
     SCHEMA_VERSION,
 )
 
@@ -27,9 +30,27 @@ DEFAULT_DB_PATH = Path.home() / ".chinalaw" / "chinalaw.db"
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 _SQLITE_LOCK_RETRY_INITIAL_SECONDS = 0.005
 _SQLITE_LOCK_RETRY_MAX_SECONDS = 0.1
+_READ_ONLY_OPERATION: ContextVar[bool] = ContextVar("chinalaw_read_only", default=False)
+
+
+@contextmanager
+def read_only_operation() -> Iterator[None]:
+    """Make all nested public service calls read-only in this request context.
+
+    Legacy CLI callers keep their existing initialization semantics. HTTP and
+    remote MCP use this boundary so nested service calls cannot create/migrate
+    a database. ContextVar also isolates concurrent requests and worker threads.
+    """
+    token = _READ_ONLY_OPERATION.set(True)
+    try:
+        yield
+    finally:
+        _READ_ONLY_OPERATION.reset(token)
 
 
 def open_connection(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+    if _READ_ONLY_OPERATION.get():
+        return open_readonly_connection(db_path)
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
@@ -151,6 +172,13 @@ def migrate(conn: sqlite3.Connection) -> int:
     无副作用。维护纪律见 ``docs/DEVELOPMENT_GUIDE.md`` §5。
     """
     current = current_version(conn)
+    if _READ_ONLY_OPERATION.get():
+        if current != SCHEMA_VERSION:
+            raise ValueError(
+                f"schema {current} is not supported for read-only access; "
+                f"expected {SCHEMA_VERSION}. Back up and explicitly initialize/upgrade first."
+            )
+        return current
     if current >= SCHEMA_VERSION:
         return current
 
@@ -523,6 +551,13 @@ def _migrate_v12_to_v13(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE norm_clauses ADD COLUMN part TEXT")
 
 
+def _migrate_v13_to_v14(conn: sqlite3.Connection) -> None:
+    """Add portable review/draft/job records without changing legal data."""
+    _execute_script(conn, SCHEMA_V14_DELTA_SQL)
+    if not get_meta(conn, "library_id"):
+        set_meta(conn, "library_id", uuid.uuid4().hex)
+
+
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """空 DB → 一次性落最新累积 DDL。
 
@@ -534,7 +569,7 @@ def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     在自身的 ``IF NOT EXISTS`` / ``PRAGMA table_info`` 守护下重复跑全部
     ALTER 无副作用。维护纪律见 docs/DEVELOPMENT_GUIDE.md §5。
     """
-    _execute_script(conn, SCHEMA_V13_SQL)
+    _execute_script(conn, SCHEMA_V14_SQL)
 
 
 # Migrator 注册表：``current_version`` → 把 schema 升一档的回调。
@@ -558,6 +593,7 @@ _MIGRATORS: dict[int, Callable[[sqlite3.Connection], None]] = {
     10: _migrate_v10_to_v11,
     11: _migrate_v11_to_v12,
     12: _migrate_v12_to_v13,
+    13: _migrate_v13_to_v14,
 }
 
 assert set(_MIGRATORS) == set(range(0, SCHEMA_VERSION)), (

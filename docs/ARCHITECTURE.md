@@ -6,7 +6,8 @@
 
 ## 1. 当前形态
 
-`chinalaw-cli` 当前是一个 stdlib-only Python CLI，使用 SQLite 作为本地规范库，面向 agent 和人类同时提供 JSON / Markdown 输出。
+`chinalaw-cli` 的 CLI 核心使用 stdlib 与 SQLite，向 agent 和人类提供 JSON / Markdown。
+可选的 FastAPI 服务复用同一业务层，提供人工管理面板、只读 REST 与 MCP HTTP；不替换现有 CLI / stdio MCP。
 
 ```text
 Agent / User
@@ -24,7 +25,8 @@ loader + db.migrate
 SQLite + FTS5
 ```
 
-当前不引入 Typer、Click、Rich、外部数据库、后台服务或远程账号系统。
+CLI 不引入 Typer、Click、Rich 或外部数据库。浏览器使用随包构建好的 React/TypeScript 静态资源；
+FastAPI/Uvicorn/MCP 等依赖只在 `server` 可选安装项中加载。
 
 ## 2. 主要模块
 
@@ -47,7 +49,11 @@ SQLite + FTS5
 | `src/chinalaw/loader.py` | JSON payload 幂等入库，维护 FTS |
 | `src/chinalaw/search_indexes.py` | 精确别名索引、FTS rowid 映射与重建 |
 | `src/chinalaw/db.py` | SQLite 连接、migration、meta |
-| `src/chinalaw/schema.py` | 当前 schema v12 DDL |
+| `src/chinalaw/schema.py` | 当前 schema v14 DDL |
+| `src/chinalaw/admin/` | 分页目录、内容指纹、冻结草稿、受管附件、任务、维护门控、备份恢复 |
+| `src/chinalaw/server/` | HTTP 路由、所有者会话、OAuth、MCP HTTP、请求边界、服务启动 |
+| `web/` | React/TypeScript 面板源码与 Playwright 测试 |
+| `src/chinalaw/server/static/` | 安装包内的离线静态界面与许可声明 |
 | `src/chinalaw/adapters/flk_npc.py` | 国家法律法规数据库 adapter |
 | `src/chinalaw/normsources.py` | 私域规范导入、导出、切条、检索 |
 | `src/chinalaw/normpacks.py` | 本地规范包导入、导出、展示、校验 |
@@ -55,7 +61,7 @@ SQLite + FTS5
 
 ## 3. 当前数据模型
 
-当前 schema 版本是 v12。
+当前 schema 版本是 v14。
 
 核心表：
 
@@ -82,9 +88,29 @@ SQLite + FTS5
 - `law_alias_index`
 - `laws_fts_rows` / `articles_fts_rows`
 - `norm_sources_fts_rows` / `norm_clauses_fts_rows`
+- `library_artifacts` / `library_drafts` / `library_operations`
+- `library_reviews` / `library_jobs`
 
 当前没有 `alias_records` / `call_log`。新增公开数据模型前必须先留下公开设计记录并同步
 CONTRACT。
+
+### 人工维护与远程访问边界
+
+`admin.payloads` 通过 canonical loader / norm importer 生成与最终写入一致的规范化内容。
+`admin.drafts` 保存完整预览、基线指纹和来源信息；在同一 SQLite 写事务中校验冲突、写入正文/索引/修订、记录维护事件。
+HTTP 路由不通过 shell 执行 CLI，也不接受任意服务器路径。
+
+`admin.jobs` 保存持久任务，单 worker 在网络和解析阶段不持有 SQLite 写事务；服务重启把未完成工作标为中断。
+进程文件锁防止两个维护 worker 同时启动。`admin.gate` 协调后台任务、人工请求和全库恢复，SQLite 事务继续协调外部 CLI 写入。
+
+上传文件以 SHA-256 为受管文件名，先落盘后写引用，使用安全副本交给既有 DOCX/PDF/文本 reader。
+备份使用 SQLite 在线快照和附件清单；恢复校验后在原数据库文件内进行事务性数据替换与索引重建，失败回滚，不在线替换数据库 inode。
+
+`server.auth_store` 将密码、会话、访问凭据、OAuth 状态放入独立 `auth.db`，不随资料库备份迁移。
+`server.oauth` 负责单所有者同意与持久化，官方 MCP SDK 负责 OAuth/PKCE 协议端点。
+公共与私域查询权限在每个 REST/MCP 请求处检查；只读请求使用 `connect_readonly` / `read_only_operation`，不初始化或迁移资料库。
+
+部署和用户操作详见 [ADMIN_SERVER.md](ADMIN_SERVER.md)。
 
 ## 4. 检索
 

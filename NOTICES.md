@@ -11,9 +11,12 @@
 
 | 包名 | 版本约束 | License | 来源 | 用途 | 登记日期 |
 |------|---------|---------|------|------|---------|
-| _（尚未引入）_ | | | | | |
+| FastAPI | >=0.141.1,<0.142 | MIT | https://github.com/fastapi/fastapi | 可选 HTTP 管理服务 | 2026-09-13 |
+| Uvicorn | >=0.52.4,<0.53 | BSD-3-Clause | https://github.com/encode/uvicorn | 可选 ASGI 服务 | 2026-09-13 |
+| MCP Python SDK | >=2.2,<2.3 | MIT | https://github.com/modelcontextprotocol/python-sdk | 可选 MCP HTTP 与 OAuth 协议端点 | 2026-09-13 |
+| python-multipart | >=0.0.20,<1 | Apache-2.0 | https://github.com/Kludex/python-multipart | 可选文件上传解析 | 2026-09-13 |
 
-说明：MVP 阶段计划引入的候选依赖（待正式加入 `pyproject.toml` 时再登记到上表）：
+上述依赖仅由 `server` 可选安装项加载，CLI 核心继续使用 stdlib。以下是未引入核心 CLI 的候选依赖：
 
 - `typer` — MIT — CLI 框架
 - `httpx` — BSD-3-Clause — HTTP 客户端
@@ -60,6 +63,11 @@
   local-only 私域导入使用。
 
 ## 3. 构建与工具链
+
+浏览器运行产物包含 React、React DOM 和 Scheduler（MIT，Meta Platforms, Inc. and affiliates）。
+完整许可随静态资源分发为 `assets/third-party-licenses.txt`，源副本在
+`web/public/assets/third-party-licenses.txt`。React 来源：https://github.com/facebook/react。
+Vite、TypeScript、Prettier 与 Playwright 只用于前端构建或测试，精确版本锁在 `web/package-lock.json`，运行面板不需要 Node.js。
 
 | 工具 | 用途 | License | 备注 |
 |------|------|---------|------|

@@ -1,0 +1,33 @@
+services:
+  library:
+    build:
+      context: ..
+    restart: unless-stopped
+    environment:
+      CHINALAW_PUBLIC_URL: https://${CHINALAW_DOMAIN:?Set CHINALAW_DOMAIN to your domain}
+    volumes:
+      - library_data:/data
+    expose:
+      - "8765"
+    security_opt:
+      - no-new-privileges:true
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      CHINALAW_DOMAIN: ${CHINALAW_DOMAIN:?Set CHINALAW_DOMAIN to your domain}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      library:
+        condition: service_healthy
+
+volumes:
+  library_data:
+  caddy_data:
+  caddy_config:
