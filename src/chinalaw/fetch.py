@@ -259,6 +259,7 @@ def _build_fetch_result_payload(
     prefer_bbbs: str | None,
     dry_run: bool,
     to_fixture: Path | str | None,
+    enrich_aliases: bool = True,
 ) -> tuple[dict, dict, dict, dict | None]:
     chosen = _choose_best(candidates, name, prefer_bbbs)
     if chosen is None:
@@ -289,7 +290,8 @@ def _build_fetch_result_payload(
     )
     if canonical_id and canonical_id != payload.get("id"):
         payload = {**payload, "id": canonical_id}
-    payload = _maybe_enrich_aliases(payload)
+    if enrich_aliases:
+        payload = _maybe_enrich_aliases(payload)
     return chosen, payload, _strip_transient_fetch_metadata(payload), article_obj
 
 
@@ -338,6 +340,7 @@ def fetch_law(
     limit: int = 5,
     force: bool = False,
     status: str | None = None,
+    enrich_aliases: bool = True,
 ) -> dict:
     """按法律名一条龙完成"取条文 + 清洗 + 入库"。
 
@@ -397,6 +400,7 @@ def fetch_law(
         prefer_bbbs=prefer_bbbs,
         dry_run=dry_run,
         to_fixture=to_fixture,
+        enrich_aliases=enrich_aliases,
     )
     chosen_id = chosen["id"]
     wrote_fixture, loaded, skipped, article_count = _apply_fetch_output(

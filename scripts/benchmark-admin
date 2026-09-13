@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Isolated public and synthetic admin read/concurrency baseline; never uses the user's DB."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import platform
+import statistics
+import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from chinalaw import loader
+from chinalaw.admin import catalog
+from chinalaw.db import connect
+
+
+def sample(operation, count=30):
+    times = []
+    for _ in range(count):
+        start = time.perf_counter()
+        operation()
+        times.append((time.perf_counter() - start) * 1000)
+    ordered = sorted(times)
+    return {
+        "p50_ms": round(statistics.median(times), 3),
+        "p95_ms": round(ordered[int(0.95 * (len(ordered) - 1))], 3),
+        "samples": count,
+    }
+
+
+def synthetic_payload(identifier: str, iteration: int = 0):
+    return {
+        "id": identifier,
+        "title": "虚构性能测试资料 " + identifier,
+        "level": "other",
+        "status": "unknown",
+        "source_name": "synthetic benchmark",
+        "source_url": "https://example.org/synthetic-benchmark",
+        "articles": [
+            {"number": str(number), "text": f"性能测试第{iteration}次。" * 30}
+            for number in range(1, 13)
+        ],
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--documents", type=int, default=1200)
+    args = parser.parse_args()
+    if not 1 <= args.documents <= 10000:
+        parser.error("documents must be 1–10,000")
+    with tempfile.TemporaryDirectory(prefix="chinalaw-admin-bench-") as directory:
+        db = Path(directory) / "library.db"
+        loader.load_fixtures(db)
+        law = next(item for item in catalog.list_documents(db, query="民法典")["items"])
+        result = {
+            "python": platform.python_version(),
+            "platform": platform.platform(),
+            "public_inventory": sample(lambda: catalog.list_documents(db)),
+            "civil_code_full_text": sample(lambda: catalog.get_document(db, "law", law["id"])),
+        }
+        with connect(db) as conn:
+            for i in range(args.documents):
+                loader.load_law_from_dict(conn, synthetic_payload(f"synthetic-{i:05d}"))
+        inventory = catalog.list_documents(db)
+        result["synthetic_documents"] = args.documents
+        result["total_documents"] = inventory["total"]
+        result["larger_inventory"] = sample(lambda: catalog.list_documents(db, page=20))
+        result["larger_search"] = sample(lambda: catalog.search_library(db, "性能测试", limit=20))
+
+        def write():
+            for iteration in range(20):
+                with connect(db) as conn:
+                    loader.load_law_from_dict(conn, synthetic_payload("synthetic-00000", iteration))
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            writer = pool.submit(write)
+            readers = [
+                pool.submit(sample, lambda: catalog.list_documents(db), 50) for _ in range(3)
+            ]
+            writer.result()
+            result["three_readers_one_writer"] = [reader.result() for reader in readers]
+        result["database_bytes"] = db.stat().st_size
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
