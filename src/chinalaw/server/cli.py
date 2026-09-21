@@ -10,7 +10,7 @@ import sqlite3
 import sys
 import threading
 import webbrowser
-from contextlib import closing
+from contextlib import closing, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -168,7 +168,19 @@ def _password(args) -> int:
     return 0
 
 
+def _configure_text_stdio() -> None:
+    """Keep Chinese output usable when Windows pipes default to cp1252 (as chinalaw CLI does)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        if reconfigure is None or encoding == "utf8":
+            continue
+        with suppress(Exception):
+            reconfigure(encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _configure_text_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
