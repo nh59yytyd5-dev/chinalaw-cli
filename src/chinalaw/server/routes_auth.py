@@ -16,6 +16,10 @@ class Login(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class PasswordChange(Login):
+    current_password: str | None = Field(default=None, max_length=1024)
+
+
 class Pairing(BaseModel):
     token: str = Field(min_length=1, max_length=256)
 
@@ -58,11 +62,14 @@ def session_info(request: Request) -> dict:
     }
 
 
+def _client_address(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/login")
 def login(body: Login, request: Request, response: Response) -> dict:
     same_origin(request)
-    address = request.client.host if request.client else "unknown"
-    token, csrf = request.app.state.auth.login(body.password, address)
+    token, csrf = request.app.state.auth.login(body.password, _client_address(request))
     _set_session(response, request, token)
     return {"authenticated": True, "csrf_token": csrf}
 
@@ -86,9 +93,14 @@ def logout(request: Request, response: Response) -> dict:
 
 
 @router.post("/password")
-def password(body: Login, request: Request, response: Response) -> dict:
+def password(body: PasswordChange, request: Request, response: Response) -> dict:
     owner(request)
-    request.app.state.auth.set_password(body.password)
+    auth = request.app.state.auth
+    if auth.has_password():
+        # Changing an existing password proves knowledge of it under the login rate limit;
+        # only the first local-mode setup may omit it.
+        auth.verify_password(body.current_password or "", _client_address(request))
+    auth.set_password(body.password)
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"authenticated": False, "password_configured": True}
 

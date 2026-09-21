@@ -1,7 +1,7 @@
 # 资料库管理服务实施与验收记录
 
 日期：2026-09-13。分支 `codex/library-admin-panel`，目标为 `0.6.0a1` 开发预览。
-需求与原始范围见 [实施计划](ADMIN_PANEL_PLAN20260913v1.md)，公开设计记录为
+需求与原始范围见 [实施计划](ADMIN_PANEL_PLAN_20260913.md)，公开设计记录为
 [issue #8](https://github.com/nh59yytyd5-dev/chinalaw-cli/issues/8)。
 
 ## 已实现

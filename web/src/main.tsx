@@ -1,4 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  Component,
+  useEffect,
+  useState,
+  type ErrorInfo,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { createRoot } from "react-dom/client";
 import { api, setCsrf, type Session } from "./api";
 import { Heading, Icon, Loading, navigate, ToastContext } from "./components";
@@ -18,6 +25,9 @@ function Login({
 }) {
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
+  // The shell reports late failures (for example a pairing link pasted into an
+  // already-open tab); keep showing the newest one.
+  useEffect(() => setError(initialError), [initialError]);
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -45,7 +55,9 @@ function Login({
           <strong>chinalaw</strong>
         </div>
         <div>
-          <span className="eyebrow">YOUR SOURCES, WITH CONFIDENCE</span>
+          <span className="eyebrow" aria-hidden="true">
+            YOUR SOURCES, WITH CONFIDENCE
+          </span>
           <h1>
             每一条依据，
             <br />
@@ -119,40 +131,69 @@ function App() {
   const [toast, setToast] = useState<{ message: string; error: boolean }>();
   const [search, setSearch] = useState("");
   useEffect(() => {
-    const update = () => {
-      setRoute(location.hash.slice(1) || "overview");
-      window.scrollTo({ top: 0 });
-    };
-    window.addEventListener("hashchange", update);
-    const expired = () => {
-      setCsrf(null);
-      setSession((value) =>
-        value ? { ...value, authenticated: false } : value,
+    const consumePairing = async () => {
+      const fragment = location.hash.slice(1);
+      if (!fragment.startsWith("pair=")) return;
+      const token = new URLSearchParams(fragment).get("pair");
+      history.replaceState(
+        null,
+        "",
+        location.pathname + location.search + "#overview",
       );
-      setError("登录会话已失效，请重新登录。");
+      setRoute("overview");
+      await api<Session>("/auth/pair", "POST", { token });
     };
-    window.addEventListener("library:authentication-required", expired);
     const load = async () => {
       try {
-        const fragment = location.hash.slice(1);
-        if (fragment.startsWith("pair=")) {
-          const token = new URLSearchParams(fragment).get("pair");
-          history.replaceState(
-            null,
-            "",
-            location.pathname + location.search + "#overview",
-          );
-          setRoute("overview");
-          await api<Session>("/auth/pair", "POST", { token });
-        }
+        await consumePairing();
         const result = await api<Session>("/auth/session");
         setCsrf(result.csrf_token);
+        setError("");
         setSession(result);
       } catch (error) {
         setError(error instanceof Error ? error.message : "打开资料库失败");
-        setSession({ authenticated: false, csrf_token: null });
+        // Keep whatever we already know (local mode, password state) so the
+        // login screen can still explain how to get back in.
+        setSession(
+          (value) => value ?? { authenticated: false, csrf_token: null },
+        );
       }
     };
+    const update = () => {
+      // A pairing link pasted into a tab that already shows the panel only
+      // fires hashchange, not a page load; consume it here as well.
+      if (location.hash.slice(1).startsWith("pair=")) {
+        void load();
+        return;
+      }
+      setRoute(location.hash.slice(1) || "overview");
+      window.scrollTo({ top: 0 });
+      // Announce the new page to keyboard and screen-reader users.
+      requestAnimationFrame(() => {
+        const main = document.getElementById("main-content");
+        if (main) main.focus({ preventScroll: true });
+      });
+    };
+    window.addEventListener("hashchange", update);
+    const expired = (event: Event) => {
+      setCsrf(null);
+      // Re-read the session so the login screen reflects the current state
+      // (for example a password that was just configured).
+      api<Session>("/auth/session")
+        .then((value) => setSession({ ...value, authenticated: false }))
+        .catch(() =>
+          setSession((value) =>
+            value ? { ...value, authenticated: false } : value,
+          ),
+        );
+      const detail = (event as CustomEvent<string>).detail;
+      setError(
+        typeof detail === "string" && detail
+          ? detail
+          : "登录会话已失效，请重新登录。",
+      );
+    };
+    window.addEventListener("library:authentication-required", expired);
     void load();
     return () => {
       window.removeEventListener("hashchange", update);
@@ -161,13 +202,26 @@ function App() {
   }, []);
   useEffect(() => {
     if (toast) {
-      const timer = setTimeout(() => setToast(undefined), 6500);
+      // Errors need more reading time than confirmations.
+      const timer = setTimeout(
+        () => setToast(undefined),
+        toast.error ? 12000 : 6500,
+      );
       return () => clearTimeout(timer);
     }
   }, [toast]);
   if (!session) return <Loading error={error} />;
   if (!session.authenticated)
-    return <Login error={error} session={session} onLogin={setSession} />;
+    return (
+      <Login
+        error={error}
+        session={session}
+        onLogin={(value) => {
+          setError("");
+          setSession(value);
+        }}
+      />
+    );
   const split = route.indexOf("/");
   const page = split < 0 ? route : route.slice(0, split);
   let id = "";
@@ -178,7 +232,7 @@ function App() {
   }
   const consent = new URLSearchParams(location.search).get("consent");
   const navigation = [
-    ["overview", "grid", "资料概览"],
+    ["overview", "grid", "资料库概览"],
     ["law", "book", "公开法规"],
     ["norm", "folder", "私域规范"],
     ["import", "upload", "导入与核对"],
@@ -209,6 +263,7 @@ function App() {
                     ? "active"
                     : ""
                 }
+                aria-current={page === value ? "page" : undefined}
                 key={value}
                 onClick={() => navigate(value)}
               >
@@ -231,9 +286,18 @@ function App() {
             <button
               className="logout"
               onClick={() => {
+                if (
+                  session.local_mode &&
+                  !session.password_configured &&
+                  !window.confirm(
+                    "尚未设置登录密码。退出后需要重新启动本机服务，用新的配对链接才能再次进入。确定退出？",
+                  )
+                )
+                  return;
                 void api("/auth/logout", "POST")
                   .then(() => {
                     setCsrf(null);
+                    setError("");
                     setSession({ ...session, authenticated: false });
                   })
                   .catch((error) =>
@@ -272,7 +336,7 @@ function App() {
               我
             </span>
           </header>
-          <main id="main-content" className="main-content">
+          <main id="main-content" className="main-content" tabIndex={-1}>
             {consent ? (
               <ConsentPage id={consent} />
             ) : page === "overview" ? (
@@ -315,4 +379,57 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { error?: Error }
+> {
+  state: { error?: Error } = {};
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("panel render failed", error, info.componentStack);
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <main className="login-page">
+        <section className="login-form">
+          <div>
+            <Heading
+              eyebrow="PAGE ERROR"
+              title="页面出现错误"
+              text="资料库本身没有改变。可以重新加载页面，或返回概览继续。"
+            />
+            <div className="inline-error" role="alert">
+              {this.state.error.message}
+            </div>
+            <div className="button-row">
+              <button
+                className="button"
+                onClick={() => {
+                  location.hash = "#overview";
+                  location.reload();
+                }}
+              >
+                返回概览
+              </button>
+              <button
+                className="button secondary"
+                onClick={() => location.reload()}
+              >
+                重新加载
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+}
+
+createRoot(document.getElementById("root")!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+);

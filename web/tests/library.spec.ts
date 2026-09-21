@@ -132,7 +132,28 @@ test("preview complete private text, compare, commit, review and reimport", asyn
   await expect(page.locator(".articles")).not.toContainText(
     "第二次导入的新内容。",
   );
+  page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "取消此预览" }).click();
+  await expect(page.getByRole("heading", { name: "导入与核对" })).toBeVisible();
+});
+
+test("re-import pre-fills existing metadata and errors keep a way back", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/#import/" + encodeURIComponent("norm:browser-norm"));
+  await expect(page.getByLabel("资料名称", { exact: true })).toHaveValue(
+    "虚构浏览器验收制度",
+  );
+  await expect(page.getByLabel("私域规范类型")).toHaveValue("other");
+  await expect(page.getByLabel("制定主体")).toHaveValue("虚构测试公司");
+  await page.goto("/#law/does-not-exist");
+  await expect(page.getByRole("alert")).toContainText("资料不存在");
+  await page.getByRole("button", { name: "返回公开法规" }).click();
+  await expect(page.getByRole("heading", { name: "公开法规" })).toBeVisible();
+  await page.goto("/#draft/does-not-exist");
+  await page.getByRole("button", { name: "返回导入与核对" }).click();
+  await expect(page.getByRole("heading", { name: "导入与核对" })).toBeVisible();
 });
 
 test("issue and revoke a public token without exposing private records", async ({
@@ -158,11 +179,15 @@ test("issue and revoke a public token without exposing private records", async (
   expect((await page.request.get("/api/v1/system", { headers })).status()).toBe(
     403,
   );
-  await page
+  const revoke = page
     .locator(".credentials .list-row")
     .filter({ hasText: "浏览器只读测试" })
-    .getByRole("button", { name: "撤销", exact: true })
-    .click();
+    .getByRole("button", { name: "撤销", exact: true });
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await revoke.click();
+  await expect(page.locator(".credentials")).toContainText("有效");
+  page.once("dialog", (dialog) => void dialog.accept());
+  await revoke.click();
   await expect(page.locator(".credentials")).toContainText("已撤销");
   expect(
     (await page.request.get("/api/v1/documents", { headers })).status(),

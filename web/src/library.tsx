@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import {
   api,
   changed,
@@ -31,6 +31,7 @@ import {
   navigate,
   Note,
   openDocument,
+  ToastContext,
   useAction,
   useResource,
 } from "./components";
@@ -288,7 +289,7 @@ export function InventoryPage({ kind }: { kind: Kind }) {
             />
           </div>
           <select
-            aria-label="规范类型"
+            aria-label="效力层级"
             value={category}
             onChange={(e) => {
               setCategory(e.target.value);
@@ -465,6 +466,7 @@ export function FullText({
 }) {
   const [filter, setFilter] = useState("");
   const [jump, setJump] = useState("");
+  const notify = useContext(ToastContext);
   const filtered = clauses
     .map((clause, index) => ({ clause, index }))
     .filter(
@@ -503,6 +505,8 @@ export function FullText({
             if (index >= 0) {
               setFilter("");
               requestAnimationFrame(() => scroll(index));
+            } else if (jump.trim()) {
+              notify(`没有找到第 ${value} 条。`, true);
             }
           }}
         >
@@ -811,7 +815,20 @@ export function DocumentPage({ kind, id }: { kind: Kind; id: string }) {
       query({ kind, id, revision: revision || undefined }),
   );
   const action = useAction();
-  if (!result.data) return <Loading {...result} />;
+  if (!result.data)
+    return (
+      <Loading
+        {...result}
+        back={
+          revision
+            ? { label: "返回当前版本", onClick: () => setRevision("") }
+            : {
+                label: kind === "law" ? "返回公开法规" : "返回私域规范",
+                onClick: () => navigate(kind),
+              }
+        }
+      />
+    );
   const data = result.data;
   const doc = data.document;
   const mark = () =>

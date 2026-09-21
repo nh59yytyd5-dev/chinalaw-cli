@@ -232,6 +232,11 @@ def _record_operation(
         after_snapshot.update(
             {field: confirmed[field] for field in REVISION_FIELDS if field in confirmed}
         )
+    before_snapshot = None
+    if before is not None:
+        before_snapshot = portable_payload(before, row["kind"])
+        if row["kind"] == "law":
+            before_snapshot.update(_revision_identity(conn, before))
     origin = json.loads(row["origin_json"])
     action = (
         "restore"
@@ -248,7 +253,7 @@ def _record_operation(
             row["target_id"],
             action,
             row["id"],
-            encode_json(portable_payload(before, row["kind"])) if before is not None else None,
+            encode_json(before_snapshot) if before_snapshot is not None else None,
             encode_json(after_snapshot),
             row["base_fingerprint"],
             content_fingerprint(after, row["kind"]),
@@ -258,6 +263,30 @@ def _record_operation(
         ),
     )
     return operation_id
+
+
+def _revision_identity(conn: sqlite3.Connection, before: dict) -> dict:
+    """Recover the stored revision that matches the pre-operation content.
+
+    `revisions.content_hash` holds the law's `source_hash`. Without this, restoring
+    "before" content would insert a fresh `{law_id}@{hash}` revision instead of
+    re-pointing at the existing one.
+    """
+    if not before.get("id") or not before.get("source_hash"):
+        return {}
+    row = conn.execute(
+        "SELECT id, version_label, released_at, notes FROM revisions "
+        "WHERE law_id = ? AND content_hash = ? ORDER BY released_at DESC, id DESC LIMIT 1",
+        (before["id"], before["source_hash"]),
+    ).fetchone()
+    if row is None:
+        return {}
+    return {
+        "revision_id": row["id"],
+        "version_label": row["version_label"],
+        "revision_released_at": row["released_at"],
+        "revision_notes": row["notes"],
+    }
 
 
 def _commit_result(row: sqlite3.Row, operation_id: str, *, repeated: bool) -> dict:

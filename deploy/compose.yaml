@@ -12,7 +12,7 @@ services:
     security_opt:
       - no-new-privileges:true
   proxy:
-    image: caddy:2
+    image: caddy:2.10
     restart: unless-stopped
     environment:
       CHINALAW_DOMAIN: ${CHINALAW_DOMAIN:?Set CHINALAW_DOMAIN to your domain}

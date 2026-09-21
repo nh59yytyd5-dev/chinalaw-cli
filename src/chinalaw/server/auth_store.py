@@ -10,8 +10,6 @@ import secrets
 import sqlite3
 import time
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +20,9 @@ PRIVATE_SCOPE = "chinalaw:private:read"
 READ_SCOPES = frozenset({PUBLIC_SCOPE, PRIVATE_SCOPE})
 SESSION_SECONDS = 8 * 3600
 PASSWORD_ITERATIONS = 600_000
+LOGIN_MAX_FAILURES = 10
+LOGIN_BACKOFF_STEP = 0.25
+LOGIN_BACKOFF_MAX = 2.0
 
 AUTH_SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -37,7 +38,8 @@ CREATE TABLE IF NOT EXISTS credentials (
 );
 CREATE INDEX IF NOT EXISTS idx_credentials_grant ON credentials(grant_id);
 CREATE TABLE IF NOT EXISTS oauth_clients (
-    id TEXT PRIMARY KEY, metadata_json TEXT NOT NULL, created_at INTEGER NOT NULL
+    id TEXT PRIMARY KEY, metadata_json TEXT NOT NULL, created_at INTEGER NOT NULL,
+    last_grant_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS oauth_requests (
     id TEXT PRIMARY KEY, client_id TEXT NOT NULL, params_json TEXT NOT NULL,
@@ -79,6 +81,31 @@ class Principal:
         return self.is_owner or PRIVATE_SCOPE in self.scopes
 
 
+class _Transaction:
+    """Commit-or-rollback connection scope.
+
+    A class rather than ``@contextmanager`` because the MCP SDK's OAuth errors are
+    frozen dataclasses: ``contextlib`` assigns ``__traceback__`` on exceptions that
+    pass through a generator-based manager, which those errors reject.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.conn = sqlite3.connect(path, timeout=10)
+        self.conn.row_factory = sqlite3.Row
+
+    def __enter__(self) -> sqlite3.Connection:
+        return self.conn
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        try:
+            if exc_type is None:
+                self.conn.commit()
+            else:
+                self.conn.rollback()
+        finally:
+            self.conn.close()
+
+
 class AuthStore:
     def __init__(self, path: Path | str, resource_url: str):
         self.path = Path(path)
@@ -86,21 +113,19 @@ class AuthStore:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with self.transaction() as conn:
             conn.executescript(AUTH_SCHEMA)
+            self._migrate(conn)
         if os.name == "posix":
             self.path.chmod(0o600)
 
-    @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Idempotent column additions for authentication databases created earlier."""
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(oauth_clients)")}
+        if "last_grant_at" not in columns:
+            conn.execute("ALTER TABLE oauth_clients ADD COLUMN last_grant_at INTEGER")
+
+    def transaction(self) -> _Transaction:
+        return _Transaction(self.path)
 
     def has_password(self) -> bool:
         with self.transaction() as conn:
@@ -134,34 +159,43 @@ class AuthStore:
         )
         return hmac.compare_digest(actual.hex(), expected)
 
-    def login(self, password: str, address: str = "local") -> tuple[str, str]:
+    def verify_password(self, password: str, address: str = "local") -> None:
+        """Rate-limited password check shared by login and password changes."""
         self._check_login_limit(address)
         if not self._password_matches(password):
+            attempts = self._record_failure(address)
+            # Linear backoff outside any database transaction slows guessing from one
+            # address without letting other addresses lock the owner out.
+            time.sleep(min(LOGIN_BACKOFF_STEP * attempts, LOGIN_BACKOFF_MAX))
             raise LibraryError("invalid_credentials", "密码不正确。", status=401)
         with self.transaction() as conn:
             conn.execute("DELETE FROM login_attempts WHERE address = ?", (address,))
+
+    def login(self, password: str, address: str = "local") -> tuple[str, str]:
+        self.verify_password(password, address)
         return self.create_session()
 
     def _check_login_limit(self, address: str) -> None:
         now = int(time.time())
         with self.transaction() as conn:
-            conn.execute("BEGIN IMMEDIATE")
             conn.execute("DELETE FROM login_attempts WHERE window_start < ?", (now - 300,))
             row = conn.execute(
-                "SELECT * FROM login_attempts WHERE address = ?", (address,)
+                "SELECT attempts FROM login_attempts WHERE address = ?", (address,)
             ).fetchone()
-            total = conn.execute(
-                "SELECT COALESCE(SUM(attempts), 0) FROM login_attempts"
-            ).fetchone()[0]
-            if (row is not None and row["attempts"] >= 10) or total >= 100:
-                raise LibraryError(
-                    "login_rate_limited", "登录尝试过多，请五分钟后再试。", status=429
-                )
+        if row is not None and row["attempts"] >= LOGIN_MAX_FAILURES:
+            raise LibraryError("login_rate_limited", "登录尝试过多，请五分钟后再试。", status=429)
+
+    def _record_failure(self, address: str) -> int:
+        with self.transaction() as conn:
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 "INSERT INTO login_attempts(address, attempts, window_start) VALUES (?, 1, ?) "
                 "ON CONFLICT(address) DO UPDATE SET attempts = attempts + 1",
-                (address, now),
+                (address, int(time.time())),
             )
+            return conn.execute(
+                "SELECT attempts FROM login_attempts WHERE address = ?", (address,)
+            ).fetchone()[0]
 
     def create_session(self) -> tuple[str, str]:
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
@@ -324,8 +358,11 @@ class AuthStore:
 
     def revoke_credential(self, identifier: str) -> None:
         with self.transaction() as conn:
-            conn.execute(
-                "UPDATE credentials SET revoked_at = ? WHERE grant_id = "
-                "(SELECT grant_id FROM credentials WHERE id = ?)",
+            conn.execute("BEGIN IMMEDIATE")
+            revoked = conn.execute(
+                "UPDATE credentials SET revoked_at = ? WHERE revoked_at IS NULL AND grant_id = "
+                "(SELECT grant_id FROM credentials WHERE id = ? AND revoked_at IS NULL)",
                 (int(time.time()), identifier),
-            )
+            ).rowcount
+        if revoked == 0:
+            raise LibraryError("credential_not_found", "凭据不存在或已撤销。", status=404)

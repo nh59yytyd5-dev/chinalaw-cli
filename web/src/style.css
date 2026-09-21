@@ -15,7 +15,7 @@
   --green-dark: #203e32;
   --soft: #edf2eb;
   --border: #e4e8e0;
-  --muted: #788077;
+  --muted: #66705f;
   --ink: #29342e;
   --serif: "Songti SC", "STSong", "SimSun", Georgia, serif;
 }
@@ -78,12 +78,20 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid #b9cdb9;
+  outline: 2px solid #66896f;
+  outline-offset: 0;
+  border-color: #66896f;
+}
+/* Search boxes hide the native outline on the inner input; show it on the
+   container instead so keyboard users can still see where focus is. */
+.global-search:focus-within,
+.search-input:focus-within {
+  outline: 2px solid #66896f;
   outline-offset: 0;
   border-color: #66896f;
 }
 input::placeholder {
-  color: #969e95;
+  color: #6f776e;
 }
 input[readonly] {
   background: #f7f8f5;
@@ -304,7 +312,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #919889;
+  color: #6f776e;
   border: 1px solid var(--border);
   background: #fff;
   border-radius: 7px;
@@ -336,6 +344,9 @@ svg {
   border: 1px solid #dfe4d5;
   font-size: 11px;
   color: #657356;
+}
+.main-content:focus {
+  outline: none;
 }
 .main-content {
   max-width: 1470px;
@@ -538,7 +549,7 @@ svg {
 }
 .stat-card small {
   font-size: 10px;
-  color: #9ba191;
+  color: #6f776e;
   margin-top: 4px;
 }
 .overview-grid {
@@ -780,7 +791,7 @@ button.list-row:hover {
   border-radius: 7px;
   background: #fff;
   padding: 0 12px;
-  color: #9ca98b;
+  color: #6f776e;
   min-width: 0;
 }
 .search-input input {
@@ -972,7 +983,7 @@ tr:last-child td {
   background: none;
   padding: 12px 2px;
   font-size: 12px;
-  color: #a0a98f;
+  color: #6f776e;
 }
 .tabs > button.active {
   color: #486537;
@@ -1350,7 +1361,7 @@ tr:last-child td {
 }
 .upload-zone span {
   font-size: 10px;
-  color: #a7b28f;
+  color: #6f776e;
 }
 .upload-zone input {
   position: absolute;
@@ -1472,7 +1483,7 @@ tr:last-child td {
 }
 .candidate small {
   display: block;
-  color: #a2b188;
+  color: #6f776e;
   font-size: 10px;
   margin-top: 7px;
 }
@@ -1528,8 +1539,8 @@ tr:last-child td {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #758e53;
-  font-size: 11px;
+  color: #5f7a3f;
+  font-size: 13px;
 }
 .diff-panel {
   padding-bottom: 20px;
@@ -2143,7 +2154,7 @@ tr:last-child td {
     font-size: 23px;
   }
   .brand small {
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 1px;
     margin-top: 3px;
   }
@@ -2211,7 +2222,7 @@ tr:last-child td {
   }
   .heading-actions .button {
     padding: 8px 10px;
-    font-size: 10px;
+    font-size: 12px;
     margin-top: 21px;
   }
   .heading-actions .button svg {
@@ -2231,7 +2242,7 @@ tr:last-child td {
     font-size: 34px;
   }
   .stat-card small {
-    font-size: 9px;
+    font-size: 11px;
   }
   .overview-grid {
     gap: 20px;
@@ -2244,13 +2255,13 @@ tr:last-child td {
     font-size: 13px;
   }
   .panel-heading p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .bars {
     padding: 0 19px 21px;
   }
   .bar-row > div:first-child {
-    font-size: 10px;
+    font-size: 12px;
   }
   .panel-foot {
     padding: 13px 19px;
@@ -2266,14 +2277,14 @@ tr:last-child td {
     font-size: 11px;
   }
   .row-body small {
-    font-size: 9px;
+    font-size: 11px;
   }
   .row-icon {
     width: 30px;
     height: 32px;
   }
   .subtle-footer {
-    font-size: 9px;
+    font-size: 11px;
   }
   .filters {
     padding: 16px;
@@ -2289,7 +2300,7 @@ tr:last-child td {
   }
   .table-caption {
     padding: 14px 16px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .table-caption span {
     display: none;
@@ -2310,17 +2321,17 @@ tr:last-child td {
   }
   .inventory-table td {
     padding: 14px 12px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .inventory-table th {
     padding: 11px 12px;
-    font-size: 9px;
+    font-size: 11px;
   }
   .document-title {
     font-size: 12px;
   }
   .cell-subtitle {
-    font-size: 9px;
+    font-size: 11px;
   }
   .pagination {
     padding: 14px 15px;
@@ -2330,7 +2341,7 @@ tr:last-child td {
     line-height: 1.7;
   }
   .document-heading p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .document-heading p > span {
     padding-inline: 8px;
@@ -2344,13 +2355,13 @@ tr:last-child td {
     padding: 10px 0;
   }
   .tabs .tab-action {
-    font-size: 10px;
+    font-size: 12px;
     margin-left: 0;
   }
   .review-bar {
     padding: 14px;
     gap: 13px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .review-bar .button-row {
     width: 100%;
@@ -2407,7 +2418,7 @@ tr:last-child td {
     margin-inline: 19px;
   }
   .artifact-actions .button {
-    font-size: 10px;
+    font-size: 12px;
     padding: 9px 12px;
   }
   .source-panel > .note {
@@ -2419,7 +2430,7 @@ tr:last-child td {
     font-size: 12px;
   }
   .note {
-    font-size: 10px;
+    font-size: 12px;
     padding: 13px;
   }
   .note > svg {
@@ -2427,7 +2438,7 @@ tr:last-child td {
   }
   .steps {
     gap: 10px;
-    font-size: 10px;
+    font-size: 12px;
     flex-wrap: wrap;
   }
   .steps i {
@@ -2460,7 +2471,7 @@ tr:last-child td {
     min-height: 155px;
   }
   .upload-zone span {
-    font-size: 9px;
+    font-size: 11px;
   }
   .form-grid {
     grid-template-columns: 1fr;
@@ -2488,7 +2499,7 @@ tr:last-child td {
     gap: 15px;
   }
   .confirmation-bar > label {
-    font-size: 10px;
+    font-size: 12px;
     align-items: flex-start;
   }
   .confirmation-bar .button-row {
@@ -2507,7 +2518,7 @@ tr:last-child td {
     table-layout: fixed;
   }
   .metadata-diff td {
-    font-size: 10px;
+    font-size: 12px;
     padding: 9px;
   }
   .diff-pair,
@@ -2554,28 +2565,28 @@ tr:last-child td {
     gap: 10px;
   }
   .credentials .badge {
-    font-size: 9px;
+    font-size: 11px;
   }
   .copy-field {
     gap: 7px;
   }
   .copy-field input {
-    font-size: 10px;
+    font-size: 12px;
     width: 100%;
   }
   .copy-field .button {
-    font-size: 10px;
+    font-size: 12px;
     padding-inline: 10px;
   }
   .token-result {
     padding: 14px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .token-result .copy-field input {
-    font-size: 9px;
+    font-size: 11px;
   }
   .settings-body > .muted {
-    font-size: 10px;
+    font-size: 12px;
   }
   .backup-options h3 {
     font-size: 12px;
@@ -2591,7 +2602,7 @@ tr:last-child td {
     gap: 8px;
   }
   .restore-preview .button {
-    font-size: 10px;
+    font-size: 12px;
   }
   .consent-page > .panel {
     padding: 21px;
@@ -2658,7 +2669,7 @@ tr:last-child td {
     font-size: 11px;
   }
   .login-note {
-    font-size: 9px;
+    font-size: 11px;
   }
   .password-form > .button {
     width: 100%;

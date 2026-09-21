@@ -32,7 +32,14 @@ class RequestGuard:
         host = headers.get(b"host", b"").decode("latin-1").lower()
         origin = headers.get(b"origin")
         if host not in {value.lower() for value in self.config.allowed_hosts}:
-            return await _reject(scope, receive, send, 421, "host_denied", "访问地址不匹配。")
+            return await _reject(
+                scope,
+                receive,
+                send,
+                421,
+                "host_denied",
+                f"访问地址不匹配，请使用 {self.config.origin} 打开。",
+            )
         if origin is not None and origin.decode("latin-1") != self.config.origin:
             return await _reject(scope, receive, send, 403, "origin_denied", "请求来源不被允许。")
         limit = MAX_REQUEST_BYTES

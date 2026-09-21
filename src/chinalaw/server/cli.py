@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if name == "init":
             command.add_argument("--with-fixtures", action="store_true", help="加载随包公开法规")
+            command.add_argument("--json", action="store_true", help="以 JSON 输出结果")
         else:
             command.add_argument(
                 "--state-dir", type=Path, default=os.environ.get("CHINALAW_STATE_DIR")
@@ -80,6 +81,19 @@ def initialize(db_path: Path, *, with_fixtures: bool = False) -> dict:
     }
 
 
+def _print_init_summary(result: dict, args) -> None:
+    status = result["status"]
+    print(f"资料库已就绪：{result['db_path']}")
+    print(
+        f"资料结构 v{result['schema_version']}；公开法规 {status['laws']} 部、"
+        f"条文 {status['articles']} 条、私域规范 {status['norm_sources']} 份。"
+    )
+    if result["upgrade_backup"]:
+        print(f"升级前的数据库副本：{result['upgrade_backup']}")
+    db_option = "" if args.db == DEFAULT_DB_PATH else f" --db {result['db_path']}"
+    print(f"下一步：chinalaw-server serve{db_option} --open")
+
+
 def _serve(args) -> int:
     try:
         import uvicorn
@@ -119,7 +133,19 @@ def _serve(args) -> int:
         opener = threading.Timer(1, webbrowser.open, args=(url,))
         opener.daemon = True
         opener.start()
-    uvicorn.run(app, host=config.host, port=config.port, workers=1, proxy_headers=False)
+    if config.local_mode:
+        uvicorn.run(app, host=config.host, port=config.port, workers=1, proxy_headers=False)
+    else:
+        # Behind a same-host reverse proxy, trust only loopback for X-Forwarded-For so
+        # login rate limits count the real client instead of the proxy address.
+        uvicorn.run(
+            app,
+            host=config.host,
+            port=config.port,
+            workers=1,
+            proxy_headers=True,
+            forwarded_allow_ips="127.0.0.1,::1",
+        )
     return 0
 
 
@@ -147,11 +173,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "init":
-            print(
-                json.dumps(
-                    initialize(args.db, with_fixtures=args.with_fixtures), ensure_ascii=False
-                )
-            )
+            result = initialize(args.db, with_fixtures=args.with_fixtures)
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False))
+            else:
+                _print_init_summary(result, args)
             return 0
         if args.command == "password":
             return _password(args)

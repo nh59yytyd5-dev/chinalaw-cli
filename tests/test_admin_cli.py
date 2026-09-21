@@ -30,13 +30,22 @@ class ServerCLITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             db = Path(directory) / "library.db"
             process = subprocess.run(
-                [sys.executable, "-m", "chinalaw.server", "init", "--db", str(db)],
+                [sys.executable, "-m", "chinalaw.server", "init", "--db", str(db), "--json"],
                 text=True,
                 capture_output=True,
                 timeout=15,
             )
             self.assertEqual(process.returncode, 0, process.stderr)
             self.assertEqual(json.loads(process.stdout)["schema_version"], SCHEMA_VERSION)
+            process = subprocess.run(
+                [sys.executable, "-m", "chinalaw.server", "init", "--db", str(db)],
+                text=True,
+                capture_output=True,
+                timeout=15,
+            )
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertIn("资料库已就绪", process.stdout)
+            self.assertIn("chinalaw-server serve", process.stdout)
             with connect(db) as conn:
                 conn.execute("UPDATE meta SET value = '13' WHERE key = 'schema_version'")
             result = initialize(db)

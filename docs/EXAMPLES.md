@@ -340,7 +340,8 @@ agent 输出法律依据时，应包含：
 
 ```bash
 # 独立测试资料库；不会使用默认库
-python -m pip install '.[server]'
+scripts/install-local --with-server   # Windows: .\scripts\install-local.ps1 -WithServer
+# 也可以在任意 venv 里 python -m pip install '.[server]'
 chinalaw-server init --db ./var/example-library.db --with-fixtures
 chinalaw-server serve --db ./var/example-library.db --open
 ```

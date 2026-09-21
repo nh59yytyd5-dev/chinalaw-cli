@@ -13,6 +13,7 @@ from starlette.exceptions import HTTPException
 from starlette.staticfiles import StaticFiles
 
 from chinalaw import __version__, fetch, service
+from chinalaw.admin import backups
 from chinalaw.admin.errors import LibraryError
 from chinalaw.admin.gate import MaintenanceGate
 from chinalaw.admin.jobs import JobWorker
@@ -42,6 +43,11 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
 
     @asynccontextmanager
     async def lifespan(app):
+        routes_backup.clear_exports(config.state_dir)
+        # backups.sweep_restores is being added alongside this code; skip until present.
+        sweep = getattr(backups, "sweep_restores", None)
+        if sweep is not None:
+            sweep(config.restores_dir)
         if worker is not None:
             worker.start()
         try:

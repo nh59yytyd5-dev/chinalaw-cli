@@ -80,11 +80,14 @@ include = [
   "/deploy",
   "/Dockerfile",
   "/.dockerignore",
+  "/tests",
   "/tests_server",
 ]
 exclude = [
   "/docs/FULL_AUDIT_*",
   "/docs/REFACTOR_PLAN_*",
+  "/docs/ADMIN_PANEL_PLAN_*",
+  "/docs/ADMIN_PANEL_IMPLEMENTATION_*",
   "/.agents",
   "/web/node_modules",
   "/web/test-results",

@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from "react";
 import {
   api,
+  ApiError,
   changed,
   formatDate,
   number,
   rawRequest,
   type Restore,
+  type Session,
 } from "./api";
 import {
   Badge,
@@ -39,6 +41,8 @@ export function ConnectionsPage() {
   const [token, setToken] = useState("");
   const [restore, setRestore] = useState<Restore>();
   const [confirmed, setConfirmed] = useState(false);
+  const session = useResource<Session>("/auth/session");
+  const hasPassword = session.data?.password_configured ?? true;
   const action = useAction();
   const createToken = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -185,13 +189,19 @@ export function ConnectionsPage() {
                       <button
                         className="text-button danger-text"
                         disabled={action.busy}
-                        onClick={() =>
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `撤销“${item.name}”后，使用这个令牌的应用会立即失去访问权限，且无法恢复。确定撤销？`,
+                            )
+                          )
+                            return;
                           void action.run(async () => {
                             await api("/auth/credentials/" + item.id, "DELETE");
                             changed();
                             action.notify("此授权已撤销。");
-                          })
-                        }
+                          });
+                        }}
                       >
                         撤销
                       </button>
@@ -316,11 +326,24 @@ export function ConnectionsPage() {
                   disabled={!confirmed || action.busy}
                   onClick={() =>
                     void action.run(async () => {
-                      await api(
-                        `/backups/restore/${restore.id}/commit`,
-                        "POST",
-                        { fingerprint: restore.fingerprint },
-                      );
+                      try {
+                        await api(
+                          `/backups/restore/${restore.id}/commit`,
+                          "POST",
+                          { fingerprint: restore.fingerprint },
+                        );
+                      } catch (error) {
+                        // The staged preview cannot be retried after a
+                        // conflict or expiry; ask for a fresh upload.
+                        if (
+                          error instanceof ApiError &&
+                          (error.status === 409 || error.status === 410)
+                        ) {
+                          setRestore(undefined);
+                          setConfirmed(false);
+                        }
+                        throw error;
+                      }
                       setRestore(undefined);
                       changed();
                       action.notify("资料库已恢复，未完成的旧任务需手动重试。");
@@ -339,7 +362,11 @@ export function ConnectionsPage() {
         <div className="panel-heading">
           <div>
             <h2>所有者登录密码</h2>
-            <p>更改后需要重新登录。密码至少 12 个字符。</p>
+            <p>
+              {hasPassword
+                ? "需要输入当前密码。更改后需要重新登录，新密码至少 12 个字符。"
+                : "设置后可用密码登录，不再依赖配对链接。密码至少 12 个字符。"}
+            </p>
           </div>
         </div>
         <form
@@ -353,12 +380,30 @@ export function ConnectionsPage() {
             }
             void action.run(async () => {
               await api("/auth/password", "POST", {
+                current_password: hasPassword
+                  ? form.get("current_password")
+                  : undefined,
                 password: form.get("password"),
               });
-              location.reload();
+              window.dispatchEvent(
+                new CustomEvent("library:authentication-required", {
+                  detail: "密码已更新，请使用新密码重新登录。",
+                }),
+              );
             });
           }}
         >
+          {hasPassword && (
+            <Field label="当前密码">
+              <input
+                type="password"
+                name="current_password"
+                maxLength={1024}
+                autoComplete="current-password"
+                required
+              />
+            </Field>
+          )}
           <Field label="新密码">
             <input
               type="password"

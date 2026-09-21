@@ -1,5 +1,9 @@
 # chinalaw 资料库管理服务：需求、调研与实施计划
 
+> 状态：已实施（2026-09-22）。§8.2 的外部 OIDC/Keycloak 候选已被内置 MCP SDK 授权服务取代，
+> 见实施记录 [ADMIN_PANEL_IMPLEMENTATION_20260913.md](ADMIN_PANEL_IMPLEMENTATION_20260913.md)；
+> 面向使用者的操作与部署说明见 [ADMIN_SERVER.md](ADMIN_SERVER.md)。
+
 日期：2026-09-13。需求经本次讨论确认；实施基线为 `335c23b`、chinalaw 0.5.1、数据库 schema 13。下一功能版本建议为 0.6.0。
 
 ## 1. 结论

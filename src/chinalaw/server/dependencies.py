@@ -52,6 +52,10 @@ def require_document_scope(value: Principal, kind: str) -> None:
 
 
 def maintenance_activity(request: Request):
+    """Count only writes as maintenance: this dependency exits after the response is sent."""
     owner(request)
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        yield
+        return
     with request.app.state.gate.activity():
         yield

@@ -184,7 +184,7 @@ export type Job = {
   draft_id?: string;
   parent_id?: string;
   cancel_requested: boolean;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; detail?: string };
   result?: { title?: string; document_kind?: Kind; target_id?: string };
 };
 export type Counts = {
@@ -280,13 +280,22 @@ export const docTitle = (document: Document) =>
   document.title || document.name || document.id;
 export const clausesOf = (document: Document) =>
   document.articles || document.clauses || [];
-export const formatDate = (value?: string | number) =>
-  value
-    ? new Date(typeof value === "number" ? value * 1000 : value).toLocaleString(
-        "zh-CN",
-        { hour12: false },
-      )
-    : "未记录";
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const SQLITE_UTC = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+// Library timestamps arrive in three shapes: date-only fields (施行/公布日期),
+// SQLite CURRENT_TIMESTAMP text (UTC without a zone marker) and ISO-8601 with
+// an explicit offset. Normalise them so the panel never shifts a calendar
+// date by the local offset or shows a UTC clock as local time.
+export const formatDate = (value?: string | number) => {
+  if (!value) return "未记录";
+  if (typeof value === "string") {
+    if (DATE_ONLY.test(value)) return value.replace(/-/g, "/");
+    if (SQLITE_UTC.test(value)) value = value.replace(" ", "T") + "Z";
+  }
+  const date = new Date(typeof value === "number" ? value * 1000 : value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("zh-CN", { hour12: false });
+};
 export const number = (value: number) => value.toLocaleString("zh-CN");
 export const safeUrl = (value?: string) => {
   try {

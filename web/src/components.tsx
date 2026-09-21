@@ -183,20 +183,30 @@ export function useResource<T>(path: string, poll = 0) {
 export function Loading({
   error,
   reload,
+  back,
 }: {
   error?: string;
   reload?: () => void;
+  /** Where the reader can go when the request is not going to succeed. */
+  back?: { label: string; onClick: () => void };
 }) {
   return error ? (
     <div className="empty" role="alert">
       <Icon name="alert" size={30} />
       <p>{error}</p>
-      <button
-        className="button secondary"
-        onClick={reload || (() => location.reload())}
-      >
-        重新加载
-      </button>
+      <div className="button-row">
+        {back && (
+          <button className="button" onClick={back.onClick}>
+            {back.label}
+          </button>
+        )}
+        <button
+          className="button secondary"
+          onClick={reload || (() => location.reload())}
+        >
+          重新加载
+        </button>
+      </div>
     </div>
   ) : (
     <div className="loading" role="status">
@@ -236,7 +246,11 @@ export function Heading({
   return (
     <header className="page-heading">
       <div>
-        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
+        {eyebrow && (
+          <div className="eyebrow" aria-hidden="true">
+            {eyebrow}
+          </div>
+        )}
         <h1>{title}</h1>
         {text && <p>{text}</p>}
       </div>

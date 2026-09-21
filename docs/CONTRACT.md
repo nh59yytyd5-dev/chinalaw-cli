@@ -2177,7 +2177,7 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
 | 引用追溯 | 任何输出都能回到来源 URL + 核查时间 + 内容指纹 |
 ## 人工资料库管理服务（0.6 alpha）
 
-设计记录：`ADMIN_PANEL_PLAN20260913v1.md`。schema 14 增加
+设计记录：`ADMIN_PANEL_PLAN_20260913.md`。schema 14 增加
 `library_artifacts`、`library_drafts`、`library_operations`、`library_reviews`、
 `library_jobs`，以及 `meta.library_id`。管理记录与法律效力/修订语义分离，
 数据库中不存储 Web 登录凭据；普通资料迁移不携带登录会话。

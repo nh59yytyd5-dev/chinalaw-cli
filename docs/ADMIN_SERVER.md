@@ -4,17 +4,15 @@
 
 ## 本机开始使用
 
-在项目目录中安装可选服务组件：
+在项目目录中安装可选服务组件。`--with-server` 会在仓库 `.venv` 里安装 `.[server]` 可选依赖，并在 `~/.local/bin` 写入 `chinalaw-server` shim（与 `chinalaw` / `chinalaw-mcp` 同一位置）：
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install '.[server]'
+scripts/install-local --with-server
 chinalaw-server init --with-fixtures
 chinalaw-server serve --open
 ```
 
-Windows 用 `.venv\Scripts\Activate.ps1` 激活，其他命令相同。运行面板不需要 Node.js、CDN、Kimi 或模型 API。发布包包含构建好的前端。
+Windows PowerShell 用 `.\scripts\install-local.ps1 -WithServer`，其他命令相同。也可以在任意 venv 里 `python -m pip install '.[server]'`，此时 `chinalaw-server` 由该 venv 的 `bin/`（Windows：`Scripts\`）提供。运行面板不需要 Node.js、CDN、Kimi 或模型 API。发布包包含构建好的前端。
 
 默认资料库是 `~/.chinalaw/chinalaw.db`。也可以用 `--db /path/library.db` 指定另一套库；`init`、`serve` 和 `password` 必须指向同一套库。示例：
 
@@ -23,7 +21,11 @@ chinalaw-server init --db ./var/my-library.db --with-fixtures
 chinalaw-server serve --db ./var/my-library.db --open
 ```
 
-`init` 是显式写入操作。新库默认建立空库，`--with-fixtures` 会加载随包公开规范。旧 schema 升级前自动产生同目录的 `*.before-upgrade-时间.sqlite3` 数据库备份；来源附件目录保持原位。`serve` 不会自动初始化或升级资料库。
+`init` 是显式写入操作。新库默认建立空库，`--with-fixtures` 会加载随包公开规范。旧 schema 升级前自动产生同目录的 `*.before-upgrade-时间.sqlite3` 数据库备份；来源附件目录保持原位。`init` 默认输出人类可读摘要，加 `--json` 输出机器可读 JSON（含 `db_path`、`schema_version`、`upgrade_backup` 与库状态），便于脚本判断。`serve` 不会自动初始化或升级资料库。
+
+默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到 schema 14 后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
+
+升级资料库（再次运行 `init`）前必须先停止运行中的 `serve`：`init` 与服务的维护 worker 共用同一把 `<db>.worker.lock`，服务未停时 `init` 会报"此资料库已有维护服务运行"。
 
 本机默认只监听 `127.0.0.1:8765`。启动输出一次性配对链接，有效期 3 分钟，令牌放在 URL fragment 中，不进入 HTTP 访问日志。进入面板后可以设置密码；已有密码也可直接登录。遗失配对链接时重新启动本机服务可生成新链接。
 
@@ -54,21 +56,29 @@ chinalaw-server serve --server --host 127.0.0.1 --port 8765 \
   --public-url https://law.example.com
 ```
 
-前置 HTTPS 反向代理把请求转发到 `127.0.0.1:8765`，保留外部 `Host`。服务器模式强制 HTTPS 对外地址与已设置的所有者密码。TLS 可以由代理终止；Uvicorn 后端只接收代理流量。使用域名根路径，不支持子路径挂载。一个库只运行一个 ASGI worker；多端通过 HTTP 访问同一服务，不把活跃 SQLite/WAL 放在多台机器共享的网络文件系统上。
+升级到新版本时同样先停掉 `serve`，再运行 `init` 升级资料库，最后重新启动服务（原因见上文的 `<db>.worker.lock`）。
+
+前置 HTTPS 反向代理把请求转发到 `127.0.0.1:8765`，保留外部 `Host`。服务器模式下服务只信任来自本机（`127.0.0.1` / `::1`）反向代理的 `X-Forwarded-For` 头，用于按真实客户端地址限制登录，请让代理运行在同一主机并设置该头（Caddy 的 `reverse_proxy` 默认转发；Nginx 需显式 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`）。登录失败按来源地址计数，5 分钟内 10 次后拒绝，且每次失败后响应会逐步延迟。修改密码需输入当前密码。服务器模式强制 HTTPS 对外地址与已设置的所有者密码。TLS 可以由代理终止；Uvicorn 后端只接收代理流量。使用域名根路径，不支持子路径挂载。一个库只运行一个 ASGI worker；多端通过 HTTP 访问同一服务，不把活跃 SQLite/WAL 放在多台机器共享的网络文件系统上。
 
 也可用仓库的 Dockerfile 与 Caddy 配置（需要域名 DNS 指向服务器并开放 80/443）：
 
 ```bash
 export CHINALAW_DOMAIN=law.example.com
 docker compose -f deploy/compose.yaml build
-docker compose -f deploy/compose.yaml run --rm library \
-  chinalaw-server init --db /data/library.db --with-fixtures
-docker compose -f deploy/compose.yaml run --rm library \
-  chinalaw-server password --db /data/library.db --state-dir /data/server-state
+docker compose -f deploy/compose.yaml run --rm library chinalaw-server init --with-fixtures
+docker compose -f deploy/compose.yaml run --rm library chinalaw-server password
 docker compose -f deploy/compose.yaml up -d
 ```
 
-镜像以非 root 用户运行，包含 PDF 提取工具。资料、附件和认证状态保存在持久卷。首次初始化和密码设置由上述命令显式完成，重启容器不会自动重置数据。已有面板登录后的日常维护均可在浏览器完成。
+镜像内已设置 `CHINALAW_DB=/data/library.db`、`CHINALAW_STATE_DIR=/data/server-state`、`CHINALAW_HOST=0.0.0.0`，所以 `init` / `password` 不必重复传 `--db` / `--state-dir`。镜像以非 root 用户运行，包含 PDF 提取工具。资料、附件和认证状态保存在持久卷。首次初始化和密码设置由上述命令显式完成，重启容器不会自动重置数据。已有面板登录后的日常维护均可在浏览器完成。
+
+升级镜像后需要重新 `init` 时，先停止服务容器再执行，否则 `init` 会因 `<db>.worker.lock` 被占用而拒绝：
+
+```bash
+docker compose -f deploy/compose.yaml stop library
+docker compose -f deploy/compose.yaml run --rm library chinalaw-server init
+docker compose -f deploy/compose.yaml up -d
+```
 
 环境变量可替代对应参数：`CHINALAW_DB`、`CHINALAW_STATE_DIR`、`CHINALAW_HOST`、`CHINALAW_PORT`、`CHINALAW_PUBLIC_URL`。不要把密码或访问令牌写入镜像、仓库或命令行参数。`password` 使用交互式隐藏输入。
 
@@ -127,4 +137,4 @@ npm test
 
 需要前端热更新时，后端用 `chinalaw-server serve --public-url http://127.0.0.1:5173` 启动，再在 `web/` 执行 `npm run dev`。配对链接和浏览器均使用 `http://127.0.0.1:5173`，Vite 把 API 与 MCP/OAuth 请求转发到后端 8765，并保留 Host/Origin 校验。
 
-当前实现与验收记录见 [ADMIN_PANEL_IMPLEMENTATION20260913v1.md](ADMIN_PANEL_IMPLEMENTATION20260913v1.md)。Docker 镜像构建/启动门禁在 CI；本机没有容器运行时的环境只能验证直接 Python 运行和服务器配置，不能将其记为容器实测。
+当前实现与验收记录见 [ADMIN_PANEL_IMPLEMENTATION_20260913.md](ADMIN_PANEL_IMPLEMENTATION_20260913.md)。Docker 镜像构建/启动门禁在 CI；本机没有容器运行时的环境只能验证直接 Python 运行和服务器配置，不能将其记为容器实测。

@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 
 from chinalaw.admin import ingest
-from chinalaw.admin.errors import LibraryError
+from chinalaw.admin.errors import LibraryError, require_kind
 from chinalaw.admin.gate import MaintenanceGate
 from chinalaw.admin.lease import ProcessLease
 from chinalaw.admin.payloads import encode_json, utc_now
@@ -21,6 +21,8 @@ JOB_FIELDS = {
     "import": {"artifact_id", "kind", "metadata"},
     "fetch": {"query", "source", "prefer_id"},
 }
+REQUIRED = {"import": {"artifact_id", "kind"}, "fetch": {"query"}}
+FINISHED_STATES = {"completed", "failed", "interrupted", "cancelled"}
 
 
 def create_job(
@@ -30,6 +32,7 @@ def create_job(
         raise LibraryError("invalid_job", "不支持此维护任务。")
     if set(arguments) - JOB_FIELDS[action]:
         raise LibraryError("invalid_job_arguments", "维护任务包含不支持的参数。")
+    _check_arguments(action, arguments)
     encoded = encode_json(arguments)
     if len(encoded.encode("utf-8")) > 32 * 1024:
         raise LibraryError("job_arguments_too_large", "任务参数过长。", status=413)
@@ -48,6 +51,23 @@ def create_job(
             (identifier, action, encoded, parent_id, utc_now()),
         )
     return get_job(db_path, identifier)
+
+
+def _check_arguments(action: str, arguments: dict) -> None:
+    invalid = LibraryError("invalid_arguments", "任务参数不完整。", status=400)
+    for name in REQUIRED[action]:
+        if not isinstance(arguments.get(name), str) or not arguments[name]:
+            raise invalid
+    if action == "import":
+        require_kind(arguments["kind"])
+        metadata = arguments.get("metadata")
+        if metadata is not None and not isinstance(metadata, dict):
+            raise invalid
+    else:
+        for name in ("source", "prefer_id"):
+            value = arguments.get(name)
+            if value is not None and not isinstance(value, str):
+                raise invalid
 
 
 def _job_payload(row) -> dict:
@@ -83,10 +103,8 @@ def cancel_job(db_path: Path | str, identifier: str) -> dict:
         row = conn.execute("SELECT * FROM library_jobs WHERE id = ?", (identifier,)).fetchone()
         if row is None:
             raise LibraryError("job_not_found", "维护任务不存在。", status=404)
-        if row["state"] == "completed":
-            raise LibraryError(
-                "job_completed", "任务已完成，不能取消已确认的入库操作。", status=409
-            )
+        if row["state"] in FINISHED_STATES:
+            raise LibraryError("job_finished", "任务已结束，不能取消。", status=409)
         if row["state"] == "running":
             conn.execute(
                 "UPDATE library_jobs SET cancel_requested = 1, "
@@ -169,11 +187,18 @@ class JobWorker:
     def _loop(self) -> None:
         try:
             while not self.stopping.is_set():
-                if not self.run_once():
+                try:
+                    busy = self.run_once()
+                except Exception:
+                    # A locked database or transient I/O error must not end the
+                    # worker; the claimed job (if any) stays recoverable.
+                    LOG.exception("Library worker iteration failed; retrying shortly")
+                    self.wake.wait(timeout=5)
+                    self.wake.clear()
+                    continue
+                if not busy:
                     self.wake.wait(timeout=1)
                     self.wake.clear()
-        except Exception:
-            LOG.exception("Library worker stopped unexpectedly; pending jobs remain recoverable")
         finally:
             self.lease.release()
 
@@ -217,7 +242,10 @@ class JobWorker:
                 result = ingest.fetch_draft(self.db_path, job_id=job["id"], **job["arguments"])
             self._finish(job, result)
         except Exception as exc:
-            self._fail(job, exc)
+            try:
+                self._fail(job, exc)
+            except Exception:
+                LOG.exception("Could not record failure of library job %s", job["id"])
         return True
 
     def _finish(self, job: dict, draft: dict) -> None:
@@ -262,10 +290,15 @@ class JobWorker:
 
     def _fail(self, job: dict, exc: Exception) -> None:
         state = "interrupted" if self.stopping.is_set() else "failed"
-        error = {
-            "code": exc.code if isinstance(exc, LibraryError) else type(exc).__name__,
-            "message": str(exc)[:1000],
-        }
+        if isinstance(exc, LibraryError):
+            error = {"code": exc.code, "message": str(exc)[:1000]}
+        else:
+            # Never surface raw Python exception text as a user-facing message.
+            error = {
+                "code": "internal_error",
+                "message": "处理时发生内部错误，请重试或检查文件。",
+                "detail": f"{type(exc).__name__}: {str(exc)[:500]}",
+            }
         with connect(self.db_path) as conn:
             conn.execute(
                 "UPDATE library_jobs SET state = ?, phase = 'failed', message = ?, error_json = ?, "

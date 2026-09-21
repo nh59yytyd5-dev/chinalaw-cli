@@ -40,15 +40,20 @@ _IDENTIFIER = re.compile(r"[0-9a-f]{32}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _FTS = ("laws_fts", "articles_fts", "norm_sources_fts", "norm_clauses_fts")
 _DERIVED = {"law_alias_index", *(name + "_rows" for name in _FTS)}
+# Bookkeeping tables that legitimately change between a restore preview and its
+# confirmation (worker progress, draft expiry, meta timestamps). They are still
+# backed up and replaced, but never decide whether the library "changed".
+_VOLATILE = frozenset({"library_jobs", "library_drafts", "meta"})
+# Staging folders without a preview are uploads still being checked; only sweep
+# them once they are clearly abandoned.
+_PENDING_GRACE = timedelta(hours=1)
 
 
 @lru_cache(maxsize=1)
 def _schema_spec() -> tuple[dict[str, tuple[str, ...]], frozenset[str]]:
     with closing(sqlite3.connect(":memory:")) as conn:
         conn.executescript(SCHEMA_V14_SQL)
-        tables = frozenset(
-            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-        )
+        tables = frozenset(_user_tables(conn))
         base = {
             name: tuple(row[1] for row in conn.execute(f'PRAGMA table_info("{name}")'))
             for name in sorted(tables)
@@ -57,6 +62,15 @@ def _schema_spec() -> tuple[dict[str, tuple[str, ...]], frozenset[str]]:
             and not any(name == fts or name.startswith(fts + "_") for fts in _FTS)
         }
     return base, tables
+
+
+def _user_tables(conn: sqlite3.Connection) -> set[str]:
+    """Table names excluding SQLite internals such as ANALYZE statistics."""
+    return {
+        row[0]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        if not row[0].startswith("sqlite_")
+    }
 
 
 def _counts(path: Path | str) -> dict:
@@ -70,6 +84,8 @@ def _counts(path: Path | str) -> dict:
 def _state_fingerprint(conn: sqlite3.Connection) -> str:
     digest = hashlib.sha256()
     for table, columns in _schema_spec()[0].items():
+        if table in _VOLATILE:
+            continue
         digest.update(table.encode())
         fields = ", ".join(f'"{column}"' for column in columns)
         for row in conn.execute(f'SELECT {fields} FROM "{table}" ORDER BY rowid'):
@@ -147,10 +163,7 @@ def _validate_database(path: Path) -> None:
         if conn.execute("SELECT 1 FROM sqlite_master WHERE type IN ('trigger', 'view')").fetchone():
             raise LibraryError("backup_schema", "备份包含不支持的视图或触发器。")
         base, expected = _schema_spec()
-        found = {
-            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-        }
-        if found != expected:
+        if _user_tables(conn) != expected:
             raise LibraryError("backup_schema", "备份的资料表与当前版本不匹配。")
         for table, columns in base.items():
             actual = {row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')}
@@ -221,8 +234,46 @@ def _extract_checked(archive: Path, destination: Path) -> dict:
     return manifest
 
 
+def _preview_expired(preview: dict) -> bool:
+    try:
+        return datetime.fromisoformat(preview["expires_at"]) <= datetime.now(timezone.utc)
+    except (KeyError, TypeError, ValueError):
+        return True
+
+
+def sweep_restores(staging: Path | str) -> int:
+    """Delete expired previews and abandoned uploads; return how many were removed."""
+    staging = Path(staging)
+    if not staging.is_dir():
+        return 0
+    removed = 0
+    now = datetime.now(timezone.utc)
+    for folder in staging.iterdir():
+        if not folder.is_dir() or not _IDENTIFIER.fullmatch(folder.name):
+            continue
+        preview_path = folder / "preview.json"
+        try:
+            if preview_path.is_file():
+                stale = _preview_expired(json.loads(preview_path.read_text(encoding="utf-8")))
+            else:
+                candidates = [folder, folder / "backup.zip"]
+                touched = max(
+                    datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+                    for path in candidates
+                    if path.exists()
+                )
+                stale = now - touched > _PENDING_GRACE
+        except (OSError, ValueError):
+            stale = True
+        if stale:
+            shutil.rmtree(folder, ignore_errors=True)
+            removed += 1
+    return removed
+
+
 def prepare_restore(db_path: Path | str, staging: Path | str, stream: BinaryIO) -> dict:
     """Validate an uploaded archive in isolation; keep the current library unchanged."""
+    sweep_restores(staging)
     identifier = uuid.uuid4().hex
     folder = Path(staging) / identifier
     folder.mkdir(parents=True, mode=0o700)
@@ -249,7 +300,7 @@ def prepare_restore(db_path: Path | str, staging: Path | str, stream: BinaryIO) 
         }
         (folder / "preview.json").write_text(encode_json(result), encoding="utf-8")
         return result
-    except (OSError, ValueError, sqlite3.Error, zipfile.BadZipFile, KeyError, TypeError) as exc:
+    except Exception as exc:
         shutil.rmtree(folder, ignore_errors=True)
         if isinstance(exc, LibraryError):
             raise
@@ -264,7 +315,10 @@ def get_restore(staging: Path | str, identifier: str) -> dict:
     path = Path(staging) / identifier / "preview.json"
     if not path.is_file():
         raise LibraryError("restore_not_found", "恢复预览不存在。", status=404)
-    return json.loads(path.read_text(encoding="utf-8"))
+    preview = json.loads(path.read_text(encoding="utf-8"))
+    if _preview_expired(preview):
+        raise LibraryError("restore_expired", "恢复预览已过期，请重新上传备份。", status=410)
+    return preview
 
 
 def _copy_blobs(database: Path, source_root: Path, target_root: Path) -> None:
@@ -310,12 +364,18 @@ def commit_restore(
     *,
     expected_fingerprint: str,
 ) -> dict:
+    if not _IDENTIFIER.fullmatch(identifier):
+        raise LibraryError("restore_not_found", "恢复预览不存在。", status=404)
+    folder = Path(staging) / identifier
+    repeated = {"kind": "library_restored", "id": identifier, "repeated": True}
+    # A confirmed restore is idempotent even after its staging folder is gone.
+    with connect_readonly(db_path) as conn:
+        if get_meta(conn, "last_restore_id") == identifier:
+            shutil.rmtree(folder, ignore_errors=True)
+            return repeated
     preview = get_restore(staging, identifier)
     if preview["fingerprint"] != expected_fingerprint:
         raise LibraryError("restore_changed", "确认的备份与预览不一致。", status=409)
-    if datetime.fromisoformat(preview["expires_at"]) <= datetime.now(timezone.utc):
-        raise LibraryError("restore_expired", "恢复预览已过期，请重新上传备份。", status=410)
-    folder = Path(staging) / identifier
     if artifacts.file_digest(folder / "backup.zip") != expected_fingerprint:
         raise LibraryError("backup_corrupted", "待恢复备份发生变化，请重新上传。", status=409)
     # Re-extract to a fresh location so staged DB/files cannot change after review.
@@ -328,7 +388,9 @@ def commit_restore(
             target.execute("PRAGMA foreign_keys = OFF")
             target.execute("BEGIN IMMEDIATE")
             if get_meta(target, "last_restore_id") == identifier:
-                return {"kind": "library_restored", "id": identifier, "repeated": True}
+                target.execute("ROLLBACK")
+                shutil.rmtree(folder, ignore_errors=True)
+                return repeated
             if _state_fingerprint(target) != preview["base_fingerprint"]:
                 raise LibraryError(
                     "content_conflict",
@@ -344,6 +406,7 @@ def commit_restore(
             )
             set_meta(target, "last_restore_id", identifier)
             set_meta(target, "last_restore_at", utc_now())
+    shutil.rmtree(folder, ignore_errors=True)
     return {
         "kind": "library_restored",
         "id": identifier,

@@ -61,7 +61,9 @@ class JobTests(unittest.TestCase):
             self.worker.run_once()
         result = jobs.get_job(self.db, job["id"])
         self.assertEqual(result["state"], "failed")
-        self.assertIn("bad document", result["error"]["message"])
+        self.assertEqual(result["error"]["code"], "internal_error")
+        self.assertNotIn("bad document", result["error"]["message"])
+        self.assertIn("bad document", result["error"]["detail"])
         self.assertEqual(catalog.list_documents(self.db, kind="norm")["total"], 0)
 
     def test_restart_interrupts_unfinished_jobs_and_duplicate_worker_rejected(self):

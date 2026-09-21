@@ -3,7 +3,7 @@
 > 本文档是 `chinalaw-cli` 的最高层产品定位文档。当前重构计划见
 > [`REFACTOR_PLAN_20260806.md`](./REFACTOR_PLAN_20260806.md)，协议契约见
 > [`CONTRACT.md`](./CONTRACT.md)。
-> 人工管理与服务器增量见 [`ADMIN_PANEL_PLAN20260913v1.md`](./ADMIN_PANEL_PLAN20260913v1.md)。
+> 人工管理面板与服务器的使用说明见 [`ADMIN_SERVER.md`](./ADMIN_SERVER.md)。
 
 ## 1. 一句话
 

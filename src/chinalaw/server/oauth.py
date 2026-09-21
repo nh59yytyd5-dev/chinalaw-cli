@@ -29,6 +29,10 @@ from chinalaw.server.auth_store import (
     validate_scopes,
 )
 
+MAX_CLIENTS = 256
+MAX_PENDING_PER_CLIENT = 10
+UNUSED_CLIENT_SECONDS = 24 * 3600
+
 
 class StoredCode(AuthorizationCode):
     grant_id: str
@@ -74,8 +78,13 @@ class OwnerOAuth(OAuthAuthorizationServerProvider[StoredCode, StoredRefresh, Sto
                 )
         with self.store.transaction() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            # Reclaim dynamic registrations that never reached an approved consent.
+            conn.execute(
+                "DELETE FROM oauth_clients WHERE last_grant_at IS NULL AND created_at <= ?",
+                (int(time.time()) - UNUSED_CLIENT_SECONDS,),
+            )
             count = conn.execute("SELECT COUNT(*) FROM oauth_clients").fetchone()[0]
-            if count >= 256:
+            if count >= MAX_CLIENTS:
                 raise RegistrationError(
                     error="invalid_client_metadata",
                     error_description="Client registration limit reached",
@@ -97,11 +106,13 @@ class OwnerOAuth(OAuthAuthorizationServerProvider[StoredCode, StoredRefresh, Sto
             )
         request_id = uuid.uuid4().hex
         with self.store.transaction() as conn:
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute("DELETE FROM oauth_requests WHERE expires_at <= ?", (int(time.time()),))
             count = conn.execute(
-                "SELECT COUNT(*) FROM oauth_requests WHERE consumed = 0"
+                "SELECT COUNT(*) FROM oauth_requests WHERE consumed = 0 AND client_id = ?",
+                (client.client_id,),
             ).fetchone()[0]
-            if count >= 100:
+            if count >= MAX_PENDING_PER_CLIENT:
                 raise AuthorizeError(
                     error="temporarily_unavailable", error_description="Try again later"
                 )
@@ -163,6 +174,10 @@ class OwnerOAuth(OAuthAuthorizationServerProvider[StoredCode, StoredRefresh, Sto
             conn.execute(
                 "INSERT INTO oauth_codes(digest, metadata_json, expires_at) VALUES (?, ?, ?)",
                 (token_digest(raw_code), code.model_dump_json(), int(code.expires_at)),
+            )
+            conn.execute(
+                "UPDATE oauth_clients SET last_grant_at = ? WHERE id = ?",
+                (int(time.time()), row["client_id"]),
             )
         return _redirect(str(params.redirect_uri), {"code": raw_code}, params.state)
 

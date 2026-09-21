@@ -1,4 +1,5 @@
 Param(
+    [switch]$WithServer,
     [switch]$SyncFixtures,
     [switch]$Skills,
     [switch]$NoDoctor
@@ -24,7 +25,7 @@ finally {
     Pop-Location
 }
 
-& (Join-Path $PSScriptRoot "install-local.ps1")
+& (Join-Path $PSScriptRoot "install-local.ps1") -WithServer:$WithServer
 
 # Skills are NOT refreshed by default (.claude/skills/ ships as usage
 # documentation); pass -Skills to opt in. (install-skills.ps1 always copies.)

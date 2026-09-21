@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   api,
   changed,
@@ -8,6 +8,8 @@ import {
   label,
   safeUrl,
   type Clause,
+  type Document,
+  type DocumentResult,
   type Draft,
   type DraftSummary,
   type Job,
@@ -39,6 +41,27 @@ export function ImportPage({ parameter = "" }: { parameter?: string }) {
   const [mode, setMode] = useState("file");
   const options = useResource<Options>("/options");
   const pending = useResource<{ items: DraftSummary[] }>("/drafts", 5000);
+  // Re-imports replace an existing record: pre-fill its metadata so the owner
+  // only has to pick the new file instead of retyping name, type and scope.
+  const [existing, setExisting] = useState<Document | null | undefined>(
+    target ? undefined : null,
+  );
+  useEffect(() => {
+    if (!target) {
+      setExisting(null);
+      return;
+    }
+    let active = true;
+    setExisting(undefined);
+    api<DocumentResult>(
+      `/document?kind=${initialKind}&id=${encodeURIComponent(target)}`,
+    )
+      .then((result) => active && setExisting(result.document))
+      .catch(() => active && setExisting(null));
+    return () => {
+      active = false;
+    };
+  }, [target, initialKind]);
   return (
     <>
       <Heading
@@ -102,7 +125,7 @@ export function ImportPage({ parameter = "" }: { parameter?: string }) {
               </button>
             )}
           </div>
-          {!options.data ? (
+          {!options.data || existing === undefined ? (
             <Loading {...options} />
           ) : mode === "file" ? (
             <ImportFile
@@ -110,6 +133,7 @@ export function ImportPage({ parameter = "" }: { parameter?: string }) {
               kind={kind}
               options={options.data}
               target={target}
+              existing={existing}
             />
           ) : (
             <FetchForm options={options.data} />
@@ -170,12 +194,18 @@ function ImportFile({
   kind,
   options,
   target,
+  existing,
 }: {
   kind: Kind;
   options: Options;
   target: string;
+  existing?: Document | null;
 }) {
   const [file, setFile] = useState<File>();
+  const preset = (field: keyof Document) => {
+    const value = existing?.[field];
+    return typeof value === "string" ? value : "";
+  };
   const action = useAction();
   const isJson = file?.name.toLowerCase().endsWith(".json");
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -234,6 +264,7 @@ function ImportFile({
           <input
             name="display_name"
             maxLength={500}
+            defaultValue={existing ? docTitle(existing) : ""}
             placeholder={
               kind === "law"
                 ? "例如：某法规的正式名称"
@@ -261,10 +292,14 @@ function ImportFile({
       <div className="form-grid">
         {kind === "law" ? (
           <>
-            <Field label="规范类型">
-              <select name="level" required={!isJson} defaultValue="">
+            <Field label="效力层级">
+              <select
+                name="level"
+                required={!isJson}
+                defaultValue={preset("level")}
+              >
                 <option value="">
-                  {isJson ? "沿用 JSON 内容" : "请选择规范类型"}
+                  {isJson ? "沿用 JSON 内容" : "请选择效力层级"}
                 </option>
                 {options.law_levels.map((value) => (
                   <option value={value} key={value}>
@@ -274,7 +309,11 @@ function ImportFile({
               </select>
             </Field>
             <Field label="法规状态">
-              <select name="status" required={!isJson} defaultValue="">
+              <select
+                name="status"
+                required={!isJson}
+                defaultValue={preset("status")}
+              >
                 <option value="">
                   {isJson ? "沿用 JSON 内容" : "请选择已核实的状态"}
                 </option>
@@ -289,7 +328,11 @@ function ImportFile({
         ) : (
           <>
             <Field label="私域规范类型">
-              <select name="source_type" required={!isJson} defaultValue="">
+              <select
+                name="source_type"
+                required={!isJson}
+                defaultValue={preset("source_type")}
+              >
                 <option value="">
                   {isJson ? "沿用 JSON 内容" : "请选择资料类型"}
                 </option>
@@ -303,6 +346,7 @@ function ImportFile({
             <Field label="制定主体">
               <input
                 name="authority"
+                defaultValue={preset("authority")}
                 placeholder="例如：资料所属公司"
                 maxLength={500}
               />
@@ -310,6 +354,7 @@ function ImportFile({
             <Field label="约束范围">
               <input
                 name="binding_scope"
+                defaultValue={preset("binding_scope")}
                 placeholder="例如：某公司内的费用审批"
                 maxLength={2000}
               />
@@ -493,9 +538,9 @@ const metadataLabels: Record<string, string> = {
   source_url: "来源地址",
   source_hash: "来源指纹",
   source_checked_at: "取得时间",
-  level: "规范类型",
+  level: "效力层级",
   status: "法规状态",
-  source_type: "私域类型",
+  source_type: "私域规范类型",
   authority: "制定主体",
   binding_scope: "约束范围",
   aliases: "其他名称",
@@ -508,12 +553,54 @@ const metadataLabels: Record<string, string> = {
   jurisdiction: "适用地域",
   id: "资料标识",
 };
-const displayValue = (value: unknown) =>
-  value == null
-    ? "未提供"
-    : typeof value === "string"
-      ? label(value)
-      : JSON.stringify(value);
+// Fields the importer rewrites on every run. They are kept for audit but are
+// not something the reviewer has to read to decide whether the text is right.
+const BOOKKEEPING_FIELDS = new Set([
+  "source_hash",
+  "source_checked_at",
+  "metadata",
+]);
+const displayValue = (field: string, value: unknown) => {
+  if (value == null) return "未提供";
+  if (typeof value === "string") {
+    if (value.startsWith("local-file://")) return "面板上传的文件";
+    if (field === "source_checked_at") return formatDate(value);
+    if (field === "source_hash") return value.slice(0, 16) + "…";
+    return label(value);
+  }
+  if (field === "metadata" && typeof value === "object") {
+    const ingest = (
+      value as { ingest?: { original_filename?: string; format?: string } }
+    ).ingest;
+    if (ingest?.original_filename)
+      return `上传文件 ${ingest.original_filename}${ingest.format ? `（${ingest.format}）` : ""}`;
+  }
+  return JSON.stringify(value);
+};
+function MetadataRows({ items }: { items: Draft["diff"]["metadata"] }) {
+  return (
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>当前值</th>
+            <th>待入库值</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.field}>
+              <td>{metadataLabels[item.field] || item.field}</td>
+              <td>{displayValue(item.field, item.before)}</td>
+              <td>{displayValue(item.field, item.after)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 function DiffClause({ clause }: { clause: Clause }) {
   return (
     <>
@@ -527,6 +614,12 @@ function DiffClause({ clause }: { clause: Clause }) {
 }
 function DraftDiff({ draft }: { draft: Draft }) {
   const diff = draft.diff;
+  const substantive = diff.metadata.filter(
+    (item) => !BOOKKEEPING_FIELDS.has(item.field),
+  );
+  const bookkeeping = diff.metadata.filter((item) =>
+    BOOKKEEPING_FIELDS.has(item.field),
+  );
   return (
     <section className="panel diff-panel">
       <div className="panel-heading">
@@ -538,29 +631,18 @@ function DraftDiff({ draft }: { draft: Draft }) {
           </p>
         </div>
       </div>
-      {diff.metadata.length > 0 && (
+      {substantive.length > 0 && (
         <details className="metadata-diff" open>
-          <summary>资料信息变化（{diff.metadata.length} 项）</summary>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>字段</th>
-                  <th>当前值</th>
-                  <th>待入库值</th>
-                </tr>
-              </thead>
-              <tbody>
-                {diff.metadata.map((item) => (
-                  <tr key={item.field}>
-                    <td>{metadataLabels[item.field] || item.field}</td>
-                    <td>{displayValue(item.before)}</td>
-                    <td>{displayValue(item.after)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <summary>资料信息变化（{substantive.length} 项）</summary>
+          <MetadataRows items={substantive} />
+        </details>
+      )}
+      {bookkeeping.length > 0 && (
+        <details className="metadata-diff">
+          <summary>
+            来源记录更新（{bookkeeping.length} 项，每次导入都会刷新）
+          </summary>
+          <MetadataRows items={bookkeeping} />
         </details>
       )}
       {diff.modified.map((item, index) => (
@@ -599,7 +681,13 @@ export function DraftPage({ id }: { id: string }) {
   const action = useAction();
   const [tab, setTab] = useState("text");
   const [confirmed, setConfirmed] = useState(false);
-  if (!result.data) return <Loading {...result} />;
+  if (!result.data)
+    return (
+      <Loading
+        {...result}
+        back={{ label: "返回导入与核对", onClick: () => navigate("import") }}
+      />
+    );
   const draft = result.data;
   const ready = draft.status === "ready";
   const canCommit = ready && !draft.expired && !draft.conflict;
@@ -698,13 +786,19 @@ export function DraftPage({ id }: { id: string }) {
             <button
               className="button secondary"
               disabled={action.busy}
-              onClick={() =>
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "取消后这份预览会被丢弃，需要重新导入才能再次核对。确定取消？",
+                  )
+                )
+                  return;
                 void action.run(async () => {
                   await api("/drafts/" + id + "/cancel", "POST");
                   changed();
                   navigate("import");
-                })
-              }
+                });
+              }}
             >
               取消此预览
             </button>
@@ -713,9 +807,17 @@ export function DraftPage({ id }: { id: string }) {
               disabled={action.busy || !canCommit || !confirmed}
               onClick={() =>
                 void action.run(async () => {
-                  await api("/drafts/" + id + "/commit", "POST", {
-                    fingerprint: draft.fingerprint,
-                  });
+                  try {
+                    await api("/drafts/" + id + "/commit", "POST", {
+                      fingerprint: draft.fingerprint,
+                    });
+                  } catch (error) {
+                    // 409/410 mean the draft state changed under us; refetch so
+                    // the conflict/expired banner replaces the confirm button.
+                    setConfirmed(false);
+                    result.reload();
+                    throw error;
+                  }
                   changed();
                   action.notify("已按确认的内容入库。");
                   openDocument(draft.document_kind, draft.target_id);
@@ -780,7 +882,17 @@ export function JobsPage({ selected }: { selected?: string }) {
                 </Badge>
               </div>
               <p className="job-message">{job.message}</p>
-              {job.error && <Note warning>{job.error.message}</Note>}
+              {job.error && (
+                <Note warning>
+                  {job.error.message}
+                  {job.error.detail && (
+                    <details>
+                      <summary>技术细节</summary>
+                      <code className="wrap">{job.error.detail}</code>
+                    </details>
+                  )}
+                </Note>
+              )}
               <div className="job-footer">
                 <span className="mono muted">{job.id.slice(0, 12)}</span>
                 <div className="button-row">

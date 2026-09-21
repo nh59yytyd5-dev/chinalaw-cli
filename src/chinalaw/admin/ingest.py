@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
-import uuid
 from pathlib import Path
 
 from chinalaw import cleaning, fetch, normsources
 from chinalaw.admin import artifacts, drafts
 from chinalaw.admin.errors import LibraryError, require_kind
+from chinalaw.admin.payloads import utc_now
 from chinalaw.db import read_only_operation
 
 PUBLIC_METADATA = frozenset(
@@ -64,10 +65,15 @@ def import_artifact(
     with artifacts.source_file(db_path, artifacts_root, artifact_id) as (artifact, path):
         origin = {"type": "upload", "filename": artifact["filename"], "artifact_ids": [artifact_id]}
         if path.suffix == ".json":
-            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8-sig"))
+            except UnicodeDecodeError as exc:
+                raise _encoding_error() from exc
             if not isinstance(payload, dict):
                 raise LibraryError("invalid_payload", "JSON 文件必须包含一个完整资料对象。")
             payload = {**payload, **metadata}
+            if kind == "law":
+                payload = _canonical_json_law(payload, artifact)
             origin["text_artifact_id"] = artifact_id
             warnings = []
         else:
@@ -77,7 +83,10 @@ def import_artifact(
                     "缺少 PDF 文本提取工具；macOS 安装 brew install poppler，"
                     "Debian/Ubuntu 安装 apt-get install poppler-utils。",
                 )
-            text = normsources.read_source_text(path)
+            try:
+                text = normsources.read_source_text(path)
+            except UnicodeDecodeError as exc:
+                raise _encoding_error() from exc
             if not text.strip():
                 raise LibraryError(
                     "source_has_no_text", "未能提取文字；请检查原件，扫描件需要先取得文本。"
@@ -96,6 +105,30 @@ def import_artifact(
     )
 
 
+def _canonical_json_law(payload: dict, artifact: dict) -> dict:
+    """Apply the same normalization as the CLI's `load_files` path.
+
+    Provenance fields the CLI requires are defaulted from the upload itself so a
+    reviewer-supplied JSON without them still gets a complete, checked preview.
+    """
+    payload = dict(payload)
+    payload.setdefault("source_name", artifact["filename"])
+    payload.setdefault("source_checked_at", utc_now())
+    try:
+        return cleaning.canonicalize(payload, source_kind="external_json")
+    except (ValueError, TypeError) as exc:
+        raise LibraryError("invalid_payload", f"JSON 资料不符合规范格式：{exc}") from exc
+
+
+def _encoding_error() -> LibraryError:
+    return LibraryError("source_encoding", "原件不是 UTF-8 文本，请另存为 UTF-8 后重新上传。")
+
+
+def _local_law_id(title: str) -> str:
+    """Deterministic identity so re-importing the same document updates it in place."""
+    return "local-law-" + hashlib.sha256(title.encode("utf-8")).hexdigest()[:16]
+
+
 def _text_payload(kind: str, text: str, artifact: dict, metadata: dict) -> tuple[dict, list[dict]]:
     title = Path(artifact["filename"]).stem
     source = {
@@ -104,17 +137,21 @@ def _text_payload(kind: str, text: str, artifact: dict, metadata: dict) -> tuple
     }
     if kind == "law":
         if not metadata.get("level") or not metadata.get("status"):
-            raise LibraryError("metadata_required", "请明确选择公开规范类型和状态。")
-        values = {"id": "local-law-" + uuid.uuid4().hex, "title": title, **source, **metadata}
+            raise LibraryError("metadata_required", "请选择公开法规的效力层级和状态。")
+        values = {"title": title, **source, **metadata}
+        if not values.get("id"):
+            values["id"] = _local_law_id(values.get("title") or title)
         payload = cleaning.canonicalize(text, source_kind="markdown", **values)
         return payload, []
     if not metadata.get("source_type"):
         raise LibraryError("metadata_required", "请选择私域规范类型。")
     values = {"name": title, **source, **metadata}
     source_id = values.pop("id", None)
+    # Without an explicit id the importer derives a stable slug from the name,
+    # so the same file imported twice targets the same record.
     payload = normsources.build_source_from_text(
         text,
-        source_id=source_id or "local-norm-" + uuid.uuid4().hex,
+        source_id=source_id or None,
         metadata={
             "ingest": {
                 "artifact_id": artifact["id"],
