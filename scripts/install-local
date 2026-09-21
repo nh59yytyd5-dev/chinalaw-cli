@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Install this checkout as the local agent-facing `chinalaw` command.
+# 传 --with-server 时额外安装 `.[server]` 可选依赖并写 chinalaw-server shim。
 set -euo pipefail
 
 SOURCE="${BASH_SOURCE[0]}"
@@ -17,6 +18,36 @@ PYTHON_BIN="${VENV_DIR}/bin/python"
 BIN_DIR="${CHINALAW_BIN_DIR:-${HOME}/.local/bin}"
 TARGET="${BIN_DIR}/chinalaw"
 MCP_TARGET="${BIN_DIR}/chinalaw-mcp"
+SERVER_TARGET="${BIN_DIR}/chinalaw-server"
+WITH_SERVER=0
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/install-local [options]
+
+Create (or reuse) the repository .venv, editable-install this checkout, and
+link chinalaw / chinalaw-mcp shims into ~/.local/bin (or CHINALAW_BIN_DIR).
+
+Options:
+  --with-server  Also install the `.[server]` extra (FastAPI/Uvicorn/MCP HTTP)
+                 and link a chinalaw-server shim next to the other two.
+  -h, --help     Show this help.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --with-server) WITH_SERVER=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "error: unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+# pip install 的目标：默认只装核心（零运行依赖），--with-server 时装 server extra。
+INSTALL_SPEC="$REPO_ROOT"
+if [ "$WITH_SERVER" -eq 1 ]; then
+    INSTALL_SPEC="${REPO_ROOT}[server]"
+fi
 
 # pyproject.toml 声明 requires-python >= 3.10；低于此版本时 venv 里的 pip 往往过旧、
 # 不支持 PEP 660 editable install，报错还会伪装成「setup.py not found」这类误导信息。
@@ -114,10 +145,13 @@ if [ -x "$PYTHON_BIN" ] && ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; the
     fi
 fi
 
-if [ -x "$PYTHON_BIN" ] && "$PYTHON_BIN" -m pip install -e "$REPO_ROOT"; then
-    echo "editable install ok: ${REPO_ROOT} (${PYTHON_BIN})"
+if [ -x "$PYTHON_BIN" ] && "$PYTHON_BIN" -m pip install -e "$INSTALL_SPEC"; then
+    echo "editable install ok: ${INSTALL_SPEC} (${PYTHON_BIN})"
 elif [ -x "$PYTHON_BIN" ]; then
     echo "editable install failed; wrapper will fall back to PYTHONPATH mode" >&2
+    if [ "$WITH_SERVER" -eq 1 ]; then
+        echo "  注意：--with-server 需要 editable 安装成功才能拿到 server 依赖；PYTHONPATH 回退模式下 chinalaw-server 无法运行。" >&2
+    fi
     echo "  常见原因：venv 内 pip 过旧、不支持 PEP 660 editable 安装（报错可能伪装成" >&2
     echo "  「setup.py or setup.cfg not found」）。可升级 pip 后重跑：" >&2
     echo "    \"${PYTHON_BIN}\" -m pip install --upgrade pip && scripts/install-local" >&2
@@ -132,6 +166,11 @@ chmod +x "${REPO_ROOT}/scripts/chinalaw-mcp"
 
 echo "installed wrapper: ${TARGET} -> ${REPO_ROOT}/scripts/chinalaw"
 echo "installed wrapper: ${MCP_TARGET} -> ${REPO_ROOT}/scripts/chinalaw-mcp"
+if [ "$WITH_SERVER" -eq 1 ]; then
+    ln -sf "${REPO_ROOT}/scripts/chinalaw-server" "$SERVER_TARGET"
+    chmod +x "${REPO_ROOT}/scripts/chinalaw-server"
+    echo "installed wrapper: ${SERVER_TARGET} -> ${REPO_ROOT}/scripts/chinalaw-server"
+fi
 if ! command -v chinalaw >/dev/null 2>&1; then
     echo "warning: chinalaw is not on PATH. Add this to your shell profile:" >&2
     echo "  export PATH=\"${BIN_DIR}:\$PATH\"" >&2
@@ -141,3 +180,6 @@ elif [ "$(command -v chinalaw)" != "$TARGET" ]; then
 fi
 
 "$TARGET" --version
+if [ "$WITH_SERVER" -eq 1 ]; then
+    "$SERVER_TARGET" --version
+fi

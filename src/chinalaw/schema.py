@@ -9,7 +9,7 @@ v0.1 策略：
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 SCHEMA_V1_SQL = """
@@ -456,3 +456,86 @@ SCHEMA_V13_SQL = SCHEMA_V12_SQL.replace(
     "    part TEXT,\n"
     "    UNIQUE(norm_source_id, position)\n",
 )
+
+
+# v14: human review and maintenance records. Authentication credentials live
+# outside the portable library. Design: docs/ADMIN_PANEL_PLAN_20260913.md.
+SCHEMA_V14_DELTA_SQL = """
+CREATE TABLE IF NOT EXISTS library_artifacts (
+    id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    size INTEGER NOT NULL CHECK(size >= 0),
+    sha256 TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS library_drafts (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('law', 'norm')),
+    target_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    before_json TEXT,
+    fingerprint TEXT NOT NULL,
+    base_fingerprint TEXT,
+    origin_json TEXT NOT NULL DEFAULT '{}',
+    warnings_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'ready'
+        CHECK(status IN ('ready', 'committed', 'cancelled')),
+    operation_id TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_library_drafts_target
+    ON library_drafts(kind, target_id, created_at);
+
+CREATE TABLE IF NOT EXISTS library_operations (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('law', 'norm')),
+    target_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    draft_id TEXT UNIQUE,
+    before_json TEXT,
+    after_json TEXT NOT NULL,
+    before_fingerprint TEXT,
+    after_fingerprint TEXT NOT NULL,
+    origin_json TEXT NOT NULL DEFAULT '{}',
+    actor TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_library_operations_target
+    ON library_operations(kind, target_id, created_at);
+
+CREATE TABLE IF NOT EXISTS library_reviews (
+    kind TEXT NOT NULL CHECK(kind IN ('law', 'norm')),
+    target_id TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    reviewed_at TEXT NOT NULL,
+    PRIMARY KEY(kind, target_id, fingerprint)
+);
+
+CREATE TABLE IF NOT EXISTS library_jobs (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    arguments_json TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN
+        ('queued', 'running', 'awaiting_confirmation', 'completed',
+         'failed', 'cancelled', 'interrupted')),
+    phase TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '',
+    result_json TEXT,
+    error_json TEXT,
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    parent_id TEXT,
+    draft_id TEXT REFERENCES library_drafts(id),
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_library_jobs_state
+    ON library_jobs(state, created_at);
+"""
+
+SCHEMA_V14_SQL = SCHEMA_V13_SQL + SCHEMA_V14_DELTA_SQL

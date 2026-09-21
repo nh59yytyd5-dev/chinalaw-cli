@@ -336,3 +336,27 @@ agent 输出法律依据时，应包含：
 - 把 pending reference 当作 resolved article。
 - fetch 失败后继续输出确定引用。
 - 把 `--as-of` 当成完整时间效力判断。
+# 人工管理与远程查询（0.6 alpha）
+
+```bash
+# 独立测试资料库；不会使用默认库
+scripts/install-local --with-server   # Windows: .\scripts\install-local.ps1 -WithServer
+# 也可以在任意 venv 里 python -m pip install '.[server]'
+chinalaw-server init --db ./var/example-library.db --with-fixtures
+chinalaw-server serve --db ./var/example-library.db --open
+```
+
+浏览器中选择“公开法规”→ 输入“民法典”→ 阅读 1,260 条完整正文。
+上传私域文件后先核对全文、章节和差异，再确认入库；原件可从资料详情页下载。
+
+只读客户端使用面板生成的令牌：
+
+```bash
+curl -H "Authorization: Bearer $CHINALAW_QUERY_TOKEN" \
+  'http://127.0.0.1:8765/api/v1/documents?kind=law&page=1&page_size=20'
+curl -H "Authorization: Bearer $CHINALAW_QUERY_TOKEN" \
+  'http://127.0.0.1:8765/api/v1/document?kind=law&id=flk-civil-code-2020'
+```
+
+第二条示例的 `id` 应以目录返回的实际标识为准。远程令牌默认不读取私域；不能调用导入、恢复或管理接口。
+服务器配置、OAuth 和备份迁移见 [ADMIN_SERVER.md](ADMIN_SERVER.md)。

@@ -3,6 +3,25 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.0a1] — 未发布（开发预览）
+
+### 新增
+
+- 可选资料库管理服务：公开/私域分页目录、完整正文、章节目次、版本与来源原件。
+- 冻结草稿、完整差异、人工确认、版本绑定的核对记录、维护历史和历史恢复预览。
+- 文件上传和官方来源获取的持久任务：取消、失败原因、重试和重启中断处理。
+- 所有者登录与本机一次性配对、可撤销只读令牌、单所有者 OAuth/PKCE、只读 REST 与官方 SDK MCP HTTP。
+- 包含来源附件的 SQLite 一致性备份，以及校验、范围预览、冲突检测和事务性恢复。
+- `chinalaw-server init/serve/password`，本机启动、Docker/Caddy 配置、部署说明与浏览器测试。
+- `scripts/install-local --with-server`（Windows：`-WithServer`）：安装 `server` 可选依赖并写 `chinalaw-server` shim。
+- 审查修复：备份对 ANALYZE 库兼容、worker 异常存活、导入 id 稳定、恢复不污染修订史、登录限流适配反向代理、恢复暂存清理、面板时间显示/配对/危险操作确认等。
+
+### 兼容性
+
+- 数据库升级至 schema 14，新增管理记录，不改变既有法规和私域分类语义。
+- CLI 核心仍无运行依赖；Web 服务通过 `server` 可选安装项提供，安装包内置静态界面。
+- 旧 CLI JSON 与 stdio MCP 保持兼容；远程查询不会创建、迁移或写入资料库，也不开放 `ensure`。
+
 ## [0.5.1] — 2026-09-12
 
 ### 新增

@@ -1,4 +1,7 @@
-Param()
+Param(
+    # 同时安装 `.[server]` 可选依赖并写 chinalaw-server shim（对应 scripts/install-local --with-server）。
+    [switch]$WithServer
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -123,13 +126,19 @@ if ((Test-Path $PythonBin) -and -not (Test-PipAvailable -Python $PythonBin)) {
     }
 }
 
+# pip install 的目标：默认只装核心（零运行依赖），-WithServer 时装 server extra。
+$InstallSpec = if ($WithServer) { "$RepoRoot[server]" } else { $RepoRoot }
+
 if (Test-Path $PythonBin) {
-    & $PythonBin -m pip install -e $RepoRoot
+    & $PythonBin -m pip install -e $InstallSpec
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "editable install ok: $RepoRoot ($PythonBin)"
+        Write-Host "editable install ok: $InstallSpec ($PythonBin)"
     }
     else {
         Write-Warning "editable install failed; wrapper will fall back to PYTHONPATH mode. Common cause: the venv's pip is too old for PEP 660 editable installs (error may masquerade as 'setup.py or setup.cfg not found'). Try: & `"$PythonBin`" -m pip install --upgrade pip; then rerun scripts\install-local.ps1"
+        if ($WithServer) {
+            Write-Warning "-WithServer needs a successful editable install to pull the server extra; chinalaw-server will not run in PYTHONPATH fallback mode."
+        }
     }
 }
 else {
@@ -176,6 +185,9 @@ exit `$LASTEXITCODE
 
 Write-ChinalawShim -Name "chinalaw" -Module "chinalaw"
 Write-ChinalawShim -Name "chinalaw-mcp" -Module "chinalaw.mcp"
+if ($WithServer) {
+    Write-ChinalawShim -Name "chinalaw-server" -Module "chinalaw.server.cli"
+}
 
 $pathParts = ($env:PATH -split [IO.Path]::PathSeparator) | Where-Object { $_ }
 $binOnPath = $pathParts | Where-Object {
@@ -189,4 +201,10 @@ if (-not $binOnPath) {
 & (Join-Path $BinDir "chinalaw.cmd") --version
 if ($LASTEXITCODE -ne 0) {
     throw "installed chinalaw wrapper failed"
+}
+if ($WithServer) {
+    & (Join-Path $BinDir "chinalaw-server.cmd") --version
+    if ($LASTEXITCODE -ne 0) {
+        throw "installed chinalaw-server wrapper failed"
+    }
 }

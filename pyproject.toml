@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chinalaw"
-version = "0.5.1"
+version = "0.6.0a1"
 description = "中国法律法规检索 CLI，为 AI agent 设计，减少幻觉、按条款引用。"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,18 +30,26 @@ classifiers = [
   "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
-  # 暂未引入任何运行时依赖；首批拟引入见 NOTICES.md 第 1 节的候选清单。
+  # CLI 核心使用 stdlib；人工管理服务通过 server 可选安装项提供。
 ]
 
 [project.optional-dependencies]
+server = [
+  "fastapi>=0.141.1,<0.142",
+  "uvicorn>=0.52.4,<0.53",
+  "mcp>=2.2,<2.3",
+  "python-multipart>=0.0.20,<1",
+]
 dev = [
   "pytest>=8.0",  # test runner，确保 clean checkout 后可直接运行测试套件。
   "ruff>=0.5",  # lint
+  "httpx>=0.28,<1",  # server transport tests
 ]
 
 [project.scripts]
 chinalaw = "chinalaw.cli:main"
 chinalaw-mcp = "chinalaw.mcp:main"
+chinalaw-server = "chinalaw.server.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/nh59yytyd5-dev/chinalaw-cli"
@@ -68,11 +76,22 @@ include = [
   "/NOTICES.md",
   "/CHANGELOG.md",
   "/pyproject.toml",
+  "/web",
+  "/deploy",
+  "/Dockerfile",
+  "/.dockerignore",
+  "/tests",
+  "/tests_server",
 ]
 exclude = [
   "/docs/FULL_AUDIT_*",
   "/docs/REFACTOR_PLAN_*",
+  "/docs/ADMIN_PANEL_PLAN_*",
+  "/docs/ADMIN_PANEL_IMPLEMENTATION_*",
   "/.agents",
+  "/web/node_modules",
+  "/web/test-results",
+  "/web/playwright-report",
 ]
 
 [tool.hatch.build.targets.wheel.shared-data]
@@ -84,6 +103,9 @@ exclude = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "C901"]
@@ -101,3 +123,4 @@ max-complexity = 21
 # 测试 fixture 大量出现长中文法条 / 案号 / URL 字符串，强行换行反而割裂语义。
 # 仅 tests/ 目录下豁免 line-too-long。
 "tests/*" = ["E501"]
+"tests_server/*" = ["E501"]

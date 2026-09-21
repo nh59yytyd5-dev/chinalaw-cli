@@ -242,8 +242,12 @@ def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
     )
 
 
-def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
-    """写入单部法规 + 条文 + FTS。返回写入的条文数。"""
+def prepare_law_payload(payload: dict) -> dict:
+    """Return the exact validated representation consumed by the loader.
+
+    Preparation has no filesystem/database side effects. Human review uses
+    this same boundary before freezing a draft for a later commit.
+    """
     if not isinstance(payload, dict):
         raise ValueError("canonical law payload must be an object")
 
@@ -258,6 +262,12 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
         "source_checked_at"
     ) or datetime.now(timezone.utc).isoformat()
     validate_law_payload(payload, require_articles=False)
+    return payload
+
+
+def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
+    """写入单部法规 + 条文 + FTS。返回写入的条文数。"""
+    payload = prepare_law_payload(payload)
 
     law_id = payload["id"]
     articles: list[dict] = payload["articles"]

@@ -15,6 +15,7 @@ SYNC_FIXTURES=0
 COPY_SKILLS=0
 SKILLS=0
 DOCTOR=1
+WITH_SERVER=0
 
 usage() {
     cat <<'EOF'
@@ -27,6 +28,8 @@ Skills are NOT refreshed by default (.claude/skills/ ships as usage
 documentation); pass --skills to also reinstall them user-level.
 
 Options:
+  --with-server    Pass through to install-local: also install the `.[server]`
+                   extra and refresh the chinalaw-server shim.
   --sync-fixtures  Load builtin fixture data after updating.
   --skills         Also refresh user-level skills (opt-in).
   --copy-skills    With --skills: copy skills instead of symlinking.
@@ -37,6 +40,7 @@ EOF
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --with-server) WITH_SERVER=1; shift ;;
         --sync-fixtures) SYNC_FIXTURES=1; shift ;;
         --skills) SKILLS=1; shift ;;
         --copy-skills) COPY_SKILLS=1; shift ;;
@@ -51,7 +55,12 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git pull --ff-only
 fi
 
-"${REPO_ROOT}/scripts/install-local"
+install_args=()
+if [ "$WITH_SERVER" -eq 1 ]; then
+    install_args+=(--with-server)
+fi
+# 同下：空数组在 Bash 3.2 + set -u 下需用 ${arr[@]+"${arr[@]}"} 展开。
+"${REPO_ROOT}/scripts/install-local" ${install_args[@]+"${install_args[@]}"}
 
 if [ "$SKILLS" -eq 1 ]; then
     skill_args=()

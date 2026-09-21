@@ -1,0 +1,4 @@
+{$CHINALAW_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy library:8765
+}
