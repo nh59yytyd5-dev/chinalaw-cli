@@ -6,7 +6,7 @@
 
 一般顺序：
 
-1. 读 `README.md`、`PROJECT_CHARTER.md`、当前计划和 `CONTRACT.md`。
+1. 读 `README.md`、`PROJECT_CHARTER.md` 和 `CONTRACT.md`。
 2. 确认当前实现，不按旧文档猜。
 3. 新功能先在公开 issue / PR 中写最小设计说明。
 4. 改代码。
@@ -19,16 +19,19 @@
 | 文档 | 职责 |
 |------|------|
 | `PROJECT_CHARTER.md` | 项目定位，不写实现细节 |
-| `REFACTOR_PLAN_20260806.md` | 当前审计重构计划 |
 | `CONTRACT.md` | 外部可依赖协议 |
 | `ARCHITECTURE.md` | 当前代码结构 |
 | `EXAMPLES.md` | 可执行调用示例 |
 | `CLEANING.md` | 清洗规则、alias、重建路径 |
 | `DATA_INDEX.md` | 数据覆盖和补全路径 |
+| `COMPLIANCE.md` | 公开来源抓取的合规边界 |
+| `ADMIN_SERVER.md` | 管理面板与服务器的使用、部署和开发验收 |
+| `AGENT_WORKFLOWS.md` | agent 调用顺序、输出纪律、语料安装与 skills 索引 |
+| `CONTRIBUTING.md` | 贡献流程与提交规范 |
 | issue / PR 设计记录 | 重要决策的 Context / Decision / Consequences |
 
-不要在多个文档重复长篇战略论证。方向冲突时，以 `PROJECT_CHARTER.md`、当前公开
-计划和 `CONTRACT.md` 为准。
+不要在多个文档重复长篇战略论证。方向冲突时，以 `PROJECT_CHARTER.md` 和
+`CONTRACT.md` 为准。
 
 ## 3. 代码边界
 

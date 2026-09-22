@@ -317,11 +317,7 @@ class DocumentationContractTests(unittest.TestCase):
     def test_active_markdown_links_resolve(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         documents = [repo_root / "README.md", repo_root / "NOTICES.md"]
-        documents.extend(
-            path
-            for path in sorted((repo_root / "docs").glob("*.md"))
-            if not path.name.startswith("FULL_AUDIT_")
-        )
+        documents.extend(sorted((repo_root / "docs").glob("*.md")))
         missing: list[str] = []
         for document in documents:
             text = document.read_text(encoding="utf-8")

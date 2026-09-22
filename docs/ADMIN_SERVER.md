@@ -1,6 +1,6 @@
 # 资料库管理面板与服务器
 
-`0.6.0a1` 提供人工管理面板、只读 REST 与 MCP HTTP。一个服务由一个所有者管理一套资料库，支持本机运行或自托管服务器。CLI / stdio MCP 的安装方式保持兼容。
+0.6 起提供人工管理面板、只读 REST 与 MCP HTTP。一个服务由一个所有者管理一套资料库，支持本机运行或自托管服务器。CLI / stdio MCP 的安装方式保持兼容。
 
 ## 本机开始使用
 
@@ -139,4 +139,4 @@ npm test
 
 需要前端热更新时，后端用 `chinalaw-server serve --public-url http://127.0.0.1:5173` 启动，再在 `web/` 执行 `npm run dev`。配对链接和浏览器均使用 `http://127.0.0.1:5173`，Vite 把 API 与 MCP/OAuth 请求转发到后端 8765，并保留 Host/Origin 校验。
 
-当前实现与验收记录见 [ADMIN_PANEL_IMPLEMENTATION_20260913.md](ADMIN_PANEL_IMPLEMENTATION_20260913.md)。Docker 镜像构建/启动门禁在 CI；本机没有容器运行时的环境只能验证直接 Python 运行和服务器配置，不能将其记为容器实测。
+Docker 镜像构建/启动门禁在 CI；本机没有容器运行时的环境只能验证直接 Python 运行和服务器配置，不能将其记为容器实测。

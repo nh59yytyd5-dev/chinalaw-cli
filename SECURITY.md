@@ -7,8 +7,8 @@ patch 版本，并在 [`CHANGELOG.md`](./CHANGELOG.md) 中以 `### 修复（安�
 
 | 版本 | 是否接受安全报告 |
 |------|---------|
-| 0.1.x | ✅ |
-| < 0.1 | ❌（早期骨架阶段，请升级） |
+| 最新 minor（当前 0.6.x） | ✅ |
+| 更早版本 | ❌（请先升级到最新版本复现） |
 
 ## 报告漏洞
 
@@ -38,11 +38,11 @@ patch 版本，并在 [`CHANGELOG.md`](./CHANGELOG.md) 中以 `### 修复（安�
 
 本仓库的安全策略覆盖：
 
-- `chinalaw` Python 包代码（`src/chinalaw/`）
-- 默认 fixture 数据（`data/fixtures/`、`data/applicability/`、`data/packs/`、
-  `data/norms/`）
+- `chinalaw` Python 包代码（`src/chinalaw/`，含可选管理服务）
+- 管理面板前端（`web/`）与部署配置（`deploy/`、`Dockerfile`）
+- 随包数据（`data/fixtures/`、`data/applicability/`、`data/norms/`）
 - CI 配置（`.github/workflows/`）
-- 发布产物（PyPI wheel、sdist）
+- 发布产物（GitHub Release 的 wheel / sdist）
 
 **不在范围**：
 

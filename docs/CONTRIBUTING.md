@@ -16,7 +16,7 @@
 | 新规范包 | 围绕一个具体场景的 norm_pack JSON | 直接 PR + `validate` 通过 |
 | 新公开法规 fixture | 民商事相关的 P0/P1 法规种子 | 直接 PR + 来源核查 |
 | 文档 / 示例 | README / EXAMPLES / CONTRACT 修订 | 直接 PR |
-| 协议层修改 | 改变 schema / CLI 契约 / JSON 输出 | **先开 issue + ADR** |
+| 协议层修改 | 改变 schema / CLI 契约 / JSON 输出 | **先开 issue，写设计记录** |
 
 ## 2. 准备开发环境
 
@@ -70,7 +70,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 |------|------|
 | `feat:` | 新功能 / 新数据 |
 | `fix:` | bug 修复 |
-| `docs:` | 文档（含 ADR） |
+| `docs:` | 文档 |
 | `refactor:` | 不改行为的重构 |
 | `test:` | 仅测试 |
 | `chore:` | 杂项（CI、依赖版本） |
@@ -88,7 +88,7 @@ docs: clarify article hit JSON schema in CONTRACT.md
 PR 描述里说明：
 
 - 改了什么 / 为什么改；
-- 是否影响协议（影响 → 链接 ADR）；
+- 是否影响协议（影响 → 链接设计记录所在的 issue）；
 - 测试情况；
 - 数据改动 → 提供来源 URL + checked_at。
 
@@ -192,7 +192,7 @@ PYTHONPATH=src python3 -m chinalaw pack validate <pack-name>
 **用例**：我作为 <角色>，需要 <能力>，以便 <目的>。
 **当前怎么做**：
 **为什么不够**：
-**协议影响**：是 / 否（是 → 需要 ADR）
+**协议影响**：是 / 否（是 → 需要设计记录）
 ```
 
 ### Data correction
@@ -216,7 +216,7 @@ PYTHONPATH=src python3 -m chinalaw pack validate <pack-name>
 ## 10. 维护者承诺
 
 - 不锁 issue、不删 issue（除 spam）。
-- ADR 全部公开。
+- 设计记录全部公开在 issue / PR 中。
 - 不主动追求 stars；**追求"5 个真实用户每周用"**。
 - 不会 24h 内必回 —— 但 1 周内一定会看。
 

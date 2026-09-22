@@ -63,7 +63,7 @@ chinalaw fetch <法规名> --article <条号> --format json
 6. 如果用户提供公司制度、甲方要求或项目规则文件，先导入本地私域规范：
 
 ```bash
-chinalaw norm ingest <文件路径> --name <规范名称> --source-type company_policy --format json
+chinalaw norm ingest <文件路径> --name <规范名称> --source-type internal_governance --format json
 chinalaw norm clause <规范名称> <条款号> --format json
 ```
 

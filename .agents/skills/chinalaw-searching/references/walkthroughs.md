@@ -166,11 +166,11 @@ not_legal_conclusion：true（仅检索线索；最终适用结论需结合具�
 ```bash
 # Step 1：导入私域规范（如尚未导入）
 chinalaw norm ingest company-policy.docx --name "公司放款审查制度" \
-  --source-type company_policy --format json
+  --source-type internal_governance --format json
 
 # Step 2：取私域条款
 chinalaw norm clause "公司放款审查制度" 4 --format json
-# → 命中 norm_clause；payload 含 source_type=company_policy / 制定主体 /
+# → 命中 norm_clause；payload 含 source_type=internal_governance / 制定主体 /
 #   适用范围
 
 # Step 3：取国家法条文
@@ -195,9 +195,9 @@ chinalaw pack show "放款审查工作底稿" --format json
   状态：current
   source_url：https://flk.npc.gov.cn/...
 
-依据层级 2：私域规范（norm / company_policy）
+依据层级 2：私域规范（norm / internal_governance）
   规范：公司放款审查制度 第4条
-  source_type：company_policy（公司内部制度，约束范围限本公司业务）
+  source_type：internal_governance（内部治理型：公司内部制度，约束范围限本公司业务）
   ⚠️ 不属于"法律规定"，对外没有强制力
   规范包成员关系：放款审查工作底稿 / role=supporting
 

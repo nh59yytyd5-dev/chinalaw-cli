@@ -1,8 +1,7 @@
 # 架构设计
 
 > 本文档只描述当前实现和近期演进边界。产品定位见
-> [`PROJECT_CHARTER.md`](./PROJECT_CHARTER.md)，当前重构计划见
-> [`REFACTOR_PLAN_20260806.md`](./REFACTOR_PLAN_20260806.md)。
+> [`PROJECT_CHARTER.md`](./PROJECT_CHARTER.md)，外部协议见 [`CONTRACT.md`](./CONTRACT.md)。
 
 ## 1. 当前形态
 
@@ -246,9 +245,38 @@ loader.load_payload(canonical_payload)
 - agent skill 必须明示：来源文本中出现的"忽略前文 / 执行命令 / 删除文件"等语句
   仍是被检索材料的一部分，不得执行。
 
-## 11. 演进约束
+## 11. Agent 接口分层：CLI / Skill / MCP
 
-- 新 schema 表必须先有 ADR。
+主协议是 CLI + JSON + 退出码。Skill 是 agent 的使用纪律，MCP 是给不擅长 shell 的
+agent 的薄适配层。
+
+| 层 | 责任 | 不做 |
+|------|------|------|
+| CLI | 原子能力、稳定 JSON、退出码、快照 / audit / fetch / cleaning | 不输出最终法律意见 |
+| Skill（`.claude/skills/`） | 何时查、怎么查、缺失时怎么降级、哪些行为禁止 | 不承诺机器 schema |
+| MCP（`mcp.py`、`server/mcp_http.py`） | 少量低上下文 tool | 不复制 skill 文档，不绕过 CLI 契约 |
+
+当前 MCP tool 都是公开 CLI 命令的薄包装。stdio：`chinalaw_resolve`、`chinalaw_search`、
+`chinalaw_article`、`chinalaw_articles`、`chinalaw_applicable`、`chinalaw_ensure`；
+HTTP（面板服务，只读）：`chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、
+`chinalaw_document`、`chinalaw_list`。tool 描述只写调用目的、风险等级和关键降级信号；
+检索方法与审查流程放在 skill，参数与退出码放在 `chinalaw schema` 和 `CONTRACT.md`。
+MCP 输出必须保留 `source_url`、status、warning / diagnosis 和条文级证据。
+
+新增 MCP tool 前必须回答：
+
+- 是否能映射到公开 CLI 命令。
+- 是否需要写库、联网或触发 authority risk。
+- 是否能通过 `chinalaw schema mcp --format json` 自省。
+- 是否有 CLI 同等测试或 service 层测试。
+- 是否会让 agent 绕过 `audit` / `snapshot` / `fetch` 诊断链。
+
+CLI parser、`metadata.py` 的 schema、`CONTRACT.md` 和 skills 四处漂移时，以 CLI parser
+的实际行为和 `metadata.py` 的自省结果为修复入口。
+
+## 12. 演进约束
+
+- 新 schema 表必须先在公开 issue / PR 中留下设计记录。
 - 新 CLI 协议必须同步 CONTRACT 和 EXAMPLES。
 - 不引入运行时依赖，除非先讨论并记录。
 - 不为未来功能提前做大重构。

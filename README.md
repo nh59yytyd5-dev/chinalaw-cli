@@ -1,63 +1,51 @@
-# chinalaw
+<h1 align="center">chinalaw</h1>
 
-> 面向 AI agent 的中国法律法规检索 CLI。
+<p align="center"><strong>面向 AI agent 的本地中国法律法规检索工具</strong></p>
 
-`chinalaw` 是一个 local-first 的规范检索工具：把公开法律、行政法规、
-司法解释和常用规范清洗成可被本机 agent 查询、引用和复核的 SQLite 数据库。
+<p align="center">
+  <a href="https://github.com/nh59yytyd5-dev/chinalaw-cli/actions/workflows/test.yml"><img alt="tests" src="https://github.com/nh59yytyd5-dev/chinalaw-cli/actions/workflows/test.yml/badge.svg"></a>
+  <a href="https://github.com/nh59yytyd5-dev/chinalaw-cli/releases"><img alt="release" src="https://img.shields.io/github/v/release/nh59yytyd5-dev/chinalaw-cli?include_prereleases&amp;label=release"></a>
+  <img alt="python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
+  <a href="LICENSE"><img alt="license Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-green"></a>
+</p>
 
-它解决的是一个基础问题：Codex、Claude Code、Cursor、OpenCode、Aider 等能调
-shell 的 agent，在写合同审查、法律备忘录、引用核对或制度分析时，应先查本机规范
-来源，而不是凭模型记忆编法条。
+<p align="center">
+  <a href="#安装">安装</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#接入-agent">接入 agent</a> ·
+  <a href="#资料库管理面板">管理面板</a> ·
+  <a href="#文档">文档</a>
+</p>
 
-当前开发版本：`v0.6.0a1`。新增可选资料库管理面板与单用户服务器；CLI、stdio MCP
-继续可用。上一正式版本为 `v0.5.1`，fetch / 多源补全按具体来源持续迭代。
+`chinalaw` 把公开法律、行政法规和司法解释整理成一个本机 SQLite 资料库，让 Codex、Claude Code、Cursor 这类能调 shell 的 agent 在做合同审查、写法律备忘录或核对引用时先查规范、再回答。返回的每一条条文都带来源 URL、核查时间、效力状态和内容哈希：人可以复核，agent 不能凭记忆编造。
 
-## Why
+```console
+$ chinalaw article 民法典 524 --format card
+《中华人民共和国民法典》§524: 债务人不履行债务，第三人对履行该债务具有合法利益的，第三人有权向债权人代为履行；但是，根据债务性质、按照当事人约定或者依照法律规定只能由债务人履行的除外。 债权人接受第三人履行后，其对债务人的债权转让给第三人，但是债务人和第三人另有约定的除外。
+source: current | flk.npc.gov.cn | https://flk.npc.gov.cn/detail?id=ff808081729d1efe01729d50b5c500bf | 核查 145 天前
+```
 
-法律 agent 的核心风险不是“写不出法律文字”，而是：
+## 特性
 
-- 没检索就直接回答。
-- 引用了不存在、已废止或错版本的条文。
-- 缺少本地数据时没有 fail loud，反而继续幻觉补全。
-- 人类很难复核它到底查了什么、用了什么来源。
+- **本地优先**。资料库就是一个 SQLite 文件，默认在 `~/.chinalaw/chinalaw.db`；合同、案件材料和公司制度不出本机。
+- **条文级引用**。按法规名、俗称、条号或关键词直接定位到条，JSON 与 Markdown 两种输出。
+- **随包语料**。内置 74 份完整、可引用的公开规范文本，`chinalaw init` 一条命令装好，不需要联网。
+- **缺失即报错**。本地没有的法规或条文返回明确诊断（`law_missing`、`article_null`、`needs_fetch`），不会让 agent 误以为引用成功。
+- **按需补全**。从 12 个官方公开来源抓取、清洗、入库，保留来源与哈希；节流和合规边界见 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)。
+- **私域规范**。公司制度、甲方要求、行业标准也能入库检索，输出始终标明它们不是国家法。
+- **管理面板（可选）**。在浏览器里浏览、核对和维护资料库，并以只读 REST / MCP HTTP 供远程 agent 查询。
+- **稳定契约**。命令、JSON 字段和退出码按 [docs/CONTRACT.md](docs/CONTRACT.md) 演进；CLI 核心没有第三方依赖。
 
-`chinalaw` 的定位是本地规范基础设施：提供可脚本化查询、稳定 JSON 输出、
-退出码、来源元数据和内容 hash，让 agent 的法律引用链可追溯。
+## 安装
 
-## Features
-
-- **Local-first**：默认数据库是 `~/.chinalaw/chinalaw.db`，工作材料不上传远端。
-- **Agent-first CLI**：核心命令支持 JSON 输出、稳定退出码和机器可读错误。
-- **One-command init**：`chinalaw init` 加载随包公开规范基线并运行健康检查。
-- **Article-level grounding**：按法规名、俗称、条号和关键词检索到条文级结果。
-- **Bundled public corpus**：随仓库提供 74 个完整可引用的公开规范 fixture，
-  不是 seed、stub 或 demo 数据。
-- **Source metadata**：输出保留来源、核查时间、状态、版本和 `source_hash`。
-- **人工资料库管理**：浏览公开/私域目录、完整条文与版本，上传原件、预览差异后确认入库，
-  记录人工核对、任务与历史恢复。
-- **可选服务器**：所有者登录、只读 REST / MCP HTTP、可撤销令牌和 OAuth；可下载包含
-  原件的备份，在本机与服务器之间迁移。
-- **On-demand fetch**：可按需从公开官方来源补全文本，并统一清洗入库；覆盖效果取决于
-  具体源适配器。
-
-## Install
-
-> **前置要求：Python 3.10+**（见 `pyproject.toml` 的 `requires-python`）。
-> `scripts/install-local` 会在创建虚拟环境前检查解释器版本：默认 `python3` 过旧时
-> 自动探测 `python3.10`–`python3.13`；若都不满足会给出平台相关的安装提示
-> （macOS 用 Homebrew、Linux 用 apt/pyenv、Windows 用 python.org/winget），
-> 而不是抛出误导性的 pip 报错。也可用 `PYTHON=/path/to/python3.12 scripts/install-local` 显式指定。
+需要 Python 3.10 或更高版本。
 
 macOS / Linux / WSL：
 
 ```bash
 git clone https://github.com/nh59yytyd5-dev/chinalaw-cli.git
 cd chinalaw-cli
-scripts/install-local
-scripts/setup-agent    # 首次运行（空库）会自动加载公开 fixtures 基线；--no-sync-fixtures 可跳过
-
-chinalaw init
-chinalaw article 民法典 524 --format card
+scripts/setup-agent
 ```
 
 Windows PowerShell：
@@ -65,140 +53,41 @@ Windows PowerShell：
 ```powershell
 git clone https://github.com/nh59yytyd5-dev/chinalaw-cli.git
 cd chinalaw-cli
-.\scripts\install-local.ps1
-.\scripts\setup-agent.ps1    # 首次运行（空库）自动加载 fixtures；-NoSyncFixtures 可跳过
-
-chinalaw init
-chinalaw article 民法典 524 --format card
+.\scripts\setup-agent.ps1
 ```
 
-如果 shell 找不到命令，把本地 bin 目录加入 `PATH`：
+`setup-agent` 会创建仓库内的 `.venv`，把 `chinalaw` 和 `chinalaw-mcp` 写到 `~/.local/bin`（Windows 为 `%USERPROFILE%\.local\bin`），首次运行时加载内置公开规范并做健康检查。命令找不到时把该目录加入 `PATH`。
+
+更新：`git pull` 后运行 `scripts/update-local`（Windows：`.\scripts\update-local.ps1`）。不安装也可以在仓库内直接运行 `PYTHONPATH=src python3 -m chinalaw ...`。
+
+## 快速开始
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Windows 下把 `%USERPROFILE%\.local\bin` 加入用户 `Path` 后重开终端：
-
-```powershell
-[Environment]::SetEnvironmentVariable(
-  'Path',
-  "$HOME\.local\bin;" + [Environment]::GetEnvironmentVariable('Path', 'User'),
-  'User'
-)
-```
-
-更新本机安装：
-
-```bash
-cd chinalaw-cli
-git pull
-scripts/update-local
-chinalaw init
-```
-
-Windows PowerShell：
-
-```powershell
-cd chinalaw-cli
-git pull
-.\scripts\update-local.ps1
-chinalaw init
-```
-
-未安装时也可以在仓库内运行：
-
-```bash
-PYTHONPATH=src python3 -m chinalaw article 民法典 524 --format card
-```
-
-## Quick Start
-
-```bash
-# 1. 初始化本地库：加载内置公开规范基线并运行健康检查
-chinalaw init
-
-# 2. 解析法规俗称 / 简称
-chinalaw resolve 民法典 --format json
-
-# 3. 关键词检索
+chinalaw init                                    # 加载内置公开规范基线并做健康检查
+chinalaw resolve 民法典 --format json             # 俗称 / 简称解析到正式记录
 chinalaw search 合同效力 --kind article --limit 5 --format md
-
-# 4. 按条取法条
 chinalaw article 民法典 第一百四十三条 --format md
-chinalaw article 民法典 524 --format card
-
-# 5. 批量取条
 chinalaw articles 民法典 --numbers "143,464,509,577" --format json
-
-# 6. 查看目录
 chinalaw outline 民法典 --limit 20 --format md
+chinalaw doctor --format md                      # 安装、数据库、MCP 与 skills 健康检查
 ```
 
-健康检查：
+本地缺少某部法规或某条条文时按需补全：
 
 ```bash
-chinalaw doctor --format md
-chinalaw status --format md
-```
-
-本地缺条文时，可以按需补全：
-
-```bash
-chinalaw ensure 民法典 --format json
+chinalaw ensure 劳动合同法 --format json           # 本地已有则跳过，缺失才抓取
 chinalaw fetch 民法典 --article 第五百八十五条 --format json
 ```
 
-`fetch` 会访问公开来源，可能受上游结构变化、网络和限流影响；生产工作流应检查
-返回的 `ok`、`error`、`source_name`、`source_url`、`source_checked_at` 和
-`source_hash`。
+`fetch` 访问公开官方来源，可能受上游改版、网络和限流影响，脚本里应检查返回的 `ok`、`error` 和 `source_*` 字段。默认输出 JSON，多数命令支持 `--format md`。完整命令与字段说明见 [docs/CONTRACT.md](docs/CONTRACT.md)，更多示例见 [docs/EXAMPLES.md](docs/EXAMPLES.md)。
 
-## 资料库管理面板（可选）
+## 接入 agent
 
-面板不改变 CLI 的零运行依赖安装；只有显式加 `--with-server` 时才把 `server`
-可选依赖装进仓库 `.venv`，并额外写一个 `chinalaw-server` shim：
-
-```bash
-scripts/install-local --with-server    # 或 scripts/update-local --with-server
-chinalaw-server init --with-fixtures
-chinalaw-server serve --open
-```
-
-Windows PowerShell 用 `.\scripts\install-local.ps1 -WithServer`（更新时
-`.\scripts\update-local.ps1 -WithServer`）。也可以在任意 venv 里
-`python -m pip install '.[server]'`，此时 `chinalaw-server` 由该 venv 提供。
-
-启动后使用终端中的一次性配对链接。运行面板无需 Node.js 或模型额度。
-旧库升级前会自动保存数据库备份。完整操作、服务器部署与客户端说明见
-[资料库管理服务](docs/ADMIN_SERVER.md)。
-
-## Initial Built-in Corpus
-
-`sync --fixtures` 加载的是完整可引用的公开规范基线。CI 会运行
-`scripts/check-public-fixtures`，禁止 seed / stub、空条文、残缺覆盖和缺来源元数据的
-fixture 进入公开发布集。
-
-当前初始库包含 74 个完整 fixture：
-
-| 范围 | 已内置规范 |
-| --- | --- |
-| 基础法典 / 程序法 | 宪法历次文本、民法典、刑法历次合并文本、民事诉讼法、刑事诉讼法、行政诉讼法、仲裁法 |
-| 通用行政 / 劳动 / 数据 | 行政处罚法、行政复议法、国家赔偿法、劳动法、劳动合同法、劳动争议调解仲裁法、个人信息保护法、数据安全法、网络安全法、消费者权益保护法、治安管理处罚法、诉讼费用交纳办法 |
-| 民商事 / 公司金融 | 公司法、合伙企业法、企业破产法、外商投资法、票据法、保险法、证券法、电子商务法 |
-| 民法典配套解释 | 时间效力规定、总则编解释、物权编解释（一）、合同编通则解释、担保制度解释、侵权责任编解释（一）、婚姻家庭编解释（一）（二）、继承编解释（一） |
-| 诉讼 / 合同 / 劳动司法解释 | 民事诉讼法解释、刑事诉讼法解释、行政诉讼法解释、民事诉讼证据规定、民间借贷规定、买卖合同解释、融资租赁合同解释、独立保函规定、建设工程施工合同解释（一）、商品房买卖合同解释、劳动争议解释（一） |
-
-未列入上表的 `data/recommended_corpus.json` 条目只是安装 / 补全建议，不表示已经
-随包内置。agent 只有在 `resolve` / `article` / `articles` / `search` 实际命中并返回
-来源元数据后，才能把该规范作为引用依据。
-
-## Agent Usage
-
-把下面这段加入 Codex / Claude Code / Cursor / OpenCode 的全局规则：
+把下面这段放进 Claude Code、Codex、Cursor 或 OpenCode 的全局规则：
 
 ```text
 涉及中国法、法条、司法解释、合同审查、劳动/公司/民商事/刑事问题时，
-先使用本机 chinalaw CLI 查询，不要先凭模型记忆回答。
+先使用本机 chinalaw CLI 查询，不要凭模型记忆回答。
 常用命令：
 - chinalaw resolve <name> --format json
 - chinalaw search <query> --kind article --limit 10 --format json
@@ -206,187 +95,100 @@ fixture 进入公开发布集。
 - chinalaw articles <law> --numbers <nums> --format json
 - chinalaw ensure <law> --format json
 如果返回 law_missing、law_stub、law_seed、article_null 或 needs_fetch，
-应按诊断信息补全或明确告知本地数据不足。
+按诊断信息补全，或明确告知本地数据不足。
 ```
 
-仓库内置 `.claude/skills/`，**仅作为使用说明（文档）**，默认不安装、不装载到
-任何 agent 框架——现代模型的工具调用与指令遵循已足够可靠，无需常驻重 skill。
-如仍想让 Claude Code / Codex / Cursor / OpenCode 全局加载这些工作流说明，
-可手动安装（opt-in）：
+仓库自带 7 份 skill（检索方法、引用核对、合同审查、法律研究等），默认只作为文档随仓库分发；需要全局加载时执行 `scripts/install-skills --copy`（Windows：`.\scripts\install-skills.ps1`），`--uninstall` 可移除。调用顺序、输出纪律、语料安装和 grounding 快照审计见 [docs/AGENT_WORKFLOWS.md](docs/AGENT_WORKFLOWS.md)。
+
+### MCP
+
+偏好 MCP 的客户端可以用 stdio 服务器 `chinalaw-mcp`（可加 `--db` 指定资料库）。它是同一组 CLI 能力的薄封装：`chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、`chinalaw_articles`、`chinalaw_applicable`、`chinalaw_ensure`。私域规范默认不经 MCP 暴露，确需时加 `--allow-private-norms` 启动。管理面板服务另外提供带 OAuth 的只读 MCP HTTP 端点。
+
+## 资料库管理面板
+
+面板是可选组件：在浏览器里看清库里有什么、逐条核对入库文本、审阅差异后再确认写入；同时提供只读 REST 与 MCP HTTP，供多台设备上的 agent 查询同一套资料库。
+
+<p align="center"><img src="docs/images/library-overview.png" alt="chinalaw 资料库管理面板概览" width="900"></p>
 
 ```bash
-scripts/install-skills --copy
+scripts/install-local --with-server     # Windows：.\scripts\install-local.ps1 -WithServer
+chinalaw-server init --with-fixtures
+chinalaw-server serve --open            # 终端输出一次性配对链接，进入面板后可设置密码
 ```
 
-Windows PowerShell：
+- 上传文件或从官方来源抓取都先生成预览：完整正文、原件、增删改差异，人工核对后才入库，核对记录绑定具体内容版本。
+- 单所有者登录，可签发和撤销只读令牌；MCP 客户端走 OAuth / PKCE。
+- 备份包含来源附件，可校验、预览冲突后事务性恢复，用于在本机与服务器之间迁移。
+- 自托管使用仓库内的 `Dockerfile` 与 `deploy/compose.yaml`（Caddy 反向代理与 HTTPS）。
 
-```powershell
-.\scripts\install-skills.ps1
-```
-
-不再需要时同样可以卸载（只删指向本仓库的条目，不动用户自建 skill）：
-
-```bash
-scripts/install-skills --uninstall
-```
-
-## Core Commands
-
-| Command | Purpose |
-| --- | --- |
-| `init` | 加载随仓库发布的公开规范基线并运行健康检查 |
-| `resolve <name>` | 把俗称、简称或模糊名称解析到本地法规记录 |
-| `search <query>` | 全文 / 条文检索 |
-| `get <name>` | 获取法规元数据和正文摘要 |
-| `article <law> <number>` | 按法规 + 条号定位单条 |
-| `articles <law> --numbers ...` | 批量取条 |
-| `outline <law>` | 查看条文目录和预览 |
-| `sync --fixtures` | 加载随仓库发布的公开规范基线 |
-| `ensure <law>` | 本地优先检查，缺失时尝试补全 |
-| `fetch <law>` | 从公开来源抓取、清洗、入库（preview） |
-| `norm <subcommand>` | 私域规范管理：list / show / clause / import / ingest / export / delete / history / diff |
-| `pack <subcommand>` | 规范包管理：list / show / add / import / export / validate |
-| `audit <target>` | 引用审查门禁（file / pack / norm / grounding） |
-| `doctor` / `status` | 本机健康检查 |
-| `rebuild-clean [--law\|--norm]` | 用当前 cleaning 规则重建已入库公开法规 / 私域规范（alpha） |
-
-默认输出 JSON。多数命令可加 `--format md` 得到人类可读输出。
+运行面板不需要 Node.js 或任何模型 API。操作、部署和客户端接入见 [docs/ADMIN_SERVER.md](docs/ADMIN_SERVER.md)。
 
 ## 私域规范
 
-除公开法规外，本机还可以把私域规范（公司制度、甲方放款要求、内部合规手册、
-行业标准等）作为 first-class 数据入库检索。它们只存进本地 SQLite 库，
-不随包分发、不上传远端。
-
-**私域规范不是国家法规范，不具备法律渊源效力**，仅在合同 / 制度约定范围内
-约束。输出层始终带这一效力分层提示：检索结果中的私域命中带
-`hierarchy: "private_norm"` 与该类型约束力定性提示 `binding_note` 字段；
-`article` fallback 到私域条款时 `status` 为 `not_applicable`，markdown
-输出附醒目提示；`search` 同时命中公开法与私域规范时顶层附加
-`conflict_notice`。
-
-快速上手（`data/norms/acme-lending-policy.json` 是随仓库的虚构示例，
-仅演示文件格式，不含任何真实机构信息）：
+公司制度、甲方放款要求、内部合规手册、行业标准可以和公开法规一起检索，但只存本机、不随包分发，输出层始终标明**它们不是国家法规范**：检索命中带 `hierarchy: "private_norm"` 与约束力提示 `binding_note`，与公开法同时命中时附 `conflict_notice`。
 
 ```bash
-chinalaw norm import data/norms/acme-lending-policy.json --format json
-chinalaw norm show 甲方放款要求 --format md
+chinalaw norm import data/norms/acme-lending-policy.json --format json   # 随仓库的虚构示例
+chinalaw norm ingest path/to/policy.md --name "内部合规手册" --source-type internal_governance
 chinalaw search 担保审批 --kind norm --format md
 ```
 
-txt / md / docx / pdf 文件可直接切分入库：
+`ingest` 支持 txt / md / docx / pdf，按“第 N 条”切分并识别章节层级；`norm history` / `norm diff` / `norm delete` 管理生命周期，`norm export` 附防泄漏标注。`--source-type` 的受控取值见 [docs/CONTRACT.md](docs/CONTRACT.md) §2.9。
 
-```bash
-chinalaw norm ingest path/to/policy.md \
-  --name "内部合规手册" --source-type internal_governance --format md
-```
+## 语料与来源
 
-切条器按 `第N条` 切分；独立成行的 `第N章` / `第N节` 标题会识别为层级
-上下文，挂到条款的 `part` 字段（如 `第三章 股份 第一节 股份发行`），
-不混入条款正文。
+内置 74 份完整公开规范文本：宪法与刑法的历次文本、民法典、民事 / 刑事 / 行政诉讼法、公司法、劳动合同法、个人信息保护法等，以及民法典配套解释和主要的诉讼、合同、劳动司法解释。完整清单见 [docs/DATA_INDEX.md](docs/DATA_INDEX.md)。
 
-`--source-type` 是受控枚举（详见 [docs/CONTRACT.md](docs/CONTRACT.md) §2.9），
-按约束力来源分类：`contractual_requirement`（合同约定型）/
-`internal_governance`（内部治理型，默认）/ `standard`（标准型）/
-`trade_usage`（习惯惯例型）/ `other`。私域规范之间不提供绝对效力排序，
-输出层只附各类型的约束力定性提示（`binding_note`），不做逐条语义冲突判断。
-
-生命周期：`norm history` 查看每次导入的快照修订，`norm diff` 对比条款
-增删改，`norm delete` 删除规范及其快照与检索索引。`norm export` 输出带
-`sensitivity: "private"` 与防泄漏提示；加 `--metadata-only` 只导出元数据
-和条款号清单，不含条款正文。
-
-MCP 默认不暴露私域规范，详见下文 MCP 小节的 `--allow-private-norms`。
-
-## Data And Sources
-
-来源覆盖范围以 `data/source_coverage.json` 为事实表，可由 CLI 查询：
+已实现 12 个官方来源适配器：国家法律法规数据库（`flk_npc`）、国家行政法规库（`gov_xzfgk`）、最高人民法院公报与主站（`court_gongbao`、`court_main`）、最高人民检察院（`spp_gov_cn`）、证监会（`csrc_gov_cn`）、国家金融监督管理总局（`nfra_gov_cn`），以及沪深北交易所、中国结算和证券业协会的规则。抓取遵守 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)：低频、只取公开文本、保留来源与哈希。
 
 ```bash
 chinalaw sources list --implemented-only --format md
-chinalaw sources show gov_xzfgk --format json
+chinalaw sources show flk_npc --format json      # 每个来源支持的命令边界
 ```
 
-当前已实现 adapter 包括：
+## 命令速查
 
-- 国家法律法规数据库：`flk_npc`
-- 国家行政法规库（国务院入口 / 司法部承载）：`gov_xzfgk`
-- 最高人民法院公报：`court_gongbao`
-- 最高人民法院主站：`court_main`
-- 最高人民检察院：`spp_gov_cn`
-- 中国证监会：`csrc_gov_cn`
-- 证券交易所和自律规则：`sse_com_cn`、`szse_cn`、`bse_cn`、`chinaclear_cn`、`sac_net_cn`
+| 命令 | 用途 |
+| --- | --- |
+| `init` | 加载内置公开规范基线并运行健康检查 |
+| `resolve <name>` | 俗称 / 简称解析到正式记录 |
+| `search <query>` | 全文 / 条文检索，`--kind` 限定范围 |
+| `article <law> <number>` / `articles <law> --numbers ...` | 单条 / 批量取条 |
+| `outline <law>` | 章节目录与正文预览 |
+| `ensure <law>` / `fetch <law>` | 本地优先补全 / 从来源抓取入库 |
+| `history` / `diff` / `applicable` / `relation` | 版本历史与时间效力线索 |
+| `norm ...` / `pack ...` | 私域规范 / 规范包管理 |
+| `audit <target>` / `cite-check <file>` | 审查文件中的法条引用是否可解析、文本是否一致 |
+| `doctor` / `status` | 本机健康检查与数据新鲜度 |
+| `chinalaw-mcp` / `chinalaw-server` | stdio MCP / 管理面板与 HTTP 服务 |
 
-数据进入本地库前必须经过 cleaning，并保留来源、检查时间、哈希和状态字段。
-不要从“source 已实现”推断它支持所有命令；`sources show <source>` 中的
-`commands.fetch/discover/sync/verify_source/status_filter` 才是当前边界。
-涉及外部抓取时，请阅读 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)，保持低频、
-可复核、不过度请求。
+## 文档
 
-## MCP
+- [docs/ADMIN_SERVER.md](docs/ADMIN_SERVER.md)：管理面板与服务器的使用、部署和客户端接入。
+- [docs/AGENT_WORKFLOWS.md](docs/AGENT_WORKFLOWS.md)：agent 调用顺序、输出纪律、语料安装与 skills。
+- [docs/CONTRACT.md](docs/CONTRACT.md)：CLI / JSON / 退出码契约与数据模型。
+- [docs/EXAMPLES.md](docs/EXAMPLES.md)：可执行的调用示例。
+- [docs/DATA_INDEX.md](docs/DATA_INDEX.md)、[docs/COMPLIANCE.md](docs/COMPLIANCE.md)：内置数据与来源抓取边界。
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[docs/CLEANING.md](docs/CLEANING.md)：代码结构与清洗规则。
+- [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md)：项目定位与不做的范围。
+- [CHANGELOG.md](CHANGELOG.md)、[SECURITY.md](SECURITY.md)、[NOTICES.md](NOTICES.md)。
 
-CLI 是主路径；仓库也提供轻量 MCP wrapper，方便偏 MCP 的 agent 以低上下文方式调用
-核心检索能力。
-
-```bash
-chinalaw-mcp --db ~/.chinalaw/chinalaw.db
-```
-
-MCP 默认不暴露私域规范：`chinalaw_article` / `chinalaw_articles` 不做私域
-fallback，`chinalaw_search` 不返回 norm 命中（显式 `kind=norm` 会报错并
-提示该开关）。确需通过 MCP 检索私域规范时，显式加 `--allow-private-norms`
-启动：
-
-```bash
-chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
-```
-
-MCP 只应作为 CLI 的薄封装，不应引入另一套法律判断逻辑。也可通过面板服务以
-HTTP MCP（Streamable HTTP + Bearer token / OAuth）接入，见 [docs/ADMIN_SERVER.md](docs/ADMIN_SERVER.md)。
-
-## Documentation
-
-- [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md)：项目定位和边界。
-- [docs/CONTRACT.md](docs/CONTRACT.md)：CLI / JSON / 退出码契约。
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：代码结构。
-- [docs/CLEANING.md](docs/CLEANING.md)：清洗规则。
-- [docs/DATA_INDEX.md](docs/DATA_INDEX.md)：内置数据说明。
-- [docs/EXAMPLES.md](docs/EXAMPLES.md)：使用示例。
-- [docs/COMPLIANCE.md](docs/COMPLIANCE.md)：公开来源抓取合规边界。
-- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)：贡献指南。
-
-## Development
+## 参与开发
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e ".[dev]"
-
+python3 -m venv .venv && . .venv/bin/activate
+python -m pip install -e ".[dev,server]"
+ruff check src tests tests_server
+python -m pytest tests tests_server -q
 scripts/check-public-fixtures
-PYTHONPATH=src python -m compileall -q src tests
-ruff check src tests
-PYTHONPATH=src python -m unittest discover -s tests -v
-python -m build
 ```
 
-本仓库的首要质量规则：
+面板前端在 `web/`（Node 22）：`npm ci && npm run build` 构建，`npm test` 跑浏览器验收（需先 `npx playwright install chromium`）；构建产物写入 `src/chinalaw/server/static/`，随源码一起提交。贡献流程见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)，模块边界与测试要求见 [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md)。三条底线：法条缺失必须 fail loud；修复应是一类问题的通用规则，不为单部法规打补丁；新增外部来源先说明来源、节流、清洗、追溯与失败模式。
 
-- 法条缺失时必须 fail loud，不得让 agent 误以为引用成功。
-- 修复应是一类问题的一般规则，不应为单个评测题或单部法规写硬编码补丁。
-- 新增外部来源必须先说明来源、节流、清洗、追溯和失败模式。
+问题与建议请开 [GitHub Issues](https://github.com/nh59yytyd5-dev/chinalaw-cli/issues)，安全漏洞请按 [SECURITY.md](SECURITY.md) 私下报告。友链：[Linux.do](https://linux.do/)。
 
-## Community
+## 许可与免责声明
 
-- Issues: [GitHub Issues](https://github.com/nh59yytyd5-dev/chinalaw-cli/issues)
-- 友链：[Linux.do](https://linux.do/)
+代码采用 [Apache License 2.0](LICENSE)，第三方依赖与数据来源登记见 [NOTICES.md](NOTICES.md)。法律、法规及国家机关的决议、决定、命令等依《著作权法》第五条不适用著作权法保护；第三方网站、释义材料、商业数据库和用户私域材料仍须遵守各自的权利与使用限制。
 
-## License And Disclaimer
-
-代码采用 [Apache License 2.0](LICENSE)。第三方依赖与数据来源登记见 [NOTICES.md](NOTICES.md)。
-
-法律、法规、国家机关决议、决定、命令和其他具有立法、行政、司法性质的文件，
-依《中华人民共和国著作权法》第五条不适用著作权法保护。第三方网站、释义材料、
-商业数据库和用户私域材料仍应分别遵守其来源权利和使用限制。
-
-本项目仅提供规范文本检索、整理和引用便利，不构成法律意见。实际案件和交易事项
-应由执业律师或负责法务最终判断，并以官方发布渠道的最新文本为准。
+本项目只提供规范文本的检索、整理和引用便利，不构成法律意见。实际案件和交易应由执业律师或法务判断，并以官方发布渠道的最新文本为准。

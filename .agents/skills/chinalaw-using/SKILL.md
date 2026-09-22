@@ -36,15 +36,15 @@ description: chinalaw CLI 总入口与决策树。何时使用：用户提中国
 
 ## 工具中立
 
-`chinalaw` CLI 与具体 agent 框架解耦。本 skill 目录放在 `.Codex/skills/`，
-但被 Codex / OpenCode / Codex CLI / Cursor / Cline / superpowers
+`chinalaw` CLI 与具体 agent 框架解耦。本 skill 目录放在 `.claude/skills/`，
+但被 Claude Code / OpenCode / Codex CLI / Cursor / Cline / superpowers
 等多个框架共同识别（事实标准）。
 
 如需在仓库外任意目录使用本 skill 套件，跑：
 
 ```bash
 # 仓库根目录
-scripts/install-skills          # symlink 到 ~/.Codex/skills/ + ~/.agents/skills/
+scripts/install-skills          # symlink 到 ~/.claude/skills/ + ~/.agents/skills/
 scripts/install-skills --dry-run # 预览
 scripts/install-skills --copy   # Windows / WSL 友好
 ```

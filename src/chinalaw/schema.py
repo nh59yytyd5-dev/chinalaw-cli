@@ -459,7 +459,8 @@ SCHEMA_V13_SQL = SCHEMA_V12_SQL.replace(
 
 
 # v14: human review and maintenance records. Authentication credentials live
-# outside the portable library. Design: docs/ADMIN_PANEL_PLAN_20260913.md.
+# outside the portable library. Design record: GitHub issue #8; the resulting
+# contract is described in docs/CONTRACT.md and docs/ADMIN_SERVER.md.
 SCHEMA_V14_DELTA_SQL = """
 CREATE TABLE IF NOT EXISTS library_artifacts (
     id TEXT PRIMARY KEY,
