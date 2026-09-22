@@ -8,6 +8,13 @@ from starlette.responses import JSONResponse
 from chinalaw.server.config import ServerConfig
 
 MAX_REQUEST_BYTES = 34 * 1024 * 1024
+# The official SDK serves these endpoints with permissive CORS on purpose:
+# browser-based MCP clients (for example MCP Inspector) discover, register,
+# exchange and revoke tokens from another origin. None of them accept the
+# owner's cookie session, so the panel's same-origin rule must not reject their
+# preflight or the request itself. ``/authorize`` stays strict: it is a redirect
+# target rather than an XHR endpoint, and its consent page is the owner's UI.
+CROSS_ORIGIN_OAUTH_PATHS = frozenset({"/register", "/token", "/revoke"})
 SECURITY_HEADERS = {
     b"x-content-type-options": b"nosniff",
     b"x-frame-options": b"DENY",
@@ -40,7 +47,11 @@ class RequestGuard:
                 "host_denied",
                 f"访问地址不匹配，请使用 {self.config.origin} 打开。",
             )
-        if origin is not None and origin.decode("latin-1") != self.config.origin:
+        if (
+            origin is not None
+            and origin.decode("latin-1") != self.config.origin
+            and not allows_cross_origin(scope["path"])
+        ):
             return await _reject(scope, receive, send, 403, "origin_denied", "请求来源不被允许。")
         limit = MAX_REQUEST_BYTES
         if scope["path"] == "/api/v1/backups/restore/preview":
@@ -92,6 +103,11 @@ class RequestGuard:
             await _reject(
                 scope, receive, secured_send, exc.status_code, "request_rejected", str(exc.detail)
             )
+
+
+def allows_cross_origin(path: str) -> bool:
+    """OAuth discovery and token endpoints are meant to be called cross-origin."""
+    return path in CROSS_ORIGIN_OAUTH_PATHS or path.startswith("/.well-known/")
 
 
 async def _reject(scope, receive, send, status: int, code: str, message: str):

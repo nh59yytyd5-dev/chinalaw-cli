@@ -15,6 +15,7 @@
 - `chinalaw-server init/serve/password`，本机启动、Docker/Caddy 配置、部署说明与浏览器测试。
 - `scripts/install-local --with-server`（Windows：`-WithServer`）：安装 `server` 可选依赖并写 `chinalaw-server` shim。
 - 审查修复：备份对 ANALYZE 库兼容、worker 异常存活、导入 id 稳定、恢复不污染修订史、登录限流适配反向代理、恢复暂存清理、面板时间显示/配对/危险操作确认等。
+- 后续修复：过期预览一周后自动清理；分类定义重命名不再使各法规的核对标记失效；预览生成后分类或私域规范名称冲突先在详情页提示，重名规范不再以 503 失败；来源错误按来源问题报告；OAuth 端点允许浏览器跨域；面板标签页符合 WAI-ARIA 键盘操作，长法规按需分块渲染。
 
 ### 兼容性
 

@@ -8,6 +8,7 @@ import threading
 import uuid
 from pathlib import Path
 
+from chinalaw import fetch
 from chinalaw.admin import ingest
 from chinalaw.admin.errors import LibraryError, require_kind
 from chinalaw.admin.gate import MaintenanceGate
@@ -23,6 +24,19 @@ JOB_FIELDS = {
 }
 REQUIRED = {"import": {"artifact_id", "kind"}, "fetch": {"query"}}
 FINISHED_STATES = {"completed", "failed", "interrupted", "cancelled"}
+# Source problems are reported as such; the generic internal-error text is
+# reserved for defects. Mirrors the HTTP mapping in ``server.app``.
+SOURCE_FAILURES = {
+    fetch.FetchNotFoundError: (
+        "source_not_found",
+        "来源没有找到匹配的资料，请检查名称或换一个来源。",
+    ),
+    fetch.FetchAmbiguousError: (
+        "source_ambiguous",
+        "来源返回多个候选，请先查找候选并选择具体资料。",
+    ),
+    fetch.FetchError: ("source_unavailable", "来源暂时不可用，请稍后重试。"),
+}
 
 
 def create_job(
@@ -292,6 +306,13 @@ class JobWorker:
         state = "interrupted" if self.stopping.is_set() else "failed"
         if isinstance(exc, LibraryError):
             error = {"code": exc.code, "message": str(exc)[:1000]}
+        elif isinstance(exc, fetch.FetchError):
+            code, message = SOURCE_FAILURES.get(type(exc), SOURCE_FAILURES[fetch.FetchError])
+            error = {
+                "code": code,
+                "message": message,
+                "detail": f"{type(exc).__name__}: {str(exc)[:500]}",
+            }
         else:
             # Never surface raw Python exception text as a user-facing message.
             error = {

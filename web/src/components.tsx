@@ -3,10 +3,12 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { api } from "./api";
+import { api, number } from "./api";
 
 const paths: Record<string, ReactNode> = {
   book: (
@@ -142,10 +144,22 @@ export function useResource<T>(path: string, poll = 0) {
   const reload = useCallback(() => setVersion((v) => v + 1), []);
   useEffect(() => {
     let active = true;
+    // Polls and change notifications can overlap a slow answer. Only one
+    // request is in flight at a time: a poll tick that arrives while busy is
+    // skipped (the next tick repeats it), a change notification is queued and
+    // sent right after. A stale early answer can therefore never overwrite a
+    // newer one.
+    let inFlight = false;
+    let queued = false;
     const controller = new AbortController();
     setData(undefined);
     setError("");
-    const load = async () => {
+    const load = async (queueWhenBusy: boolean) => {
+      if (inFlight) {
+        queued ||= queueWhenBusy;
+        return;
+      }
+      inFlight = true;
       try {
         const value = await api<T>(path, "GET", undefined, controller.signal);
         if (active) {
@@ -158,16 +172,22 @@ export function useResource<T>(path: string, poll = 0) {
           !(error instanceof DOMException && error.name === "AbortError")
         )
           setError(error instanceof Error ? error.message : "读取失败");
+      } finally {
+        inFlight = false;
+        if (active && queued) {
+          queued = false;
+          void load(true);
+        }
       }
     };
-    void load();
+    void load(true);
     const update = () => {
-      void load();
+      void load(true);
     };
     window.addEventListener("library:changed", update);
     const timer = poll
       ? window.setInterval(() => {
-          if (!document.hidden) void load();
+          if (!document.hidden) void load(false);
         }, poll)
       : undefined;
     return () => {
@@ -305,6 +325,164 @@ export function Note({
     <div className={`note ${warning ? "warning" : ""}`}>
       <Icon name={warning ? "alert" : "check"} size={18} />
       <div>{children}</div>
+    </div>
+  );
+}
+export type TabItem = { key: string; title: string };
+/** WAI-ARIA tabs: roving focus, arrow/Home/End keys, panels linked by id. */
+export function Tabs({
+  id,
+  label,
+  items,
+  value,
+  onChange,
+  className = "",
+  action,
+}: {
+  /** Stable prefix shared with the matching TabPanel elements. */
+  id: string;
+  label: string;
+  items: TabItem[];
+  value: string;
+  onChange: (key: string) => void;
+  className?: string;
+  /** Rendered beside the tab list, outside the tablist role. */
+  action?: ReactNode;
+}) {
+  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
+  const onKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    const moves: Record<string, number> = {
+      ArrowRight: index + 1,
+      ArrowLeft: index - 1,
+      Home: 0,
+      End: items.length - 1,
+    };
+    const next = moves[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    const target = (next + items.length) % items.length;
+    onChange(items[target].key);
+    buttons.current[target]?.focus();
+  };
+  return (
+    <div className={`tab-bar ${className}`}>
+      <div className="tabs" role="tablist" aria-label={label}>
+        {items.map((item, index) => {
+          const selected = item.key === value;
+          return (
+            <button
+              type="button"
+              role="tab"
+              id={`${id}-tab-${item.key}`}
+              aria-selected={selected}
+              aria-controls={selected ? `${id}-panel-${item.key}` : undefined}
+              tabIndex={selected ? 0 : -1}
+              className={selected ? "active" : ""}
+              key={item.key}
+              ref={(node) => {
+                buttons.current[index] = node;
+              }}
+              onClick={() => onChange(item.key)}
+              onKeyDown={(event) => onKeyDown(event, index)}
+            >
+              {item.title}
+            </button>
+          );
+        })}
+      </div>
+      {action}
+    </div>
+  );
+}
+export function TabPanel({
+  id,
+  tab,
+  active,
+  children,
+}: {
+  id: string;
+  tab: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  if (!active) return null;
+  return (
+    <div
+      role="tabpanel"
+      id={`${id}-panel-${tab}`}
+      aria-labelledby={`${id}-tab-${tab}`}
+      tabIndex={0}
+      className="tab-panel"
+    >
+      {children}
+    </div>
+  );
+}
+
+export const RENDER_CHUNK = 100;
+export type Incremental = ReturnType<typeof useIncrementalList>;
+/**
+ * Render long lists in chunks. A complete statute has more than a thousand
+ * articles; mounting them all at once makes the first paint and every filter
+ * keystroke slow. More items are mounted as the sentinel scrolls into view,
+ * `reveal` mounts up to a given index before a jump, `showAll` restores the
+ * complete list for find-in-page.
+ */
+export function useIncrementalList(total: number) {
+  const [limit, setLimit] = useState(RENDER_CHUNK);
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || limit >= total) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting))
+          setLimit((v) => Math.min(total, v + RENDER_CHUNK));
+      },
+      { rootMargin: "800px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [limit, total]);
+  const reveal = useCallback(
+    (index: number) =>
+      setLimit((v) => Math.max(v, index + 1 + RENDER_CHUNK / 2)),
+    [],
+  );
+  const showAll = useCallback(() => setLimit(Number.MAX_SAFE_INTEGER), []);
+  return {
+    limit,
+    sentinel,
+    reveal,
+    showAll,
+    rendered: Math.min(limit, total),
+    remaining: Math.max(0, total - limit),
+  };
+}
+export function RenderMore({
+  list,
+  total,
+  unit,
+  label,
+}: {
+  list: Incremental;
+  total: number;
+  unit: string;
+  label: string;
+}) {
+  if (list.remaining <= 0) return null;
+  return (
+    <div className="render-more" ref={list.sentinel}>
+      <span>
+        已显示 {number(list.rendered)} / {number(total)} {unit}
+        ，继续滚动自动加载。
+      </span>
+      <button type="button" className="text-button" onClick={list.showAll}>
+        {label}
+      </button>
     </div>
   );
 }

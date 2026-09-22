@@ -86,12 +86,19 @@ def freeze_categories(conn: sqlite3.Connection, payload: dict, before: dict | No
     check_category_conflicts(conn, payload)
 
 
-def check_category_conflicts(conn: sqlite3.Connection, payload: dict) -> None:
+def has_category_conflict(conn: sqlite3.Connection, payload: dict) -> bool:
+    """True when a frozen definition no longer matches the shared taxonomy."""
     existing = category_definitions(conn)
-    for item in payload.get("categories", []):
-        if item["id"] in existing and existing[item["id"]] != item:
-            raise LibraryError(
-                "category_conflict",
-                "导入分类定义与现有目录不同，请核对分类目录后再导入。",
-                status=409,
-            )
+    return any(
+        item["id"] in existing and existing[item["id"]] != item
+        for item in payload.get("categories", [])
+    )
+
+
+def check_category_conflicts(conn: sqlite3.Connection, payload: dict) -> None:
+    if has_category_conflict(conn, payload):
+        raise LibraryError(
+            "category_conflict",
+            "导入分类定义与现有目录不同，请核对分类目录后再导入。",
+            status=409,
+        )
