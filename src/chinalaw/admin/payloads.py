@@ -113,7 +113,18 @@ def portable_payload(payload: dict, kind: str) -> dict:
 
 
 def content_fingerprint(payload: dict | None, kind: str) -> str | None:
-    return fingerprint(portable_payload(payload, kind)) if payload is not None else None
+    """Identity of one document's own content.
+
+    Category *definitions* are shared taxonomy: renaming a category that many
+    laws link to must not invalidate each law's review mark or maintenance
+    links. Only the association (``category_ids``) belongs to the document.
+    The definitions stay in the portable payload for display, diff and restore.
+    """
+    if payload is None:
+        return None
+    portable = portable_payload(payload, kind)
+    portable.pop("categories", None)
+    return fingerprint(portable)
 
 
 def prepare_payload(kind: str, payload: dict) -> dict:

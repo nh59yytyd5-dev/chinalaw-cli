@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,7 +14,7 @@ from starlette.exceptions import HTTPException
 from starlette.staticfiles import StaticFiles
 
 from chinalaw import __version__, fetch, service
-from chinalaw.admin import backups
+from chinalaw.admin import backups, drafts
 from chinalaw.admin.errors import LibraryError
 from chinalaw.admin.gate import MaintenanceGate
 from chinalaw.admin.jobs import JobWorker
@@ -25,6 +26,8 @@ from chinalaw.server.dependencies import owner
 from chinalaw.server.guard import RequestGuard
 from chinalaw.server.mcp_http import make_mcp
 from chinalaw.server.oauth import OwnerOAuth
+
+LOG = logging.getLogger(__name__)
 
 
 def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> FastAPI:
@@ -44,10 +47,8 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
     @asynccontextmanager
     async def lifespan(app):
         routes_backup.clear_exports(config.state_dir)
-        # backups.sweep_restores is being added alongside this code; skip until present.
-        sweep = getattr(backups, "sweep_restores", None)
-        if sweep is not None:
-            sweep(config.restores_dir)
+        backups.sweep_restores(config.restores_dir)
+        drafts.sweep_drafts(config.db_path)
         if worker is not None:
             worker.start()
         try:
@@ -116,9 +117,25 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
             status_code=502,
         )
 
+    @app.exception_handler(sqlite3.IntegrityError)
+    async def integrity_error(request: Request, exc: sqlite3.IntegrityError):
+        # A constraint the preview checks did not anticipate: the write was
+        # rolled back, the library is intact, and a fresh preview will show why.
+        LOG.exception("constraint violated on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            {
+                "kind": "library_error",
+                "error": "storage_conflict",
+                "message": "写入与资料库现有内容冲突，本次写入已撤销，请重新生成预览后确认。",
+            },
+            status_code=409,
+        )
+
     @app.exception_handler(OSError)
     @app.exception_handler(sqlite3.Error)
     async def storage_error(request: Request, exc: Exception):
+        # The client gets a generic message; the operator needs the cause.
+        LOG.exception("storage error on %s %s", request.method, request.url.path, exc_info=exc)
         return JSONResponse(
             {
                 "kind": "library_error",

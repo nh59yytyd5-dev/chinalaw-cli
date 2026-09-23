@@ -10,7 +10,11 @@ from pathlib import Path
 
 from chinalaw import loader, normsources
 from chinalaw.admin import artifacts
-from chinalaw.admin.categories import check_category_conflicts, freeze_categories
+from chinalaw.admin.categories import (
+    check_category_conflicts,
+    freeze_categories,
+    has_category_conflict,
+)
 from chinalaw.admin.errors import LibraryError, require_kind
 from chinalaw.admin.payloads import (
     REVISION_FIELDS,
@@ -26,6 +30,13 @@ from chinalaw.admin.payloads import (
 from chinalaw.db import connect, connect_readonly, migrate
 
 MAX_DRAFT_BYTES = 32 * 1024 * 1024
+# A preview can be confirmed for one day. Keep it a further week so a closed tab
+# or a repeated confirmation still finds it, then drop it: frozen payloads are the
+# largest rows in the library that are not legal content, and every backup would
+# otherwise carry all of them forever. Confirmed content lives on in
+# ``library_operations``.
+DRAFT_TTL = timedelta(days=1)
+DRAFT_RETENTION = timedelta(days=7)
 
 
 def create_draft(
@@ -42,6 +53,7 @@ def create_draft(
     draft_id = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
     origin = origin or {}
+    sweep_drafts(db_path, now=now)
     with connect(db_path) as conn:
         migrate(conn)
         conn.execute("BEGIN IMMEDIATE")
@@ -49,6 +61,8 @@ def create_draft(
         before = current_payload(conn, kind, identifier)
         if kind == "law":
             freeze_categories(conn, prepared, before)
+        else:
+            check_name_conflict(conn, prepared)
         serialized = encode_json(prepared)
         if len(serialized.encode("utf-8")) > MAX_DRAFT_BYTES:
             raise LibraryError("document_too_large", "资料超过单次导入的大小限制。", status=413)
@@ -69,7 +83,7 @@ def create_draft(
                 encode_json(origin),
                 encode_json(warnings or []),
                 now.isoformat(),
-                (now + timedelta(days=1)).isoformat(),
+                (now + DRAFT_TTL).isoformat(),
             ),
         )
         if job_id is not None:
@@ -97,6 +111,65 @@ def _check_artifacts(conn: sqlite3.Connection, origin: dict) -> None:
             raise LibraryError("artifact_not_found", "来源附件不存在。", status=404)
 
 
+def norm_name_taken_by(conn: sqlite3.Connection, payload: dict) -> str | None:
+    """Id of another private norm already using this payload's name.
+
+    ``norm_sources.name`` is unique so the reader can address a norm by name.
+    Writing such a payload would fail the constraint at the last step; report
+    it while the reviewer can still choose the existing id or another name.
+    """
+    row = conn.execute(
+        "SELECT id FROM norm_sources WHERE name = ? AND id != ?",
+        (payload["name"], payload["id"]),
+    ).fetchone()
+    return row["id"] if row is not None else None
+
+
+def check_name_conflict(conn: sqlite3.Connection, payload: dict) -> None:
+    other = norm_name_taken_by(conn, payload)
+    if other is not None:
+        raise LibraryError(
+            "name_conflict",
+            f"资料名称已被另一份私域规范（{other}）使用。"
+            "要更新那份规范请使用它的标识，否则请换一个名称。",
+            status=409,
+        )
+
+
+def _stale(expires_at: str, cutoff: datetime) -> bool:
+    try:
+        return datetime.fromisoformat(expires_at) <= cutoff
+    except (TypeError, ValueError):
+        return True
+
+
+def sweep_drafts(db_path: Path | str, *, now: datetime | None = None) -> int:
+    """Delete previews whose confirmation window closed more than a week ago.
+
+    Applies to every status: confirmed content is already recorded in
+    ``library_operations`` and cancelled or expired previews cannot be used.
+    Jobs keep their result summary but no longer link to a removed preview.
+    Returns how many previews were removed.
+    """
+    cutoff = (now or datetime.now(timezone.utc)) - DRAFT_RETENTION
+    with connect(db_path) as conn:
+        migrate(conn)
+        conn.execute("BEGIN IMMEDIATE")
+        stale = [
+            row["id"]
+            for row in conn.execute("SELECT id, expires_at FROM library_drafts")
+            if _stale(row["expires_at"], cutoff)
+        ]
+        for start in range(0, len(stale), 500):
+            batch = stale[start : start + 500]
+            marks = ", ".join("?" for _ in batch)
+            conn.execute(
+                f"UPDATE library_jobs SET draft_id = NULL WHERE draft_id IN ({marks})", batch
+            )
+            conn.execute(f"DELETE FROM library_drafts WHERE id IN ({marks})", batch)
+    return len(stale)
+
+
 def _row(conn: sqlite3.Connection, draft_id: str) -> sqlite3.Row:
     row = conn.execute("SELECT * FROM library_drafts WHERE id = ?", (draft_id,)).fetchone()
     if row is None:
@@ -109,8 +182,16 @@ def get_draft(db_path: Path | str, draft_id: str) -> dict:
         conn.execute("BEGIN")
         row = _row(conn, draft_id)
         current = current_payload(conn, row["kind"], row["target_id"])
+        payload = json.loads(row["payload_json"])
+        # Shared state changed after the preview was frozen (taxonomy for laws,
+        # another norm taking the name): commit would refuse it, so tell the
+        # reviewer now rather than at the last click.
+        blocked = (
+            has_category_conflict(conn, payload)
+            if row["kind"] == "law"
+            else norm_name_taken_by(conn, payload) is not None
+        )
     before = json.loads(row["before_json"]) if row["before_json"] else None
-    payload = json.loads(row["payload_json"])
     return {
         "kind": "library_draft",
         "id": row["id"],
@@ -124,7 +205,8 @@ def get_draft(db_path: Path | str, draft_id: str) -> dict:
         "origin": json.loads(row["origin_json"]),
         "warnings": json.loads(row["warnings_json"]),
         "diff": compare_payloads(before, payload, row["kind"]),
-        "conflict": content_fingerprint(current, row["kind"]) != row["base_fingerprint"],
+        "conflict": content_fingerprint(current, row["kind"]) != row["base_fingerprint"]
+        or blocked,
         "expired": datetime.fromisoformat(row["expires_at"]) <= datetime.now(timezone.utc),
         "created_at": row["created_at"],
         "expires_at": row["expires_at"],
@@ -196,6 +278,7 @@ def commit_draft(
             check_category_conflicts(conn, payload)
             loader.load_law_from_dict(conn, payload)
         else:
+            check_name_conflict(conn, payload)
             normsources.import_source_from_dict(conn, payload)
         after = current_payload(conn, kind, target)
         if after is None or content_fingerprint(after, kind) != expected_content:

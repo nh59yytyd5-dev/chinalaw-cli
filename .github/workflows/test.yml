@@ -314,11 +314,7 @@ jobs:
           with tarfile.open(archive) as bundle:
               names = bundle.getnames()
           assert any(name.endswith("data/public_fixture_manifest.json") for name in names)
-          assert not any(
-              marker in name
-              for name in names
-              for marker in ("FULL_AUDIT_", "REFACTOR_PLAN_", "ADMIN_PANEL_PLAN_", "ADMIN_PANEL_IMPLEMENTATION_")
-          )
+          assert not any("/.agents/" in name for name in names)
           PY
 
       - name: Inspect wheel contents

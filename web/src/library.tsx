@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   api,
   changed,
@@ -31,8 +31,12 @@ import {
   navigate,
   Note,
   openDocument,
+  RenderMore,
+  TabPanel,
+  Tabs,
   ToastContext,
   useAction,
+  useIncrementalList,
   useResource,
 } from "./components";
 
@@ -466,26 +470,48 @@ export function FullText({
 }) {
   const [filter, setFilter] = useState("");
   const [jump, setJump] = useState("");
+  const [target, setTarget] = useState<number | null>(null);
   const notify = useContext(ToastContext);
-  const filtered = clauses
-    .map((clause, index) => ({ clause, index }))
-    .filter(
-      ({ clause }) =>
-        !filter ||
-        clause.text.includes(filter) ||
-        clause.number_display?.includes(filter) ||
-        clause.title?.includes(filter),
-    );
-  const parts = clauses
-    .map((clause, index) => ({ part: clause.part, index }))
-    .filter(
-      (item, index, list) =>
-        item.part && (index === 0 || item.part !== list[index - 1].part),
-    );
-  const scroll = (index: number) =>
-    document
-      .getElementById("clause-" + index)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const filtered = useMemo(
+    () =>
+      clauses
+        .map((clause, index) => ({ clause, index }))
+        .filter(
+          ({ clause }) =>
+            !filter ||
+            clause.text.includes(filter) ||
+            clause.number_display?.includes(filter) ||
+            clause.title?.includes(filter),
+        ),
+    [clauses, filter],
+  );
+  const parts = useMemo(
+    () =>
+      clauses
+        .map((clause, index) => ({ part: clause.part, index }))
+        .filter(
+          (item, index, list) =>
+            item.part && (index === 0 || item.part !== list[index - 1].part),
+        ),
+    [clauses],
+  );
+  const list = useIncrementalList(filtered.length);
+  const visible = filtered.slice(0, list.limit);
+  useEffect(() => {
+    // Scroll once the requested clause is mounted (see jumpTo).
+    if (target === null) return;
+    const node = document.getElementById("clause-" + target);
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTarget(null);
+  }, [target, list.limit, filter]);
+  const jumpTo = (index: number) => {
+    // Jumps address the complete text: drop the filter so the clause exists,
+    // mount everything up to it, then scroll after React has rendered it.
+    setFilter("");
+    list.reveal(index);
+    setTarget(index);
+  };
   return (
     <div className="reader-layout">
       <aside className="outline panel">
@@ -502,12 +528,8 @@ export function FullText({
               (clause) =>
                 clause.number === value || clause.number_display === jump,
             );
-            if (index >= 0) {
-              setFilter("");
-              requestAnimationFrame(() => scroll(index));
-            } else if (jump.trim()) {
-              notify(`没有找到第 ${value} 条。`, true);
-            }
+            if (index >= 0) jumpTo(index);
+            else if (jump.trim()) notify(`没有找到第 ${value} 条。`, true);
           }}
         >
           <input
@@ -523,7 +545,7 @@ export function FullText({
         <nav aria-label="章节目次">
           {parts.length ? (
             parts.map((item) => (
-              <button key={item.index} onClick={() => scroll(item.index)}>
+              <button key={item.index} onClick={() => jumpTo(item.index)}>
                 {item.part}
               </button>
             ))
@@ -556,7 +578,7 @@ export function FullText({
         </div>
         <div className="articles">
           {filtered.length ? (
-            filtered.map(({ clause, index }) => (
+            visible.map(({ clause, index }) => (
               <article id={"clause-" + index} className="article" key={index}>
                 {clause.part &&
                   (index === 0 || clauses[index - 1]?.part !== clause.part) && (
@@ -578,6 +600,12 @@ export function FullText({
               <p>试试其他关键词。</p>
             </Empty>
           )}
+          <RenderMore
+            list={list}
+            total={filtered.length}
+            unit="条"
+            label="显示全部条文"
+          />
         </div>
       </section>
     </div>
@@ -933,40 +961,42 @@ export function DocumentPage({ kind, id }: { kind: Kind; id: string }) {
           </div>
         </div>
       )}
-      <div className="tabs" role="tablist">
-        {[
-          ["text", "完整正文"],
-          ["source", "来源与原件"],
-          ...(!revision ? [["history", "版本与维护记录"]] : []),
-        ].map(([key, value]) => (
-          <button
-            role="tab"
-            aria-selected={tab === key}
-            className={tab === key ? "active" : ""}
-            key={key}
-            onClick={() => setTab(key)}
-          >
-            {value}
-          </button>
-        ))}
-        {!revision && (
-          <button
-            className="text-button tab-action"
-            onClick={() => navigate("import", `${kind}:${id}`)}
-          >
-            <Icon name="upload" size={16} />
-            重新导入
-          </button>
-        )}
-      </div>
-      {tab === "text" && <FullText key={revision} clauses={clausesOf(doc)} />}
-      {tab === "source" && (
+      <Tabs
+        id="document"
+        label="资料内容"
+        items={[
+          { key: "text", title: "完整正文" },
+          { key: "source", title: "来源与原件" },
+          ...(!revision ? [{ key: "history", title: "版本与维护记录" }] : []),
+        ]}
+        value={tab}
+        onChange={setTab}
+        action={
+          !revision && (
+            <button
+              className="text-button tab-action"
+              onClick={() => navigate("import", `${kind}:${id}`)}
+            >
+              <Icon name="upload" size={16} />
+              重新导入
+            </button>
+          )
+        }
+      />
+      <TabPanel id="document" tab="text" active={tab === "text"}>
+        <FullText key={revision} clauses={clausesOf(doc)} />
+      </TabPanel>
+      <TabPanel id="document" tab="source" active={tab === "source"}>
         <SourcePanel
           data={doc}
           origin={revision ? undefined : data.latest_operation?.origin}
         />
-      )}
-      {tab === "history" && (
+      </TabPanel>
+      <TabPanel
+        id="document"
+        tab="history"
+        active={tab === "history" && !revision}
+      >
         <History
           kind={kind}
           id={id}
@@ -975,7 +1005,7 @@ export function DocumentPage({ kind, id }: { kind: Kind; id: string }) {
             setTab("text");
           }}
         />
-      )}
+      </TabPanel>
     </>
   );
 }

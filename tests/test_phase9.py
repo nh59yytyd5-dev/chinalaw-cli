@@ -317,11 +317,7 @@ class DocumentationContractTests(unittest.TestCase):
     def test_active_markdown_links_resolve(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         documents = [repo_root / "README.md", repo_root / "NOTICES.md"]
-        documents.extend(
-            path
-            for path in sorted((repo_root / "docs").glob("*.md"))
-            if not path.name.startswith("FULL_AUDIT_")
-        )
+        documents.extend(sorted((repo_root / "docs").glob("*.md")))
         missing: list[str] = []
         for document in documents:
             text = document.read_text(encoding="utf-8")
@@ -341,7 +337,7 @@ class DocumentationContractTests(unittest.TestCase):
             (repo_root / "data" / "source_coverage.json").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(USER_AGENT_TOKEN, f"chinalaw-cli/0.6.0a1 (+{PROJECT_URL})")
+        self.assertEqual(USER_AGENT_TOKEN, f"chinalaw-cli/0.6.0 (+{PROJECT_URL})")
         self.assertIn(PROJECT_URL, compliance)
         self.assertNotIn("github.com/chinalaw-cli/chinalaw-cli", compliance)
         self.assertNotIn("README 中维护者邮箱", compliance)

@@ -3,11 +3,11 @@
 
 1. 已读 docs/CONTRIBUTING.md（提交规范、代码风格）。
 2. 已读 docs/DEVELOPMENT_GUIDE.md（模块边界、测试要求、schema 纪律）。
-3. 不引入新的运行时依赖（除非已经有 ADR 并登记 NOTICES.md）。
+3. 不引入新的运行时依赖（除非已有公开设计记录并登记 NOTICES.md）。
 4. 通过本地基线：
    - `PYTHONPATH=src python3 -m unittest discover -s tests -v`
    - `PYTHONPATH=src python3 -m compileall -q src tests`
-   - `ruff check src tests`
+   - `ruff check src tests tests_server`
 5. 必要时附 `chinalaw verify-source ...` 的真实 smoke 输出。
 -->
 
@@ -25,9 +25,9 @@
 - [ ] chore（构建、CI、工具链）
 - [ ] schema（涉及 SQLite migration）
 
-## 关联 issue / ADR
+## 关联 issue
 
-> Closes #___ / Refs #___ / 见 `docs/decisions/ADR-NNNN-*.md`
+> Closes #___ / Refs #___
 
 ## 自检清单
 
@@ -35,9 +35,9 @@
 - [ ] `unittest discover` 全绿（贴出测试数量：旧 X → 新 Y）
 - [ ] `ruff check` 零警告
 - [ ] `compileall` 零错误
-- [ ] 不新增运行时依赖；如新增，已在 NOTICES.md 登记并附 ADR
+- [ ] 不新增运行时依赖；如新增，已在 NOTICES.md 登记并附设计记录
 - [ ] 协议字段变化已同步 `docs/CONTRACT.md` 与示例
-- [ ] schema 变化已写 migration + 测试 + ADR
+- [ ] schema 变化已写 migration + 测试 + 设计记录
 - [ ] CHANGELOG.md `[Unreleased]` 已记录用户可见的行为变化
 - [ ] 没有提交真实抓取的法规数据 / 个人路径 / 密钥 / 商业软件名
 

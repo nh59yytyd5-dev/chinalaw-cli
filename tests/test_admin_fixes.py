@@ -12,7 +12,7 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
-from chinalaw import loader, service
+from chinalaw import fetch, loader, service
 from chinalaw.admin import artifacts, backups, catalog, drafts, ingest, jobs
 from chinalaw.admin.errors import LibraryError
 from chinalaw.db import connect, connect_readonly, migrate
@@ -161,9 +161,7 @@ class BackupFixTests(AdminFixtureCase):
         upload = artifacts.save_text(
             self.target, self.target_root, "a.json", json.dumps(document, ensure_ascii=False)
         )
-        job = jobs.create_job(
-            self.target, "import", {"artifact_id": upload["id"], "kind": "norm"}
-        )
+        job = jobs.create_job(self.target, "import", {"artifact_id": upload["id"], "kind": "norm"})
         preview = self.prepare()
         worker = jobs.JobWorker(self.target, self.target_root)
         self.assertTrue(worker.run_once())
@@ -234,9 +232,7 @@ class JobFixTests(AdminFixtureCase):
         # Item 4: raw exception text goes to detail, not to the user-facing message.
         worker = jobs.JobWorker(self.db, self.root)
         job = jobs.create_job(self.db, "import", self.arguments)
-        with patch(
-            "chinalaw.admin.ingest.import_artifact", side_effect=KeyError("secret path")
-        ):
+        with patch("chinalaw.admin.ingest.import_artifact", side_effect=KeyError("secret path")):
             worker.run_once()
         error = jobs.get_job(self.db, job["id"])["error"]
         self.assertEqual(error["code"], "internal_error")
@@ -250,6 +246,24 @@ class JobFixTests(AdminFixtureCase):
             failed = jobs.create_job(self.db, "import", self.arguments)
             worker.run_once()
         self.assertEqual(jobs.get_job(self.db, failed["id"])["error"]["code"], "custom")
+
+    def test_source_failures_are_reported_as_source_errors(self) -> None:
+        worker = jobs.JobWorker(self.db, self.root)
+        cases = (
+            (fetch.FetchNotFoundError("no results"), "source_not_found"),
+            (fetch.FetchAmbiguousError("many", [{"id": "x"}]), "source_ambiguous"),
+            (fetch.FetchSourceError("HTTP 502"), "source_unavailable"),
+        )
+        for exc, code in cases:
+            with self.subTest(code=code):
+                job = jobs.create_job(self.db, "fetch", {"query": "虚构法规"})
+                with patch("chinalaw.admin.ingest.fetch_draft", side_effect=exc):
+                    self.assertTrue(worker.run_once())
+                result = jobs.get_job(self.db, job["id"])
+                self.assertEqual(result["state"], "failed")
+                self.assertEqual(result["error"]["code"], code)
+                self.assertNotIn("内部错误", result["error"]["message"])
+                self.assertTrue(result["error"]["detail"].startswith(type(exc).__name__))
 
     def test_cancel_refuses_every_finished_state(self) -> None:
         # Item 5: terminal states are never overwritten by cancel.
@@ -313,7 +327,9 @@ class IngestFixTests(AdminFixtureCase):
         # Item 7: deterministic ids let a second import compare against the first.
         upload = artifacts.save_text(self.db, self.root, "虚构条例.txt", "第一条 初版正文。" * 10)
         metadata = {"level": "other", "status": "unknown"}
-        first = ingest.import_artifact(self.db, self.root, upload["id"], kind="law", metadata=metadata)
+        first = ingest.import_artifact(
+            self.db, self.root, upload["id"], kind="law", metadata=metadata
+        )
         self.assertTrue(first["target_id"].startswith("local-law-"))
         self.assertEqual(first["diff"]["before_count"], 0)
         self.commit(first)
@@ -336,7 +352,9 @@ class IngestFixTests(AdminFixtureCase):
     def test_same_norm_file_targets_same_source(self) -> None:
         upload = artifacts.save_text(self.db, self.root, "Internal Rules.txt", "第一条 初版。" * 10)
         metadata = {"source_type": "other"}
-        first = ingest.import_artifact(self.db, self.root, upload["id"], kind="norm", metadata=metadata)
+        first = ingest.import_artifact(
+            self.db, self.root, upload["id"], kind="norm", metadata=metadata
+        )
         self.assertEqual(first["target_id"], "internal-rules")
         self.commit(first)
         again = artifacts.save_text(self.db, self.root, "Internal Rules.txt", "第一条 修订。" * 10)

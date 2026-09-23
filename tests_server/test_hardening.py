@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from chinalaw.admin import backups
+from chinalaw.admin import backups, drafts
 from chinalaw.admin.errors import LibraryError
 from chinalaw.admin.gate import MaintenanceGate
 from chinalaw.server import auth_store as auth_module
@@ -120,17 +120,18 @@ def test_export_streams_from_state_dir_and_cleans_up(owner_api):
     assert exports.is_dir() and not any(exports.iterdir())
 
 
-def test_startup_clears_exports_and_sweeps_restores(api, tmp_path, monkeypatch):
+def test_startup_clears_exports_and_sweeps_restores_and_drafts(api, tmp_path, monkeypatch):
     config = api.app.state.config
     stale = config.state_dir / "exports" / "export-stale"
     stale.mkdir(parents=True)
     (stale / "library.zip").write_bytes(b"stale")
     swept = []
-    monkeypatch.setattr(backups, "sweep_restores", swept.append, raising=False)
+    monkeypatch.setattr(backups, "sweep_restores", swept.append)
+    monkeypatch.setattr(drafts, "sweep_drafts", swept.append)
     with TestClient(create_app(config, auth_store=api.app.state.auth), base_url=config.origin):
         pass
     assert not stale.exists()
-    assert swept == [config.restores_dir]
+    assert swept == [config.restores_dir, config.db_path]
 
 
 def test_unused_dynamic_clients_are_reclaimed_after_a_day(owner_api):

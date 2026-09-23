@@ -8,9 +8,8 @@ assignees: ''
 
 <!--
 提交前请先读：
-- docs/PROJECT_CHARTER.md（项目定位）
-- docs/DIFFERENTIATION.md（明确不做什么）
-- docs/MVP_PLAN.md（当前阶段优先级）
+- docs/PROJECT_CHARTER.md（项目定位与不做的范围）
+- docs/CONTRACT.md（现有命令与 JSON 契约）
 
 如果你的需求落入"不做的范围"（商业法律数据库克隆、远程 SaaS / MCP 数据服务、AI 法律问答机器人等），
 issue 仍欢迎，但可能会被标记为 `wontfix` 并附说明。
@@ -35,8 +34,8 @@ issue 仍欢迎，但可能会被标记为 `wontfix` 并附说明。
 ## 影响范围
 
 - [ ] 命令协议（README / docs/CONTRACT.md）会变
-- [ ] 数据库 schema 会变（需要 ADR + migration）
-- [ ] 新引入运行时依赖（需要 ADR + NOTICES 登记）
+- [ ] 数据库 schema 会变（需要设计记录 + migration）
+- [ ] 新引入运行时依赖（需要设计记录 + NOTICES 登记）
 - [ ] 新接入数据源（需要 docs/COMPLIANCE.md 复核）
 - [ ] 仅文档 / 测试 / 内部重构
 

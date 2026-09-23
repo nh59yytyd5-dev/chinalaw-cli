@@ -41,7 +41,7 @@ PYTHONPATH=src python3 -m chinalaw search 合同 履行 --format json
 PYTHONPATH=src python3 -m chinalaw applicable --date 2022-01-01 --topic 合同效力 --format json
 PYTHONPATH=src python3 -m chinalaw article 民法典 第五百零九条 --format json
 PYTHONPATH=src python3 -m chinalaw fetch 民法典 --article 第五百八十五条 --format json
-PYTHONPATH=src python3 -m chinalaw norm ingest company-policy.docx --name 公司合同审批制度 --source-type company_policy
+PYTHONPATH=src python3 -m chinalaw norm ingest company-policy.docx --name 公司合同审批制度 --source-type internal_governance
 PYTHONPATH=src python3 -m chinalaw pack validate 放款审查基础包 --format json
 PYTHONPATH=src python3 -m chinalaw pack show 放款审查基础包 --format json
 ```
@@ -113,3 +113,50 @@ Windows PowerShell 原生环境使用复制安装：
 ```
 
 see also: [`.claude/skills/README.md`](../.claude/skills/README.md) 总索引与设计说明。
+
+## 6. 安装规范语料
+
+`chinalaw init` 加载的随包基线覆盖常用法典、程序法和主要司法解释（清单见
+[`DATA_INDEX.md`](./DATA_INDEX.md)）。任务涉及基线之外的规范时按下面的顺序补库，
+不要直接改 SQLite：
+
+1. 确认本机健康：`chinalaw doctor --format md`、`chinalaw status --format md`。
+2. 查看推荐语料 profile：`chinalaw corpus list --format md`；
+   `chinalaw corpus show general --format md` 展开清单（`--no-deps` 不展开依赖）。
+   `data/recommended_corpus.json` 只是安装索引，不是权威文本。
+3. 先问用户用途再装，按缺口逐部补：`chinalaw ensure 劳动合同法 --format md`。
+   只有用户明确要批量预装并接受官方源限流风险时才用
+   `chinalaw ensure --profile general --format md`（`--no-profile-deps` 不带依赖 profile）。
+4. 安装后复核：`chinalaw status --format md`、`chinalaw resolve <法规名> --format json`。
+
+| 用途 | profile |
+|------|---------|
+| 随包基线 | `baseline` |
+| 通用法律检索 / 合同 / 民商基础 | `general` |
+| 合同审查 / 民商争议 | `contracts` |
+| 民法典施行前的旧民商法 | `civil-history` |
+| 公司商事 / 投融资 / 破产 | `company` |
+| 劳动争议 / HR 合规 | `labor` |
+| 刑事辩护 / 刑事合规 | `criminal` |
+| 行政诉讼 / 政府合规 | `admin` |
+| 房地产 / 建设工程 | `real-estate` |
+| 婚姻家庭 / 继承 | `family` |
+| 知识产权 / 反不正当竞争 | `ip` |
+| 证券 / 资本市场 | `securities` |
+
+失败处理：
+
+- `unsupported_source`：当前 adapter 未实现，把法规名和来源反馈给用户，不要声称已安装。
+- `manual_review`：该条目的公开 fetch 路径尚未稳定；除非用户提供官方 URL 另行 fetch
+  或人工入库，不得引用为已安装规范。
+- `FetchAmbiguousError`：`chinalaw fetch <name> --source <source> --list-matches --format json`
+  列出候选，再用 `--prefer-id` 精取。
+- `FetchNotFoundError`：先 `chinalaw resolve <name>` 排除本地别名问题，仍失败再报告找不到。
+- `FetchSourceError`：`chinalaw verify-source <source> --format json` 判断是否上游改版；
+  属于项目缺陷时创建 issue。
+- FLK 返回反爬 JavaScript 挑战：停止批量安装，改为单部 `ensure`，间隔一段时间后再试
+  （见 issue #97）。
+
+`needs_verification=true`、`law_stub`、`law_seed`、`article_null` 都表示不能直接引用，
+必须继续 fetch / verify-source，或明确告知用户本地数据不足。不要读取用户素材目录的正文
+来猜法规名；给了目录时只用文件名，或让用户确认。

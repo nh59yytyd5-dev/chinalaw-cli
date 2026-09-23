@@ -5,13 +5,16 @@ from __future__ import annotations
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 from chinalaw import loader, normsources, service
-from chinalaw.admin import catalog, drafts, payloads
+from chinalaw.admin import catalog, drafts, jobs, payloads
 from chinalaw.admin.errors import LibraryError
 from chinalaw.db import connect, connect_readonly, migrate
+
+LONG_AGO = "2000-01-01T00:00:00+00:00"
 
 
 def law(text: str = "原有完整正文。") -> dict:
@@ -26,6 +29,24 @@ def law(text: str = "原有完整正文。") -> dict:
         "source_checked_at": "2026-09-13T00:00:00+00:00",
         "articles": [{"number": "1", "text": text, "part": "第一章 测试"}],
     }
+
+
+def categorized(text: str, name: str, identifier: str = "draft-law") -> dict:
+    """A law linked to the shared category ``c-root`` carrying its definition."""
+    return {
+        **law(text),
+        "id": identifier,
+        "category_ids": ["c-root"],
+        "categories": [{"id": "c-root", "name": name, "parent_id": None, "description": None}],
+    }
+
+
+def set_expiry(db: Path, expires_at: str, *identifiers: str) -> None:
+    with connect(db) as conn:
+        for identifier in identifiers:
+            conn.execute(
+                "UPDATE library_drafts SET expires_at = ? WHERE id = ?", (expires_at, identifier)
+            )
 
 
 class DraftTests(unittest.TestCase):
@@ -49,7 +70,12 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(catalog.get_document(self.db, "law", "draft-law"), before)
         result = self.commit(draft)
         after = catalog.get_document(self.db, "law", "draft-law")
-        self.assertEqual(after["fingerprint"], draft["fingerprint"])
+        # The draft fingerprint covers the whole frozen payload; the document
+        # fingerprint is the content identity used by reviews. Both describe
+        # exactly the previewed content.
+        self.assertEqual(
+            after["fingerprint"], payloads.content_fingerprint(draft["document"], "law")
+        )
         self.assertEqual(after["document"]["articles"][0]["text"], text)
         self.assertEqual(after["latest_operation"]["id"], result["operation_id"])
         self.assertEqual(len(drafts.list_operations(self.db, "law", "draft-law")), 1)
@@ -180,6 +206,120 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(
             normsources.list_revisions(self.db, "private-example")["revision_count"], 1
         )
+
+    def test_norm_name_taken_by_another_source_is_a_conflict_not_a_crash(self) -> None:
+        def norm(identifier: str, text: str) -> dict:
+            return {
+                "id": identifier,
+                "name": "同名制度",
+                "source_type": "other",
+                "clauses": [{"number": "1", "text": text}],
+            }
+
+        self.commit(drafts.create_draft(self.db, "norm", norm("first", "第一份。")))
+        # The preview refuses a second id with the same name outright.
+        with self.assertRaises(LibraryError) as caught:
+            drafts.create_draft(self.db, "norm", norm("second", "第二份。"))
+        self.assertEqual(caught.exception.code, "name_conflict")
+        self.assertIn("first", str(caught.exception))
+        # Same id: an update keeps its own name without conflict.
+        self.commit(drafts.create_draft(self.db, "norm", norm("first", "第一份修订。")))
+        # The name is taken after the preview was frozen: flagged, then refused.
+        draft = drafts.create_draft(
+            self.db, "norm", {**norm("third", "第三份。"), "name": "新名称"}
+        )
+        self.assertFalse(draft["conflict"])
+        self.commit(
+            drafts.create_draft(self.db, "norm", {**norm("first", "改名。"), "name": "新名称"})
+        )
+        self.assertTrue(drafts.get_draft(self.db, draft["id"])["conflict"])
+        with self.assertRaises(LibraryError) as caught:
+            self.commit(draft)
+        self.assertEqual(caught.exception.code, "name_conflict")
+        with self.assertRaises(LibraryError):
+            catalog.get_document(self.db, "norm", "third")
+
+    def test_shared_category_rename_keeps_review_and_maintenance_links(self) -> None:
+        operation = self.commit(
+            drafts.create_draft(self.db, "law", categorized("分类正文。", "原名称"))
+        )
+        document = catalog.get_document(self.db, "law", "draft-law")
+        drafts.mark_reviewed(
+            self.db, "law", "draft-law", expected_fingerprint=document["fingerprint"]
+        )
+        # Another law imported through the CLI renames the shared category.
+        with connect(self.db) as conn:
+            loader.load_law_from_dict(conn, categorized("另一部法规。", "新名称", "other-law"))
+        after = catalog.get_document(self.db, "law", "draft-law")
+        self.assertEqual(after["document"]["categories"][0]["name"], "新名称")
+        self.assertEqual(after["fingerprint"], document["fingerprint"])
+        self.assertIsNotNone(after["review"])
+        self.assertEqual(after["latest_operation"]["id"], operation["operation_id"])
+        # The law's own association is still part of its content.
+        moved = {
+            **categorized("分类正文。", "新名称"),
+            "category_ids": ["c-other"],
+            "categories": [
+                {"id": "c-other", "name": "其他", "parent_id": None, "description": None}
+            ],
+        }
+        self.commit(drafts.create_draft(self.db, "law", moved))
+        self.assertIsNone(catalog.get_document(self.db, "law", "draft-law")["review"])
+
+    def test_preview_reports_taxonomy_conflict_before_commit(self) -> None:
+        draft = drafts.create_draft(self.db, "law", categorized("分类正文。", "原名称"))
+        self.assertFalse(draft["conflict"])
+        self.assertEqual(
+            [item["field"] for item in draft["diff"]["metadata"] if item["field"] == "categories"],
+            ["categories"],
+        )
+        with connect(self.db) as conn:
+            loader.load_law_from_dict(conn, categorized("另一部法规。", "新名称", "other-law"))
+        self.assertTrue(drafts.get_draft(self.db, draft["id"])["conflict"])
+        with self.assertRaises(LibraryError) as caught:
+            self.commit(draft)
+        self.assertEqual(caught.exception.code, "category_conflict")
+        with connect_readonly(self.db) as conn:
+            self.assertEqual(payloads.current_payload(conn, "law", "draft-law")["category_ids"], [])
+
+    def test_sweep_drops_previews_a_week_after_expiry_and_unlinks_jobs(self) -> None:
+        ready = drafts.create_draft(self.db, "law", law("待确认。"))
+        committed = drafts.create_draft(self.db, "law", law("已入库。"))
+        operation = self.commit(committed)
+        cancelled = drafts.create_draft(self.db, "law", law("已取消。"))
+        drafts.cancel_draft(self.db, cancelled["id"])
+        fresh = drafts.create_draft(self.db, "law", law("新预览。"))
+        job = jobs.create_job(self.db, "fetch", {"query": "虚构法规"})
+        with connect(self.db) as conn:
+            conn.execute(
+                "UPDATE library_jobs SET draft_id = ?, state = 'completed' WHERE id = ?",
+                (committed["id"], job["id"]),
+            )
+        set_expiry(self.db, LONG_AGO, ready["id"], committed["id"], cancelled["id"])
+        self.assertEqual(drafts.sweep_drafts(self.db), 3)
+        self.assertEqual([item["id"] for item in drafts.list_drafts(self.db)], [fresh["id"]])
+        for stale in (ready, committed, cancelled):
+            with self.assertRaises(LibraryError) as caught:
+                drafts.get_draft(self.db, stale["id"])
+            self.assertEqual(caught.exception.code, "draft_not_found")
+        self.assertIsNone(jobs.get_job(self.db, job["id"])["draft_id"])
+        records = drafts.list_operations(self.db, "law", "draft-law")
+        self.assertEqual(records[0]["id"], operation["operation_id"])
+        self.assertEqual(records[0]["draft_id"], committed["id"])
+        self.assertEqual(
+            catalog.get_document(self.db, "law", "draft-law")["document"]["articles"][0]["text"],
+            "已入库。",
+        )
+        # Expired yesterday: still listed as expired rather than silently gone.
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        set_expiry(self.db, yesterday, fresh["id"])
+        self.assertEqual(drafts.sweep_drafts(self.db), 0)
+        self.assertTrue(drafts.get_draft(self.db, fresh["id"])["expired"])
+        # Preparing a new preview sweeps as well.
+        set_expiry(self.db, LONG_AGO, fresh["id"])
+        drafts.create_draft(self.db, "law", law("触发清理。"))
+        with self.assertRaises(LibraryError):
+            drafts.get_draft(self.db, fresh["id"])
 
     def test_repeated_private_numbering_is_not_lost_in_diff(self) -> None:
         payload = {

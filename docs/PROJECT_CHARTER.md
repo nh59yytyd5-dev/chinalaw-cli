@@ -1,8 +1,7 @@
 # 项目宪章
 
-> 本文档是 `chinalaw-cli` 的最高层产品定位文档。当前重构计划见
-> [`REFACTOR_PLAN_20260806.md`](./REFACTOR_PLAN_20260806.md)，协议契约见
-> [`CONTRACT.md`](./CONTRACT.md)。
+> 本文档是 `chinalaw-cli` 的最高层产品定位文档。协议契约见
+> [`CONTRACT.md`](./CONTRACT.md)，代码结构见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。
 > 人工管理面板与服务器的使用说明见 [`ADMIN_SERVER.md`](./ADMIN_SERVER.md)。
 
 ## 1. 一句话
@@ -112,7 +111,9 @@ CLI 提供依据和线索，不输出最终法律意见。
 
 ## 10. 与商业 MCP 的关系
 
-商业法律数据库 / MCP 是潜在上游，不是竞争对象。
+商业法律数据库 / MCP 是潜在上游，不是竞争对象。它们的优势是内容规模、人工编辑、
+授权合规和 SaaS 交付；本项目不在这些方面正面竞争，不拼法规、案例、文书的总量，
+也不复制商业检索网站的体验。
 
 `chinalaw-cli` 的价值在本地侧：
 

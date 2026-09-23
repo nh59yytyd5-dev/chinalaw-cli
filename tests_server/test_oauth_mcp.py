@@ -190,6 +190,86 @@ def test_refresh_rotates_and_revocation_revokes_the_grant(owner_api):
     )
 
 
+def test_oauth_endpoints_answer_browser_clients_from_other_origins(owner_api):
+    """A browser-based MCP client runs discovery, registration, token exchange and
+    revocation cross-origin; the SDK serves those with permissive CORS on purpose."""
+    foreign = {"Origin": "https://inspector.example"}
+    preflight = owner_api.options(
+        "/token",
+        headers={
+            **foreign,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert preflight.status_code == 200, preflight.text
+    assert preflight.headers["access-control-allow-origin"] == "*"
+    for path in (
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/oauth-protected-resource/mcp",
+    ):
+        response = owner_api.get(path, headers=foreign)
+        assert response.status_code == 200, response.text
+        assert response.headers["access-control-allow-origin"] == "*"
+    registered = owner_api.post(
+        "/register",
+        headers=foreign,
+        json={
+            "client_name": "Browser MCP client",
+            "redirect_uris": ["http://127.0.0.1:43111/callback"],
+            "token_endpoint_auth_method": "none",
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+        },
+    )
+    assert registered.status_code == 201, registered.text
+    assert registered.headers["access-control-allow-origin"] == "*"
+    client_id, verifier, request_id = authorization(owner_api)
+    code = consent_code(owner_api, request_id)
+    exchanged = owner_api.post(
+        "/token",
+        headers=foreign,
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code,
+            "redirect_uri": "http://127.0.0.1:43111/callback",
+            "code_verifier": verifier,
+            "resource": owner_api.app.state.config.resource_url,
+        },
+    )
+    assert exchanged.status_code == 200, exchanged.text
+    assert exchanged.headers["access-control-allow-origin"] == "*"
+    revoked = owner_api.post(
+        "/revoke",
+        headers=foreign,
+        data={"client_id": client_id, "token": exchanged.json()["access_token"]},
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert revoked.headers["access-control-allow-origin"] == "*"
+    assert (
+        owner_api.get(
+            "/api/v1/documents",
+            headers={"Authorization": "Bearer " + exchanged.json()["access_token"]},
+        ).status_code
+        == 401
+    )
+    # The panel, the consent API and the authorization page keep the strict rule.
+    assert owner_api.get("/api/v1/documents", headers=foreign).status_code == 403
+    assert (
+        owner_api.post(
+            "/api/v1/auth/consent/" + request_id, headers=foreign, json={"approved": False}
+        ).status_code
+        == 403
+    )
+    assert (
+        owner_api.get(
+            "/authorize", headers=foreign, params={"client_id": client_id}, follow_redirects=False
+        ).status_code
+        == 403
+    )
+
+
 def test_mcp_http_rejects_anonymous_and_exposes_only_read_tools(owner_api):
     headers = {"Accept": "application/json, text/event-stream"}
     request = {
@@ -245,12 +325,43 @@ def test_mcp_session_cannot_keep_private_access_after_token_switch_or_revocation
     auth = owner_api.app.state.auth
     private = auth.issue_query_token("private session", [PUBLIC_SCOPE, PRIVATE_SCOPE])
     public = auth.issue_query_token("public session", [PUBLIC_SCOPE])
-    headers = {"Accept": "application/json, text/event-stream", "Authorization": "Bearer " + private["token"]}
-    initialized = owner_api.post("/mcp", headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "scope-switch", "version": "1"}}})
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Authorization": "Bearer " + private["token"],
+    }
+    initialized = owner_api.post(
+        "/mcp",
+        headers=headers,
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "scope-switch", "version": "1"},
+            },
+        },
+    )
     assert initialized.status_code == 200
-    headers.update({"Mcp-Session-Id": initialized.headers["mcp-session-id"], "MCP-Protocol-Version": "2025-11-25"})
-    owner_api.post("/mcp", headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
-    request = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "chinalaw_document", "arguments": {"kind": "norm", "id": "private-test"}}}
+    headers.update(
+        {
+            "Mcp-Session-Id": initialized.headers["mcp-session-id"],
+            "MCP-Protocol-Version": "2025-11-25",
+        }
+    )
+    owner_api.post(
+        "/mcp", headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"}
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "chinalaw_document",
+            "arguments": {"kind": "norm", "id": "private-test"},
+        },
+    }
     allowed = owner_api.post("/mcp", headers=headers, json=request)
     assert "私域独有关键词正文。" in allowed.text
     headers["Authorization"] = "Bearer " + public["token"]

@@ -3,7 +3,7 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.6.0a1] — 未发布（开发预览）
+## [0.6.0] — 2026-09-23
 
 ### 新增
 
@@ -15,6 +15,15 @@
 - `chinalaw-server init/serve/password`，本机启动、Docker/Caddy 配置、部署说明与浏览器测试。
 - `scripts/install-local --with-server`（Windows：`-WithServer`）：安装 `server` 可选依赖并写 `chinalaw-server` shim。
 - 审查修复：备份对 ANALYZE 库兼容、worker 异常存活、导入 id 稳定、恢复不污染修订史、登录限流适配反向代理、恢复暂存清理、面板时间显示/配对/危险操作确认等。
+- 后续修复：过期预览一周后自动清理；分类定义重命名不再使各法规的核对标记失效；预览生成后分类或私域规范名称冲突先在详情页提示，重名规范不再以 503 失败；来源错误按来源问题报告；OAuth 端点允许浏览器跨域；面板标签页符合 WAI-ARIA 键盘操作，长法规按需分块渲染。
+
+### 文档
+
+- README 重写为简明介绍并附管理面板截图：安装、接入 agent、面板、私域规范与 MCP 各保留最短可用说明，细节移到 `docs/`。
+- 移除已完成的审计报告、重构计划与面板实施记录（历史内容保留在 git 记录中）；`MCP_POSITIONING`、`AGENT_INSTALL_GUIDE`、`DIFFERENTIATION` 分别并入 `ARCHITECTURE`、`AGENT_WORKFLOWS`、`PROJECT_CHARTER`。
+- 文档与 issue / PR 模板不再引用仓库中不存在的 ADR 目录和 MVP 计划；`SECURITY.md` 的受支持版本改为最新 minor。
+- skills 示例中失效的 `--source-type company_policy` 改为 `internal_governance`；`.agents` 下的 `chinalaw-using` 副本与 `.claude` 重新同步。
+- `chinalaw-using` skill 新增"远端 MCP 模式"：已部署 `chinalaw-server` 时，查询类任务优先用 `chinalaw_*` MCP 工具，给出 CLI 命令到工具的对照与降级规则。
 
 ### 兼容性
 

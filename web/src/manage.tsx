@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   api,
   changed,
@@ -27,7 +27,11 @@ import {
   navigate,
   Note,
   openDocument,
+  RenderMore,
+  TabPanel,
+  Tabs,
   useAction,
+  useIncrementalList,
   useResource,
 } from "./components";
 import { FullText, SourcePanel } from "./library";
@@ -109,34 +113,36 @@ export function ImportPage({ parameter = "" }: { parameter?: string }) {
               </button>
             ))}
           </div>
-          <div className="tabs inner">
-            <button
-              className={mode === "file" ? "active" : ""}
-              onClick={() => setMode("file")}
-            >
-              上传文件
-            </button>
-            {kind === "law" && (
-              <button
-                className={mode === "fetch" ? "active" : ""}
-                onClick={() => setMode("fetch")}
-              >
-                从来源获取
-              </button>
-            )}
-          </div>
+          <Tabs
+            id="import-mode"
+            label="取得方式"
+            className="inner"
+            items={[
+              { key: "file", title: "上传文件" },
+              ...(kind === "law"
+                ? [{ key: "fetch", title: "从来源获取" }]
+                : []),
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
           {!options.data || existing === undefined ? (
             <Loading {...options} />
-          ) : mode === "file" ? (
-            <ImportFile
-              key={kind}
-              kind={kind}
-              options={options.data}
-              target={target}
-              existing={existing}
-            />
           ) : (
-            <FetchForm options={options.data} />
+            <>
+              <TabPanel id="import-mode" tab="file" active={mode === "file"}>
+                <ImportFile
+                  key={kind}
+                  kind={kind}
+                  options={options.data}
+                  target={target}
+                  existing={existing}
+                />
+              </TabPanel>
+              <TabPanel id="import-mode" tab="fetch" active={mode === "fetch"}>
+                <FetchForm options={options.data} />
+              </TabPanel>
+            </>
           )}
         </section>
         <aside className="import-aside">
@@ -612,6 +618,9 @@ function DiffClause({ clause }: { clause: Clause }) {
     </>
   );
 }
+type DiffEntry =
+  | { type: "modified"; item: Draft["diff"]["modified"][number] }
+  | { type: "added" | "removed"; clause: Clause };
 function DraftDiff({ draft }: { draft: Draft }) {
   const diff = draft.diff;
   const substantive = diff.metadata.filter(
@@ -620,6 +629,17 @@ function DraftDiff({ draft }: { draft: Draft }) {
   const bookkeeping = diff.metadata.filter((item) =>
     BOOKKEEPING_FIELDS.has(item.field),
   );
+  // A first import of a complete statute lists every article as added; mount
+  // the entries in chunks like the reader does.
+  const entries = useMemo<DiffEntry[]>(
+    () => [
+      ...diff.modified.map((item) => ({ type: "modified" as const, item })),
+      ...diff.added.map((clause) => ({ type: "added" as const, clause })),
+      ...diff.removed.map((clause) => ({ type: "removed" as const, clause })),
+    ],
+    [diff],
+  );
+  const list = useIncrementalList(entries.length);
   return (
     <section className="panel diff-panel">
       <div className="panel-heading">
@@ -645,33 +665,37 @@ function DraftDiff({ draft }: { draft: Draft }) {
           <MetadataRows items={bookkeeping} />
         </details>
       )}
-      {diff.modified.map((item, index) => (
-        <div className="diff-pair" key={index}>
-          <div className="diff-before">
-            <Badge tone="red">修改前</Badge>
-            <DiffClause clause={item.before} />
+      {entries.slice(0, list.limit).map((entry, index) =>
+        entry.type === "modified" ? (
+          <div className="diff-pair" key={index}>
+            <div className="diff-before">
+              <Badge tone="red">修改前</Badge>
+              <DiffClause clause={entry.item.before} />
+            </div>
+            <div className="diff-after">
+              <Badge tone="green">修改后</Badge>
+              <DiffClause clause={entry.item.after} />
+            </div>
           </div>
-          <div className="diff-after">
-            <Badge tone="green">修改后</Badge>
-            <DiffClause clause={item.after} />
+        ) : (
+          <div
+            className={`diff-single ${entry.type === "added" ? "diff-after" : "diff-before"}`}
+            key={index}
+          >
+            <Badge tone={entry.type === "added" ? "green" : "red"}>
+              {entry.type === "added" ? "新增" : "移除"}
+            </Badge>
+            <DiffClause clause={entry.clause} />
           </div>
-        </div>
-      ))}
-      {diff.added.map((clause, index) => (
-        <div className="diff-single diff-after" key={"add" + index}>
-          <Badge tone="green">新增</Badge>
-          <DiffClause clause={clause} />
-        </div>
-      ))}
-      {diff.removed.map((clause, index) => (
-        <div className="diff-single diff-before" key={"remove" + index}>
-          <Badge tone="red">移除</Badge>
-          <DiffClause clause={clause} />
-        </div>
-      ))}
-      {!diff.modified_count && !diff.added_count && !diff.removed_count && (
-        <Empty title="条文内容与结构没有变化" />
+        ),
       )}
+      <RenderMore
+        list={list}
+        total={entries.length}
+        unit="项差异"
+        label="显示全部差异"
+      />
+      {!entries.length && <Empty title="条文内容与结构没有变化" />}
     </section>
   );
 }
@@ -747,30 +771,26 @@ export function DraftPage({ id }: { id: string }) {
           </div>
         </div>
       )}
-      <div className="tabs" role="tablist">
-        {[
-          ["text", "待入库全文"],
-          ["diff", "完整差异"],
-          ["source", "来源与原件"],
-        ].map(([value, title]) => (
-          <button
-            role="tab"
-            aria-selected={tab === value}
-            className={tab === value ? "active" : ""}
-            onClick={() => setTab(value)}
-            key={value}
-          >
-            {title}
-          </button>
-        ))}
-      </div>
-      {tab === "text" && (
+      <Tabs
+        id="draft"
+        label="待确认内容"
+        items={[
+          { key: "text", title: "待入库全文" },
+          { key: "diff", title: "完整差异" },
+          { key: "source", title: "来源与原件" },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      <TabPanel id="draft" tab="text" active={tab === "text"}>
         <FullText clauses={clausesOf(draft.document)} title="待入库正文" />
-      )}
-      {tab === "diff" && <DraftDiff draft={draft} />}
-      {tab === "source" && (
+      </TabPanel>
+      <TabPanel id="draft" tab="diff" active={tab === "diff"}>
+        <DraftDiff draft={draft} />
+      </TabPanel>
+      <TabPanel id="draft" tab="source" active={tab === "source"}>
         <SourcePanel data={draft.document} origin={draft.origin} />
-      )}
+      </TabPanel>
       {ready && (
         <div className="confirmation-bar">
           <label>
