@@ -49,6 +49,31 @@ scripts/install-skills --dry-run # 预览
 scripts/install-skills --copy   # Windows / WSL 友好
 ```
 
+## 远端 MCP 模式（已部署 `chinalaw-server` 时优先）
+
+当 agent 的工具列表里有 `chinalaw_resolve` / `chinalaw_search` / `chinalaw_article` /
+`chinalaw_list` / `chinalaw_document`（来自 `chinalaw-server` 的 MCP HTTP 端点），
+**查询类任务优先用这些工具，不再本地起 CLI**：库在服务器上统一维护，多台机器、
+多个 agent 看到同一份资料。心法与纪律不变，只是命令换成工具：
+
+| CLI 命令 | MCP 工具 | 备注 |
+|------|------|------|
+| `resolve <name>` | `chinalaw_resolve(name)` | 俗称解析协议照旧 |
+| `search <q> --kind --limit` | `chinalaw_search(query, kind, limit)` | 命中仍不是条文 |
+| `article <law> <num> [--as-of]` | `chinalaw_article(law, number, as_of)` | 最终引用落点 |
+| `laws` / `list` / `norm list` | `chinalaw_list(kind, query, page, page_size)` | `kind` 取 `law` / `norm` |
+| `outline --full-text` / `articles --batch` / `norm show` | `chinalaw_document(kind, id, offset, limit)` | 按条分页，`has_more` 为真时用 `offset` 续读 |
+
+远端是**只读**的，没有的能力仍走本地 CLI：`fetch` / `discover` 抓取补全、
+`sync`、`applicable`、`relation` / `trace`、`audit` / `cite-check` / `snapshot`、
+norm / pack 写入。远端缺资料时工具返回诊断（`article_missing` 等），不会自动抓取：
+先本地 `fetch`，再由维护者在面板"导入与核对"上传，或整库迁移；不要把远端缺
+资料解释成"法规不存在"。
+
+MCP 工具不可见、返回 401 或超时，才降级到本地 CLI，并在输出里说明用的是本地库。
+两边内容可能不同步，引用时注明来源库。私域规范只有令牌带 private 权限才可见；
+`chinalaw_list(kind="norm")` 返回 403 表示令牌没有该权限，不是库里没有规范。
+
 ## 命令前缀约定
 
 **默认所有命令都用 `chinalaw <command>` 直接调用**（CLI 已 `pip install -e .`

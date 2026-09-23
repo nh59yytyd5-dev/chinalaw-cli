@@ -3,7 +3,7 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.6.0a1] — 未发布（开发预览）
+## [0.6.0] — 2026-09-23
 
 ### 新增
 
@@ -23,6 +23,7 @@
 - 移除已完成的审计报告、重构计划与面板实施记录（历史内容保留在 git 记录中）；`MCP_POSITIONING`、`AGENT_INSTALL_GUIDE`、`DIFFERENTIATION` 分别并入 `ARCHITECTURE`、`AGENT_WORKFLOWS`、`PROJECT_CHARTER`。
 - 文档与 issue / PR 模板不再引用仓库中不存在的 ADR 目录和 MVP 计划；`SECURITY.md` 的受支持版本改为最新 minor。
 - skills 示例中失效的 `--source-type company_policy` 改为 `internal_governance`；`.agents` 下的 `chinalaw-using` 副本与 `.claude` 重新同步。
+- `chinalaw-using` skill 新增"远端 MCP 模式"：已部署 `chinalaw-server` 时，查询类任务优先用 `chinalaw_*` MCP 工具，给出 CLI 命令到工具的对照与降级规则。
 
 ### 兼容性
 
