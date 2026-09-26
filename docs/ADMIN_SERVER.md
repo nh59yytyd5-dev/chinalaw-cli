@@ -23,7 +23,7 @@ chinalaw-server serve --db ./var/my-library.db --open
 
 `init` 是显式写入操作。新库默认建立空库，`--with-fixtures` 会加载随包公开规范。旧 schema 升级前自动产生同目录的 `*.before-upgrade-时间.sqlite3` 数据库备份；来源附件目录保持原位。`init` 默认输出人类可读摘要，加 `--json` 输出机器可读 JSON（含 `db_path`、`schema_version`、`upgrade_backup` 与库状态），便于脚本判断。`serve` 不会自动初始化或升级资料库。
 
-默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到 schema 14 后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
+默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到当前 schema（15）后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌，以及检索日志 `queries.db`），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
 
 升级资料库（再次运行 `init`）前必须先停止运行中的 `serve`：`init` 与服务的维护 worker 共用同一把 `<db>.worker.lock`，服务未停时 `init` 会报"此资料库已有维护服务运行"。
 
@@ -110,6 +110,20 @@ MCP 暴露 `chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、`chinal
 这是一套实际运行的内置授权服务，不需要另外安装 Keycloak。此选择替代初始计划中待验证的外部 OIDC 候选，依据是官方 SDK 协议流程与真实 TCP 客户端测试已通过。它不提供第三方身份登录、多用户或组织身份联合。
 
 已用 MCP SDK 2.2.0 的标准客户端测试 `legacy`（2025-11-25）与 `auto`（2026-07-28）两种 HTTP 协议模式，并覆盖匿名拒绝、私域隔离、完整正文和只读工具集合。既有 stdio 协议仍保持 2025-06-18。具体商业 Work 平台的账号权限、连接入口和托管 OAuth 接入未作实际登录验证，不作全平台兼容承诺。
+
+## 检索日志
+
+服务记录每次只读查询，用来了解资料库的实际用法：MCP 的五个工具和 REST `/api/v1/search`。每条记录包含时间、渠道、客户端、工具、查询参数、命中概况（数量或是否找到）、错误代码和耗时；不记录条文或私域规范的正文。
+
+日志存放在服务状态目录的 `queries.db`，与 `auth.db` 并列，不进入资料备份。导出为 JSON Lines：
+
+```bash
+chinalaw-server queries --db /srv/chinalaw/library.sqlite3 --since 2026-10-01
+```
+
+个人令牌记为 `personal:<令牌名称>`（给每位使用者单独发令牌即可区分），OAuth 客户端记为其 client id，面板查询记为 `owner`。
+
+启动时加 `--no-query-log` 可关闭记录。
 
 ## 备份迁移
 

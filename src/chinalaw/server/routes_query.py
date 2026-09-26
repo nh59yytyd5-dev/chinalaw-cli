@@ -62,12 +62,25 @@ def revisions(request: Request, kind: str, id: str) -> dict:
 @router.get("/search")
 def search(request: Request, q: str, kind: str = "all", limit: int = 20) -> dict:
     value = principal(request)
-    return catalog.search_library(
-        request.app.state.config.db_path,
-        q,
-        kind=kind,
-        include_private=value.can_read_private,
-        limit=limit,
+
+    def call() -> dict:
+        return catalog.search_library(
+            request.app.state.config.db_path,
+            q,
+            kind=kind,
+            include_private=value.can_read_private,
+            limit=limit,
+        )
+
+    query_log = request.app.state.query_log
+    if query_log is None:
+        return call()
+    return query_log.run(
+        call,
+        channel="http",
+        client=value.log_label or value.client_id,
+        tool="search",
+        params={"query": q, "kind": kind, "limit": limit},
     )
 
 

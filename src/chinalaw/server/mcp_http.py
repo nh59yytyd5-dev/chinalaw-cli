@@ -16,6 +16,7 @@ from chinalaw.db import read_only_operation
 from chinalaw.server.auth_store import PRIVATE_SCOPE, PUBLIC_SCOPE, READ_SCOPES
 from chinalaw.server.config import ServerConfig
 from chinalaw.server.oauth import OwnerOAuth
+from chinalaw.server.query_log import QueryLog
 
 READ_ONLY = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
@@ -29,7 +30,7 @@ def _private_allowed() -> bool:
     return PRIVATE_SCOPE in token.scopes
 
 
-def make_mcp(config: ServerConfig, oauth: OwnerOAuth):
+def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None = None):
     server = MCPServer(
         "chinalaw",
         version=__version__,
@@ -53,9 +54,19 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth):
         ),
     )
 
-    @server.tool(annotations=READ_ONLY)
-    def chinalaw_resolve(name: str) -> dict:
-        """Resolve a public law name/alias to the local record and source metadata."""
+    def logged(tool: str, params: dict, call):
+        if query_log is None:
+            return call()
+        token = get_access_token()
+        return query_log.run(
+            call,
+            channel="mcp",
+            client=_log_label(token),
+            tool=tool,
+            params=params,
+        )
+
+    def resolve(name: str) -> dict:
         _private_allowed()
         if not 1 <= len(name) <= 200:
             raise ValueError("name must contain 1–200 characters")
@@ -63,19 +74,26 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth):
             return service.resolve(config.db_path, name)
 
     @server.tool(annotations=READ_ONLY)
-    def chinalaw_search(query: str, kind: str = "all", limit: int = 10) -> dict:
-        """Search grounded text. Private hits appear only with private-read authorization."""
-        return catalog.search_library(
-            config.db_path,
-            query,
-            kind=kind,
-            limit=limit,
-            include_private=_private_allowed(),
-        )
+    def chinalaw_resolve(name: str) -> dict:
+        """Resolve a public law name/alias to the local record and source metadata."""
+        return logged("resolve", {"name": name}, lambda: resolve(name))
 
     @server.tool(annotations=READ_ONLY)
-    def chinalaw_article(law: str, number: str, as_of: str | None = None) -> dict:
-        """Read one complete article with provenance, optionally at a historical date."""
+    def chinalaw_search(query: str, kind: str = "all", limit: int = 10) -> dict:
+        """Search grounded text. Private hits appear only with private-read authorization."""
+        return logged(
+            "search",
+            {"query": query, "kind": kind, "limit": limit},
+            lambda: catalog.search_library(
+                config.db_path,
+                query,
+                kind=kind,
+                limit=limit,
+                include_private=_private_allowed(),
+            ),
+        )
+
+    def article(law: str, number: str, as_of: str | None) -> dict:
         include_private = _private_allowed()
         if not 1 <= len(law) <= 200 or not 1 <= len(number) <= 60:
             raise ValueError("law or article number is too long")
@@ -91,10 +109,15 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth):
         return result or {"kind": "article_missing", "error": "article_not_found", "law": law}
 
     @server.tool(annotations=READ_ONLY)
-    def chinalaw_list(
-        kind: str = "law", query: str = "", page: int = 1, page_size: int = 20
-    ) -> dict:
-        """List documents in this library, with stable pagination and provenance."""
+    def chinalaw_article(law: str, number: str, as_of: str | None = None) -> dict:
+        """Read one complete article with provenance, optionally at a historical date."""
+        return logged(
+            "article",
+            {"law": law, "number": number, "as_of": as_of},
+            lambda: article(law, number, as_of),
+        )
+
+    def list_documents(kind: str, query: str, page: int, page_size: int) -> dict:
         if kind == "norm" and not _private_allowed():
             raise LibraryError("private_access_denied", "未获私域规范访问权限。", status=403)
         _private_allowed()
@@ -103,8 +126,17 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth):
         )
 
     @server.tool(annotations=READ_ONLY)
-    def chinalaw_document(kind: str, id: str, offset: int = 0, limit: int = 50) -> dict:
-        """Read complete clauses from a document; use offset to continue through long documents."""
+    def chinalaw_list(
+        kind: str = "law", query: str = "", page: int = 1, page_size: int = 20
+    ) -> dict:
+        """List documents in this library, with stable pagination and provenance."""
+        return logged(
+            "list",
+            {"kind": kind, "query": query, "page": page, "page_size": page_size},
+            lambda: list_documents(kind, query, page, page_size),
+        )
+
+    def document(kind: str, id: str, offset: int, limit: int) -> dict:
         private = _private_allowed()
         if kind == "norm" and not private:
             raise LibraryError("private_access_denied", "未获私域规范访问权限。", status=403)
@@ -119,6 +151,15 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth):
         )
         return result
 
+    @server.tool(annotations=READ_ONLY)
+    def chinalaw_document(kind: str, id: str, offset: int = 0, limit: int = 50) -> dict:
+        """Read complete clauses from a document; use offset to continue through long documents."""
+        return logged(
+            "document",
+            {"kind": kind, "id": id, "offset": offset, "limit": limit},
+            lambda: document(kind, id, offset, limit),
+        )
+
     app = server.streamable_http_app(
         json_response=True,
         host=config.host,
@@ -132,3 +173,9 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth):
         ),
     )
     return server, app
+
+
+def _log_label(token) -> str | None:
+    if token is None:
+        return None
+    return getattr(token, "log_label", None) or token.client_id

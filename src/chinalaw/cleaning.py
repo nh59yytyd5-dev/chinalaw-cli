@@ -75,6 +75,11 @@ DECIMAL_ARTICLE_RE = re.compile(
     r"^(?P<number_display>\d{1,3}(?:\.\d{1,2})+)(?!\s*条)"
     r"(?:[　\s]+|(?=[\u4e00-\u9fff]))(?P<body>.*)$"
 )
+# A paragraph that opens with an article number but goes on to cite a
+# paragraph/item of it (“第四十五条第二款规定的……”) is a cross-reference.
+ARTICLE_REFERENCE_BODY_RE = re.compile(
+    r"^(?:第[〇零一二三四五六七八九十百千两0-9]+[款项目]|[、和及与至或]\s*第|规定|所称|的)"
+)
 NUMBERED_ITEM_RE = re.compile(
     r"^(?P<number>\d{1,3})[.．]\s*(?P<body>[\u4e00-\u9fff].*)$"
 )
@@ -376,12 +381,37 @@ def _is_metadata_article_boundary(text: str) -> bool:
     return not is_reference_fragment
 
 
+def _article_heading(text: str, current: dict | None, *, statute_numbering: bool):
+    """Match ``text`` as an article heading, or return None when it only looks like one.
+
+    Decimal numbers (``1.1``) number exchange and policy rules; in a document
+    already numbered ``第X条`` they are table cells (``1.0升（含）以下``). A line
+    repeating the current article number, or citing a paragraph of an article,
+    continues the current article.
+    """
+    match = ARTICLE_RE.match(text)
+    if match is None:
+        if statute_numbering:
+            return None
+        return DECIMAL_ARTICLE_RE.match(text)
+    body = match.group("body")
+    # Headings separate number and text with a space; a citation runs on.
+    if body[:1] not in {" ", "\u3000", "\t"} and ARTICLE_REFERENCE_BODY_RE.match(body):
+        return None
+    if current is not None and normalize_article_number(
+        match.group("number_display")
+    ) == current.get("number"):
+        return None
+    return match
+
+
 def parse_articles_from_docx(docx_bytes: bytes) -> list[dict]:
     paragraphs = _iter_docx_paragraphs(docx_bytes)
     articles: list[dict] = []
     current: dict | None = None
     context = _new_parse_context()
     position = 1
+    statute_numbering = False
 
     for paragraph in paragraphs:
         text = _clean_text(paragraph["text"])
@@ -406,10 +436,11 @@ def parse_articles_from_docx(docx_bytes: bytes) -> list[dict]:
             _update_context(context, structural_heading)
             continue
 
-        article_match = ARTICLE_RE.match(text) or DECIMAL_ARTICLE_RE.match(text)
+        article_match = _article_heading(text, current, statute_numbering=statute_numbering)
         if article_match:
             number_display = article_match.group("number_display")
             body = article_match.group("body").strip()
+            statute_numbering = statute_numbering or number_display.startswith("第")
 
             if current is not None:
                 articles.append(current)
@@ -469,6 +500,7 @@ def parse_articles_from_text(text: str) -> list[dict]:
     current: dict | None = None
     context = _new_parse_context()
     position = 1
+    statute_numbering = False
 
     for raw_line in text.splitlines():
         line = _clean_text(raw_line.strip().lstrip("#").strip())
@@ -481,10 +513,11 @@ def parse_articles_from_text(text: str) -> list[dict]:
             _update_context(context, line)
             continue
 
-        article_match = ARTICLE_RE.match(line) or DECIMAL_ARTICLE_RE.match(line)
+        article_match = _article_heading(line, current, statute_numbering=statute_numbering)
         if article_match:
             number_display = article_match.group("number_display")
             body = article_match.group("body").strip()
+            statute_numbering = statute_numbering or number_display.startswith("第")
             if current is not None:
                 articles.append(current)
             current = {

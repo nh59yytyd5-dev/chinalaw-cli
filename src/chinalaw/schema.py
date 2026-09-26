@@ -9,7 +9,7 @@ v0.1 策略：
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 SCHEMA_V1_SQL = """
@@ -540,3 +540,18 @@ CREATE INDEX IF NOT EXISTS idx_library_jobs_state
 """
 
 SCHEMA_V14_SQL = SCHEMA_V13_SQL + SCHEMA_V14_DELTA_SQL
+
+
+# v15: legal works and status provenance on public laws.
+# ``work_id`` groups the separately stored versions of one law (flk records
+# every version under its own id); NULL means "not declared", and readers fall
+# back to grouping by identical title, issuing body and level.
+# ``status_checked_at`` is when ``status`` was last confirmed against the
+# upstream source, independent of when the text was fetched.
+SCHEMA_V15_DELTA_COLUMNS = (
+    ("work_id", "TEXT"),
+    ("status_checked_at", "TEXT"),
+)
+SCHEMA_V15_DELTA_SQL = """
+CREATE INDEX IF NOT EXISTS idx_laws_work_id ON laws(work_id);
+"""

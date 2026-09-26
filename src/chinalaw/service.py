@@ -11,7 +11,7 @@ import os
 import re
 import shlex
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from chinalaw.aliases import display_short_title, merge_law_aliases
@@ -969,6 +969,167 @@ def _revision_sort_date(revision: dict) -> date | None:
     )
 
 
+# 法律上的“今天”以北京时间为准：施行日零点起生效，服务器时区不影响结果。
+_LEGAL_TZ = timezone(timedelta(hours=8))
+
+
+def legal_today() -> date:
+    return datetime.now(_LEGAL_TZ).date()
+
+
+def _work_member_rows(conn: sqlite3.Connection, row: sqlite3.Row) -> list[sqlite3.Row]:
+    """All stored versions of the law ``row`` belongs to (itself included).
+
+    ``work_id`` is authoritative when set. Without it, records that share
+    title, level and issuing body are treated as versions of one law — flk
+    keeps each version under its own id with an identical title.
+    """
+    if row["work_id"]:
+        rows = conn.execute(
+            "SELECT * FROM laws WHERE work_id = ? AND status != 'seed'", (row["work_id"],)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM laws
+            WHERE work_id IS NULL AND status != 'seed'
+              AND title = ? AND level = ? AND COALESCE(issuing_body, '') = COALESCE(?, '')
+            """,
+            (row["title"], row["level"], row["issuing_body"]),
+        ).fetchall()
+    return rows or [row]
+
+
+def _version_start(row) -> date | None:
+    return _parse_iso_date(row["effective_at"]) or _parse_iso_date(row["released_at"])
+
+
+def _work_version_starts(conn: sqlite3.Connection, members: list[sqlite3.Row]) -> set[date]:
+    """Start dates of every version in the work: each record and its stored revisions."""
+    starts = {start for member in members if (start := _version_start(member)) is not None}
+    for member in members:
+        for revision in _fetch_revisions(conn, member["id"]):
+            start = _revision_sort_date(revision)
+            if start is not None:
+                starts.add(start)
+    return starts
+
+
+def _status_as_of(
+    member: sqlite3.Row,
+    members: list[sqlite3.Row],
+    as_of: date,
+    *,
+    start: date | None = None,
+    starts: set[date] | None = None,
+) -> tuple[str, str | None]:
+    """Effective status of one version on ``as_of``, derived from dates.
+
+    Returns ``(status, note)``. Scheduled changes (a version taking effect, the
+    previous one being superseded) follow from effective dates alone. A repeal
+    needs ``repealed_at``; when upstream says repealed without a date, only the
+    present is certain. ``start`` overrides the record's own date when the
+    version is a stored revision; ``starts`` lists every version of the work.
+    """
+    if start is None:
+        start = _version_start(member)
+    if starts is None:
+        starts = {s for other in members if (s := _version_start(other)) is not None}
+    if start is not None and start > as_of:
+        return "pending_effective", None
+    if start is not None and any(start < other <= as_of for other in starts):
+        return "amended", None
+    repealed_at = _parse_iso_date(member["repealed_at"])
+    if repealed_at is not None:
+        return ("repealed", None) if repealed_at <= as_of else ("current", None)
+    if member["status"] == "repealed":
+        if as_of >= legal_today():
+            return "repealed", None
+        return "unknown", "上游标注已废止，但缺少废止日期，无法判断该日期是否仍然有效。"
+    if start is None:
+        return member["status"], "缺少施行日期，沿用上游标注的状态。"
+    return "current", None
+
+
+def _select_work_version_as_of(
+    conn: sqlite3.Connection, row: sqlite3.Row, as_of: date
+) -> tuple[sqlite3.Row, list[dict], dict, list[sqlite3.Row]] | None:
+    """Pick the revision in force on ``as_of`` across every version of the work.
+
+    Returns ``(member_row, member_revisions, revision, members)``. On equal
+    dates the record the caller resolved wins, so an explicit id stays stable.
+    """
+    members = _work_member_rows(conn, row)
+    best: tuple | None = None
+    for member in members:
+        revisions = _fetch_revisions(conn, member["id"])
+        selected = _select_revision_as_of(revisions, as_of)
+        if selected is None:
+            continue
+        key = (_revision_sort_date(selected), member["id"] == row["id"])
+        if best is None or key > best[0]:
+            best = (key, member, revisions, selected)
+    if best is None:
+        return None
+    _key, member, revisions, selected = best
+    return member, revisions, selected, members
+
+
+def _annotate_effective_status(
+    conn: sqlite3.Connection,
+    law: dict,
+    member: sqlite3.Row,
+    members: list[sqlite3.Row],
+    as_of: date,
+    revision: dict | None = None,
+) -> None:
+    status, note = _status_as_of(
+        member,
+        members,
+        as_of,
+        start=_revision_sort_date(revision) if revision is not None else None,
+        starts=_work_version_starts(conn, members),
+    )
+    law["work_id"] = member["work_id"]
+    law["effective_status_as_of"] = status
+    law["effective_status_date"] = as_of.isoformat()
+    law["status_checked_at"] = member["status_checked_at"]
+    if note:
+        law["effective_status_note"] = note
+    law["work_versions"] = [
+        {
+            "id": other["id"],
+            "effective_at": other["effective_at"],
+            "released_at": other["released_at"],
+            "status": other["status"],
+        }
+        for other in sorted(members, key=lambda item: _version_start(item) or date.min)
+    ]
+
+
+def _current_work_version(
+    conn: sqlite3.Connection, row: sqlite3.Row, via: str | None
+) -> tuple[sqlite3.Row, list[sqlite3.Row]]:
+    """Without a date, a name means the version in force today.
+
+    Resolution ranks by the stored status, which lags scheduled changes; dates
+    decide instead. An explicit id always keeps the requested record.
+    """
+    members = _work_member_rows(conn, row)
+    if via == "id_match" or len(members) < 2:
+        return row, members
+    today = legal_today()
+    in_force = [
+        member
+        for member in members
+        if _status_as_of(member, members, today)[0] == "current"
+        and _count_articles_for_law(conn, member["id"]) > 0
+    ]
+    if not in_force or any(member["id"] == row["id"] for member in in_force):
+        return row, members
+    return max(in_force, key=lambda member: _version_start(member) or date.min), members
+
+
 def _select_revision_as_of(revisions: list[dict], as_of: date) -> dict | None:
     applicable = [
         revision
@@ -1744,21 +1905,24 @@ def _get_law_internal(
 
     with connect(db_path) as conn:
         migrate(conn)
-        row = _resolve_law_row(conn, identifier)
+        row, via = _resolve_law_row_with_via(conn, identifier)
         if row is None:
             return None
 
-        revisions = _fetch_revisions(conn, row["id"])
-        categories = _fetch_categories_for_law(conn, row["id"])
         if as_of is not None:
-            selected = _select_revision_as_of(revisions, as_of)
-            if selected is None:
+            picked = _select_work_version_as_of(conn, row, as_of)
+            if picked is None:
                 return None
-            law = _build_law_from_revision_snapshot(conn, row, revisions, selected)
+            member, revisions, selected, members = picked
+            law = _build_law_from_revision_snapshot(conn, member, revisions, selected)
             if law is not None:
-                law["categories"] = categories
+                law["categories"] = _fetch_categories_for_law(conn, member["id"])
+                _annotate_effective_status(conn, law, member, members, as_of, selected)
             return _law_without_revision_snapshots(law)
 
+        row, members = _current_work_version(conn, row, via)
+        revisions = _fetch_revisions(conn, row["id"])
+        categories = _fetch_categories_for_law(conn, row["id"])
         law = _row_to_law(row)
         articles = conn.execute(
             "SELECT * FROM articles WHERE law_id = ? ORDER BY position",
@@ -1772,6 +1936,7 @@ def _get_law_internal(
         law["current_revision"] = revisions[0] if revisions else None
         law["selected_revision"] = law["current_revision"]
         law["categories"] = categories
+        _annotate_effective_status(conn, law, row, members, legal_today())
         return _law_without_revision_snapshots(law)
 
 
@@ -1873,14 +2038,20 @@ def diagnose_article_miss(
     if parsed_as_of is not None:
         law_as_of = _get_law_internal(db_path, name, as_of=parsed_as_of)
         if law_as_of is None:
+            starts = [
+                version.get("effective_at") or version.get("released_at")
+                for version in law.get("work_versions") or []
+            ]
+            earliest = min((start for start in starts if start), default=None)
+            earliest_note = f"本地最早的版本自 {earliest} 起施行。" if earliest else ""
             return {
                 "reason": "version_not_found_as_of",
                 "law_id": law.get("id"),
                 "as_of": as_of_value,
+                "earliest_version_effective_at": earliest,
                 "hint": (
-                    f"法规已入库，但本地没有 {as_of_value} 时点可用版本。"
-                    f"先 `{history_cmd}` 查看版本；不要用 fetch 当前版本替代"
-                    "该时点判断。"
+                    f"法规已入库，但本地没有 {as_of_value} 时点可用版本。{earliest_note}"
+                    f"先 `{history_cmd}` 查看版本；不要用现行版本替代该时点的条文。"
                 ),
                 "suggested_history": history_cmd,
             }
@@ -2432,7 +2603,7 @@ def _get_article_internal(
         return None
     with connect(db_path) as conn:
         migrate(conn)
-        row = _resolve_law_row(conn, law_identifier)
+        row, via = _resolve_law_row_with_via(conn, law_identifier)
         if row is None:
             # 公开法规未命中——尝试 norm fallback（仅当未指定 as_of）
             if include_norm and as_of is None:
@@ -2441,21 +2612,20 @@ def _get_article_internal(
                     return fallback
             return None
 
-        law = _row_to_law(
-            row, article_count=_count_articles_for_law(conn, row["id"])
-        )
-        revisions = _fetch_revisions(conn, row["id"])
-        categories = _fetch_categories_for_law(conn, row["id"])
         if as_of is not None:
-            selected = _select_revision_as_of(revisions, as_of)
-            if selected is None:
+            picked = _select_work_version_as_of(conn, row, as_of)
+            if picked is None:
                 return None
+            member, revisions, selected, members = picked
             law_from_revision = _build_law_from_revision_snapshot(
-                conn, row, revisions, selected
+                conn, member, revisions, selected
             )
             if law_from_revision is None:
                 return None
-            law_from_revision["categories"] = categories
+            law_from_revision["categories"] = _fetch_categories_for_law(conn, member["id"])
+            _annotate_effective_status(
+                conn, law_from_revision, member, members, as_of, selected
+            )
             if law_from_revision.get("error"):
                 return {
                     "kind": "article_result",
@@ -2485,11 +2655,17 @@ def _get_article_internal(
                 "requested_number": number,
             }
 
+        row, members = _current_work_version(conn, row, via)
+        law = _row_to_law(
+            row, article_count=_count_articles_for_law(conn, row["id"])
+        )
+        revisions = _fetch_revisions(conn, row["id"])
         law["revisions"] = revisions
         law["revision_count"] = len(revisions)
         law["current_revision"] = revisions[0] if revisions else None
         law["selected_revision"] = law["current_revision"]
-        law["categories"] = categories
+        law["categories"] = _fetch_categories_for_law(conn, row["id"])
+        _annotate_effective_status(conn, law, row, members, legal_today())
         art = conn.execute(
             "SELECT * FROM articles WHERE law_id = ? AND number = ?",
             (row["id"], norm),
@@ -3262,7 +3438,14 @@ def history(db_path: Path | str, identifier: str) -> dict | None:
         if row is None:
             return None
         law = _row_to_law(row, article_count=_count_articles_for_law(conn, row["id"]))
-        revisions = _fetch_revisions(conn, row["id"])
+        members = _work_member_rows(conn, row)
+        revisions = [
+            revision for member in members for revision in _fetch_revisions(conn, member["id"])
+        ]
+        revisions.sort(
+            key=lambda revision: _revision_sort_date(revision) or date.min, reverse=True
+        )
+        _annotate_effective_status(conn, law, row, members, legal_today())
         return {
             "law": law,
             "revisions": [

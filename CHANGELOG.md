@@ -3,6 +3,30 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 新增
+
+- 服务端检索日志：记录 MCP 工具与 REST 检索的查询参数、命中概况和耗时，不记录正文；存于状态目录 `queries.db`，用 `chinalaw-server queries` 导出；个人令牌按令牌名称区分使用者。
+
+- 法规作品：`laws` 新增 `work_id`，同一部法规分别入库的各个版本视为一个作品；未声明时按相同标题、层级和制定机关归组。
+- `as_of` 在整个作品的所有版本中选取当日有效的版本；不带日期时，法规名解析到今天有效的版本（按北京时间，施行日零点起生效）。
+- `get` / `article` / `history` 返回按日期推算的 `effective_status_as_of`，以及 `work_versions`、`status_checked_at`；`history` 列出作品的全部版本。
+- 法规 JSON 可附 `work_id`、`status_checked_at`、`relations`（写入 `law_relations`）。
+
+### 修正
+
+- 同一部法规的多个版本分别入库时 `as_of` 取不到旧版本：例如民事诉讼法 2017 版已入库，`--as-of 2018-01-01` 仍报 `version_not_found_as_of`。
+- 时点早于本地最早版本时，诊断给出 `earliest_version_effective_at`。
+- 条文切分：段首引用本条或他条款项（“第四十五条第二款规定的……”，编号后无空格）不再被当作新条；已按“第X条”编号的文件中，表格里的小数（“1.0升”）不再被当作条号。兵役法、车船税法、消费税暂行条例等此前切分失败。
+- 同一记录内保存多个历史版本（如刑法）时，按所选版本的施行日期推算效力，不再误报“尚未生效”。
+- 备份校验改用当前 schema 生成字段清单，不再固定为 v14。
+- `chinalaw-fetching`、`chinalaw-searching` skill 不再把一般部门规章和地方政府规章指向 `flk_npc`：flk 不收录这两类规范。
+
+### 兼容性
+
+- 数据库升级至 schema 15（`laws.work_id`、`laws.status_checked_at`），由 `migrate()` 自动完成；服务器需先执行 `chinalaw-server init` 升级。
+
 ## [0.6.0] — 2026-09-23
 
 ### 新增
