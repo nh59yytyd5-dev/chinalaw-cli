@@ -39,6 +39,7 @@ from chinalaw.document_numbers import index_document_number
 from chinalaw.search_indexes import (
     delete_article_search_indexes,
     insert_article_search_index,
+    reindex_law_articles,
     replace_law_search_indexes,
 )
 
@@ -198,6 +199,7 @@ def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
     validate_law_payload(normalized, require_articles=False)
 
     law_id = normalized["id"]
+    before = conn.execute("SELECT title, level FROM laws WHERE id = ?", (law_id,)).fetchone()
     conn.execute(
         """
         UPDATE laws SET
@@ -243,6 +245,9 @@ def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
         short_title=normalized.get("short_title"),
         aliases=normalized.get("aliases", []),
     )
+    # Article index rows carry the law title and level tier.
+    if before is not None and tuple(before) != (normalized["title"], normalized["level"]):
+        reindex_law_articles(conn, law_id)
 
 
 def prepare_law_payload(payload: dict) -> dict:
@@ -432,7 +437,7 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
             article_id=article_id,
             law_id=law_id,
             law_title=payload["title"],
-            number_display=number_display,
+            law_level=payload.get("level"),
             text=text,
         )
         count += 1

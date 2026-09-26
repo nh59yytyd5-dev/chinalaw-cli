@@ -13,9 +13,18 @@
 - `as_of` 在整个作品的所有版本中选取当日有效的版本；不带日期时，法规名解析到今天有效的版本（按北京时间，施行日零点起生效）。
 - `get` / `article` / `history` 返回按日期推算的 `effective_status_as_of`，以及 `work_versions`、`status_checked_at`；`history` 列出作品的全部版本。
 - 法规 JSON 可附 `work_id`、`status_checked_at`、`relations`（写入 `law_relations`）。
+- `search` 新增 `--as-of`（按案件时间检索）、`--status`、`--level`、`--region`、`--versions`；CLI、stdio MCP、远端 MCP 与 REST 同步。命中附 `match_mode`、`work_id`、`effective_status_as_of`、`status_checked_at`、`other_versions`，结果顶层附 `retrieval`。
+- 引用识别：检索“民法典第五百零四条”“公司法 15 条”“刑法133条之一”时，该条排在最前（`match_mode: "citation"`）。
+- 远端 MCP 新增 `chinalaw_applicable`（按日期返回时间效力规则线索）。
+
+### 变更
+
+- 条文全文索引改为二元组（contentless，不再复制一份正文）：2 字查询不再全表扫描，全国层级 8.9 万条文的库从 260MB 降到 189MB。精确检索语义不变——每个片段须原样出现在条文或法规标题中；1–2 字查询现在与更长的查询一样也匹配法规标题。
+- 检索结果按推算效力、层级、相关度排序（现行在前，法律、行政法规、司法解释在前，地方性法规在后）；同一法规的多个版本默认只保留一个。只看 `counts.total` 的调用方不受影响，但返回顺序会变化。
 
 ### 修正
 
+- 条号简写“133之一”“第133条之一”可以识别（#12）。
 - 同一部法规的多个版本分别入库时 `as_of` 取不到旧版本：例如民事诉讼法 2017 版已入库，`--as-of 2018-01-01` 仍报 `version_not_found_as_of`。
 - 时点早于本地最早版本时，诊断给出 `earliest_version_effective_at`。
 - 条文切分：段首引用本条或他条款项（“第四十五条第二款规定的……”，编号后无空格）不再被当作新条；已按“第X条”编号的文件中，表格里的小数（“1.0升”）不再被当作条号。兵役法、车船税法、消费税暂行条例等此前切分失败。
@@ -25,7 +34,7 @@
 
 ### 兼容性
 
-- 数据库升级至 schema 15（`laws.work_id`、`laws.status_checked_at`），由 `migrate()` 自动完成；服务器需先执行 `chinalaw-server init` 升级。
+- 数据库升级至 schema 16（v15：`laws.work_id`、`laws.status_checked_at`；v16：重建条文索引），由 `migrate()` 自动完成，全国层级的库约需数秒；服务器需先执行 `chinalaw-server init` 升级。
 
 ## [0.6.0] — 2026-09-23
 

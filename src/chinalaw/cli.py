@@ -118,6 +118,23 @@ def _add_search_parser(sub) -> None:
         default="all",
         help="匹配范围（默认全部）",
     )
+    p_search.add_argument(
+        "--as-of",
+        dest="as_of",
+        help="按该日期（YYYY-MM-DD）判断效力、选取版本，即按案件时间检索；默认今天",
+    )
+    p_search.add_argument(
+        "--status",
+        help="只要这些效力状态，逗号分隔：current,amended,repealed,pending_effective,unknown",
+    )
+    p_search.add_argument("--level", help="只要这些层级，逗号分隔，如 law,judicial_interpretation")
+    p_search.add_argument("--region", help="地方性法规的地域，如 上海市；指定后地方性法规不降权")
+    p_search.add_argument(
+        "--versions",
+        choices=["folded", "all"],
+        default="folded",
+        help="folded：同一法规只显示一个版本（默认）；all：显示所有版本",
+    )
     _add_format_arg(p_search)
     _add_snapshot_out_arg(p_search)
 
@@ -1279,6 +1296,11 @@ def _handle_search(args, db_path: Path, fmt: str, parser: argparse.ArgumentParse
         kind=args.kind,
         in_laws=args.in_laws,
         in_part=args.in_part,
+        as_of=args.as_of,
+        status=args.status,
+        level=args.level,
+        region=args.region,
+        versions=args.versions,
     )
     _record_snapshot(args, db_path, "search", result)
     _emit(result, fmt, formatters.search_to_markdown)

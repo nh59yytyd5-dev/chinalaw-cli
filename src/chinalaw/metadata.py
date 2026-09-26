@@ -740,8 +740,12 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "chinalaw_search",
         "title": "Search Chinese law database",
         "description": (
-            "Search local laws/articles/norms. Use kind=article for legal "
-            "basis discovery. By default private norm hits are excluded and "
+            "Exact search of local laws/articles/norms: every space-separated "
+            "segment must occur verbatim. Use kind=article for legal basis "
+            "discovery. Public hits are judged on as_of (default today): laws "
+            "in force and national levels first, one version per law unless "
+            "versions=all. A citation such as 民法典第五百零四条 returns that "
+            "article first. By default private norm hits are excluded and "
             "kind=norm is rejected unless the server is started with "
             "--allow-private-norms. Risk: read."
         ),
@@ -754,6 +758,17 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
                 "kind": {"type": "string", "enum": ["article", "law", "norm", "all"]},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                 "in_laws": {"type": "string"},
+                "as_of": {"type": "string", "description": "YYYY-MM-DD"},
+                "status": {
+                    "type": "string",
+                    "description": (
+                        "comma-separated: current, amended, repealed, "
+                        "pending_effective, unknown"
+                    ),
+                },
+                "level": {"type": "string", "description": "comma-separated LawLevel values"},
+                "region": {"type": "string"},
+                "versions": {"type": "string", "enum": ["folded", "all"]},
             },
             "required": ["query"],
             "additionalProperties": False,

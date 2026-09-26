@@ -23,7 +23,7 @@
 ### 协议不包含
 
 - Python 实现细节、SQLite 内部结构、任何模块名 / 类名 / 函数名
-- FTS5 tokenizer 的具体选择（trigram 是当前实现，未来可换 ngram / jieba）
+- FTS5 tokenizer 的具体选择（当前：条文为二元组，法规标题与私域规范为 trigram）
 - 同步真实数据源（flk_npc）的内部协议
 - 内部 helper 函数与日志格式
 - 任何只在仓库内部使用、不被外部消费的字段
@@ -48,7 +48,7 @@
 ## 2. 数据模型（SQLite DDL）
 
 > 所有表 schema 由 `chinalaw.schema` 模块在显式写入流程调用 `migrate()` 时创建。
-> 当前 schema 版本 = **15**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
+> 当前 schema 版本 = **16**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
 >
 > `law_relations` / `applicability_rules` 已进入 alpha 协议，用于时间效力检索线索。`alias_records` / `call_log` 仍属后续方向。
 
@@ -310,6 +310,7 @@ CREATE TABLE meta (
 - `schema_version`：当前 SQLite schema 版本（整数串）。
 - `last_sync_at`：最近一次 `sync` 命令完成时间。
 - `last_applicability_sync_at`：最近一次 `sync --applicability` 完成时间。
+- `search_tokenizer_version`（v16）：条文索引的切分规则版本（当前 `bigram-1`）。规则改变须伴随 schema 迁移重建条文索引。
 - `source:<source>:last_page` / `next_page` / `last_mode` / `last_incremental_to`：sync 进度元数据。
 
 ### 2.9 受控枚举
@@ -607,6 +608,15 @@ JSON 输出：
 | `--limit` | int | 20 | 各类命中各自的上限 |
 | `--kind` | enum | `all` | `article` / `law` / `norm` / `all` |
 | `--in` | str | 无 | 限定公开法规范围；多个法规名 / id / alias 用逗号分隔 |
+| `--as-of` | YYYY-MM-DD | 今天（北京时间） | 按该日期判断效力、选取版本，即按案件时间检索 |
+| `--status` | str | 不过滤 | 只要这些效力状态（按 `--as-of` 推算），逗号分隔：`current` / `amended` / `repealed` / `pending_effective` / `unknown` |
+| `--level` | str | 不过滤 | 只要这些层级（§2.9 LawLevel），逗号分隔 |
+| `--region` | str | 不过滤 | 地方性法规、地方政府规章只保留制定机关或标题含该地名的，且不再降权；全国层级不受影响 |
+| `--versions` | enum | `folded` | `folded`：同一法规作品只保留一个版本；`all`：各版本都列出 |
+
+远端 MCP 的 `chinalaw_search`、REST `/api/v1/search`、stdio MCP 的 `chinalaw_search`
+接受同名参数（`as_of`、`status`、`level`、`region`、`versions`）。取值不合法时报错，
+不静默忽略。
 
 JSON 输出 schema：
 
@@ -639,18 +649,48 @@ JSON 输出 schema：
       "text": "string",
       "source_url": "string",
       "freshness_days": "integer|null",
-      "score": "number",
-      "match_kind": "primary|relevant"
+      "score": "number|null",
+      "match_kind": "primary|relevant",
+      "match_mode": "citation|exact",
+      "work_id": "string|null",
+      "effective_status_as_of": "current|amended|repealed|pending_effective|unknown",
+      "effective_status_note": "string | 仅在状态无法由日期确定时出现",
+      "status_checked_at": "ISO datetime|null",
+      "other_versions": "integer | 折叠时出现：同一作品另有几个版本也命中"
     }
   ],
-  "law_hits": [Law],
+  "law_hits": [Law + {"work_id", "effective_status_as_of", "status_checked_at", "other_versions"}],
   "norm_clause_hits": [{...}],
   "norm_source_hits": [NormSource],
+  "retrieval": {
+    "as_of": "YYYY-MM-DD",
+    "versions": "folded|all",
+    "status": ["string"] | null,
+    "level": ["string"] | null,
+    "region": "string|null",
+    "citation": "boolean"
+  },
   "conflict_notice": "string | 仅公开法与私域规范同时命中时出现，见 §2.9"
 }
 ```
 
-**FTS5 vs LIKE**：所有 term ≥ 3 字 → FTS5（trigram，`AND` 连接）；任一 term < 3 字 → LIKE 子串匹配。`strategy` 字段告知调用方使用了哪种。
+**匹配语义（精确检索）**：按空白拆分出的每个片段，都必须原样出现在条文正文或其法规标题中
+（英文字母不区分大小写）。条文用二元组索引缩小候选、再逐条做子串核对，命中集合与子串
+扫描相同；只有无法用索引缩小的查询（单个汉字、只有数字等）才走全表扫描。`strategy`：
+条文检索用上索引时为 `fts5`，否则为 `like`；只查法规（`--kind law`）时沿用标题索引的规则
+（所有 term ≥ 3 字 → `fts5`）。
+
+**排序与折叠**（公开法命中）：先按 `effective_status_as_of`（现行 → 尚未施行 → 待核 →
+已修改 / 已废止），再把只在法规标题里命中的条文排在正文命中之后，再按层级（法律、行政法规、
+司法解释、监察法规在前；地方性法规、地方政府规章在后，指定 `--region` 时不降权），最后看
+相关度。`--versions folded` 时，同一作品（§2.1 `work_id`）只保留一个版本：优先 `as_of`
+当日有效的版本，否则取最近的版本；其余版本计入 `other_versions`。`--status` 不含 `current`
+时不折叠，因为此时要的正是旧版本。
+
+**引用识别**：查询形如“民法典第五百零四条”“公司法 15 条”“刑法133条之一”，且法规名能
+确定解析（不是 `like_fallback`）时，该条排在最前，`match_mode = "citation"`，
+`retrieval.citation = true`；指定 `--as-of` 时取该日期有效的版本。指定 `--in` 或
+`--in-part` 时不做引用识别。
 
 **`--in` 语义**：只限制公开法规 / 公开条文命中范围，不读取私域规范。未解析的过滤项进入 `law_filter.unresolved`；如果全部过滤项均未解析，公开法规 / 条文命中为空。
 
@@ -2150,7 +2190,7 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
 
 以下是当前实现细节，不进入兼容承诺：
 
-- **FTS5 tokenizer 选择**（trigram）：未来可能切到 ngram / jieba，调用方应假设"中文检索可用"，不假设具体策略。
+- **FTS5 tokenizer 选择**（条文二元组、其余 trigram）：可能调整，调用方应假设"中文检索可用"，不假设具体策略；精确检索的命中语义（§4.1）不随之改变。
 - **LIKE 回退阈值**（< 3 字）：可能调整。`strategy` 字段告知实际策略。
 - **真实数据源同步内部协议**：flk_npc 适配器、bbbs / search_list / 增量窗口等，本期不承诺稳定。
   但建立在其上的 `fetch` 命令（参 §4.11）是协议级接口，其输入 / 输出 / 退出码受协议保护。

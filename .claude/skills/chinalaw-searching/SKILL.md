@@ -41,7 +41,7 @@ description: 中国法规检索方法 skill。何时使用：用户提法律问�
 
 | 命令 | 合法过滤 |
 |------|----------|
-| `search <kw>` | `--kind` / `--in <law>` / `--in-part <part>` / `--limit` |
+| `search <kw>` | `--kind` / `--in <law>` / `--in-part <part>` / `--limit` / `--as-of` / `--status` / `--level` / `--region` / `--versions` |
 | `laws` | `--level` / `--status` / `--limit`；没有 `--query` |
 | `discover` | `--query` / `--status` / `--limit`；没有位置参数 |
 | `applicable` | `--date` / `--topic` / `--law` / `--domain` |
@@ -50,6 +50,12 @@ description: 中国法规检索方法 skill。何时使用：用户提法律问�
 套到 `laws`。`--top`、`--law-filter`、`--headless` 都不是 chinalaw CLI flag。
 多关键词 query 推荐作为一个 shell 参数传入：`chinalaw search "保证期间届满 签字" --kind article --format json`。
 CLI 对未加引号的多个 query token 做空格合并容错，但加引号更清晰。
+
+search 是精确检索：每个片段都要原样出现在条文或法规标题里，0 命中时换成法条原文的
+用语再试，不要堆砌口语词。命中默认按今天推算效力（`effective_status_as_of`），现行和
+全国层级在前，同一法规只留一个版本（`other_versions` 是被折叠的版本数）；事实发生在
+过去时加 `--as-of <日期>`。查询写成“民法典第五百零四条”会直接把该条排在最前
+（`match_mode: citation`），仍要用 `article` 取全文核对。
 
 ### 方法 1：法规名称归一化
 
@@ -182,6 +188,7 @@ chinalaw relation 民法典 --format json
 | `outline <law> --with-text|--full-text --part <章节>` | 章节内全文 | 章节级深读 |
 | `search <kw> --in <law>` | 法规内全文搜 | 已知法规缩小范围 |
 | `search <kw> --in-part <章节>` | 章节内全文搜 | 长法（民法典 1260 条）的章节级精检 |
+| `search <kw> --as-of <案件日期>` | 按案件时间检索 | 每部法规取该日有效的版本，效力按该日推算 |
 | `cited-by <law>:<num>` | 反向引用 | 看某条被哪些条引用 |
 
 经典 fly weight：先

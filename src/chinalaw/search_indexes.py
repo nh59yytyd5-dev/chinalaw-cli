@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Iterable
 
 from chinalaw.aliases import common_law_aliases, display_short_title
+from chinalaw.search_tokens import index_tokens, tier_of
 
 
 def _clean_aliases(values: Iterable[object]) -> list[str]:
@@ -110,7 +111,7 @@ def _delete_mapped_fts_rows(
     map_table: str,
     map_key: str,
     value: str,
-    legacy_column: str,
+    legacy_column: str | None,
     expected_count: int,
 ) -> None:
     rows = conn.execute(
@@ -124,7 +125,7 @@ def _delete_mapped_fts_rows(
             [int(row[0]) for row in rows],
         )
         conn.execute(f"DELETE FROM {map_table} WHERE {map_key} = ?", (value,))
-    if len(rows) < expected_count:
+    if legacy_column is not None and len(rows) < expected_count:
         # Legacy/corrupt databases may have FTS rows without a mapping.  The
         # normal v11 path never reaches this scan; it is only a correctness
         # fallback while repairing incomplete indexes.
@@ -201,7 +202,9 @@ def delete_article_search_indexes(conn: sqlite3.Connection, law_id: str) -> None
         map_table="articles_fts_rows",
         map_key="law_id",
         value=law_id,
-        legacy_column="law_id",
+        # The contentless article index has no columns to scan; the v16
+        # rebuild left every row mapped.
+        legacy_column=None,
         expected_count=expected,
     )
 
@@ -212,14 +215,14 @@ def insert_article_search_index(
     article_id: str,
     law_id: str,
     law_title: str,
-    number_display: str,
+    law_level: str | None,
     text: str,
 ) -> None:
     rowid = _insert_fts_row(
         conn,
         fts_table="articles_fts",
-        columns=("article_id", "law_id", "law_title", "number_display", "text"),
-        values=(article_id, law_id, law_title, number_display, text),
+        columns=("tier", "title", "text"),
+        values=(tier_of(law_level), index_tokens(law_title), index_tokens(text)),
     )
     conn.execute(
         "INSERT INTO articles_fts_rows(article_id, law_id, fts_rowid) "
@@ -323,6 +326,44 @@ def insert_norm_clause_search_index(
     )
 
 
+def _fill_article_search_index(conn: sqlite3.Connection, law_id: str | None = None) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(articles_fts)")}
+    if "tier" not in columns:
+        # A pre-v16 trigram table met during an older migration step; the
+        # v16 step replaces it and fills the new one.
+        return
+    for article in conn.execute(
+        """
+        SELECT a.id, a.law_id, l.title AS law_title, l.level AS law_level, a.text
+        FROM articles a
+        JOIN laws l ON l.id = a.law_id
+        WHERE ? IS NULL OR a.law_id = ?
+        ORDER BY a.rowid
+        """,
+        (law_id, law_id),
+    ).fetchall():
+        insert_article_search_index(
+            conn,
+            article_id=article["id"],
+            law_id=article["law_id"],
+            law_title=article["law_title"],
+            law_level=article["law_level"],
+            text=article["text"],
+        )
+
+
+def reindex_law_articles(conn: sqlite3.Connection, law_id: str) -> None:
+    delete_article_search_indexes(conn, law_id)
+    _fill_article_search_index(conn, law_id)
+
+
+def rebuild_article_search_index(conn: sqlite3.Connection) -> None:
+    """Refill only the article index, e.g. after its tokenizer changed."""
+    conn.execute("DELETE FROM articles_fts_rows")
+    conn.execute("DELETE FROM articles_fts")
+    _fill_article_search_index(conn)
+
+
 def rebuild_search_indexes(conn: sqlite3.Connection) -> None:
     """Rebuild alias and FTS mappings from canonical base tables."""
 
@@ -369,22 +410,7 @@ def rebuild_search_indexes(conn: sqlite3.Connection) -> None:
             (law["id"], rowid),
         )
 
-    for article in conn.execute(
-        """
-        SELECT a.id, a.law_id, l.title AS law_title, a.number_display, a.text
-        FROM articles a
-        JOIN laws l ON l.id = a.law_id
-        ORDER BY a.rowid
-        """
-    ).fetchall():
-        insert_article_search_index(
-            conn,
-            article_id=article["id"],
-            law_id=article["law_id"],
-            law_title=article["law_title"],
-            number_display=article["number_display"],
-            text=article["text"],
-        )
+    _fill_article_search_index(conn)
 
     for source in conn.execute(
         "SELECT id, name, short_name, aliases FROM norm_sources ORDER BY rowid"

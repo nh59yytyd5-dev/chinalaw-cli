@@ -18,6 +18,7 @@ from chinalaw.aliases import display_short_title, merge_law_aliases
 from chinalaw.db import connect, connect_readonly, current_version, migrate
 from chinalaw.models import norm_source_type_binding_note, normalize_norm_source_type
 from chinalaw.schema import SCHEMA_VERSION
+from chinalaw.search_tokens import LOCAL_LEVELS, is_exact_phrase, match_expression
 
 # ---------- 辅助 ----------
 
@@ -99,7 +100,7 @@ def normalize_article_number(raw: str) -> str:
         s = article_with_suffix.group("article")
 
     inserted = re.fullmatch(
-        r"第?(?P<base>[0-9]+|[〇零一二三四五六七八九十百千万两]+)条之"
+        r"第?(?P<base>[0-9]+|[〇零一二三四五六七八九十百千万两]+)条?之"
         r"(?P<inserted>[0-9]+|[〇零一二三四五六七八九十百千万两]+)",
         s,
     )
@@ -1427,6 +1428,31 @@ def _in_clause(column: str, values: list[str] | None) -> tuple[str, list[str]]:
     return f" AND {column} IN ({placeholders})", list(values)
 
 
+_ARTICLE_HIT_COLUMNS = """
+    a.id, a.law_id, a.number, a.number_display, a.part, a.title, a.text, a.position,
+    l.title AS law_title, l.short_title AS law_short_title, l.level AS law_level,
+    l.status AS law_status, l.source_url AS law_source_url,
+    l.source_checked_at AS law_source_checked_at
+"""
+
+
+def _segment_check(terms: list[str], *, indexed: bool) -> tuple[str, list[str]]:
+    """Every segment verbatim in the article text or its law title.
+
+    ASCII letters compare case-insensitively, as the old trigram index did.
+    With the index, a segment that is a run of two or more Han characters
+    needs no check: its bigram phrase cannot match anything but the run.
+    """
+    clauses, params = [], []
+    for term in terms:
+        if indexed and is_exact_phrase(term):
+            continue
+        folded = term.lower()
+        clauses.append("(instr(lower(a.text), ?) > 0 OR instr(lower(l.title), ?) > 0)")
+        params.extend((folded, folded))
+    return " AND ".join(clauses), params
+
+
 def _search_articles(
     conn: sqlite3.Connection,
     *,
@@ -1436,50 +1462,63 @@ def _search_articles(
     limit: int,
     law_ids: list[str] | None = None,
     in_part: str | None = None,
+    tier: str | None = None,
+    law_where: str = "",
+    law_where_params: tuple = (),
 ) -> list[dict]:
+    """Exact article hits: every query segment occurs verbatim.
+
+    The bigram index narrows candidates and the segment check makes the set
+    identical to a substring scan (see search_tokens). ``use_fts`` is kept for
+    callers; the index is used whenever the query has a usable phrase.
+    """
+    del use_fts
     law_filter, law_params = _in_clause("a.law_id", law_ids)
     part_filter = ""
     part_params: list[str] = []
     if in_part:
         part_filter = " AND a.part LIKE ? ESCAPE '\\'"
         part_params = [_like_pattern(in_part)]
-    if use_fts:
+    match = match_expression(terms)
+    check, check_params = _segment_check(terms, indexed=match is not None)
+    check = f" AND {check}" if check else ""
+    extra = f"{law_filter}{part_filter}{law_where}"
+    extra_params = [*law_params, *part_params, *law_where_params]
+    if match is not None:
+        if tier is not None:
+            match = f"tier : {tier} AND {{title text}} : ({match})"
+        else:
+            match = f"{{title text}} : ({match})"
         rows = conn.execute(
             f"""
-            SELECT a.id, a.law_id, a.number, a.number_display, a.part,
-                   a.title, a.text, a.position,
-                   l.title AS law_title, l.short_title AS law_short_title,
-                   l.status AS law_status, l.source_url AS law_source_url,
-                   l.source_checked_at AS law_source_checked_at,
-                   bm25(articles_fts) AS score
+            SELECT {_ARTICLE_HIT_COLUMNS}, bm25(articles_fts, 0.0, 0.1, 1.0) AS score
             FROM articles_fts
-            JOIN articles a ON a.id = articles_fts.article_id
+            JOIN articles_fts_rows r ON r.fts_rowid = articles_fts.rowid
+            JOIN articles a ON a.id = r.article_id
             JOIN laws l ON l.id = a.law_id
-            WHERE articles_fts MATCH ?
-              {law_filter}{part_filter}
+            WHERE articles_fts MATCH ?{check}{extra}
             ORDER BY score
             LIMIT ?
             """,
-            (_to_fts_query(query), *law_params, *part_params, limit),
+            (match, *check_params, *extra_params, limit),
         ).fetchall()
     else:
-        where, params = _build_like_all_clause("a.text", terms)
+        tier_filter, tier_params = "", []
+        if tier is not None:
+            local = sorted(LOCAL_LEVELS)
+            op = "IN" if tier == "local" else "NOT IN"
+            tier_filter = f" AND l.level {op} ({', '.join('?' for _ in local)})"
+            tier_params = local
         rows = conn.execute(
             f"""
-            SELECT a.id, a.law_id, a.number, a.number_display, a.part,
-                   a.title, a.text, a.position,
-                   l.title AS law_title, l.short_title AS law_short_title,
-                   l.status AS law_status, l.source_url AS law_source_url,
-                   l.source_checked_at AS law_source_checked_at,
-                   0.0 AS score
+            SELECT {_ARTICLE_HIT_COLUMNS}, 0.0 AS score
             FROM articles a
             JOIN laws l ON l.id = a.law_id
-            WHERE {where}
-              {law_filter}{part_filter}
+            WHERE 1{check}{extra}{tier_filter}
             ORDER BY l.released_at DESC, a.position ASC
             LIMIT ?
             """,
-            [*params, *law_params, *part_params, limit],
+            [*check_params, *extra_params, *tier_params, limit],
         ).fetchall()
     return [_article_hit_from_row(row, terms) for row in rows]
 
@@ -1492,8 +1531,12 @@ def _search_laws(
     use_fts: bool,
     limit: int,
     law_ids: list[str] | None = None,
+    law_where: str = "",
+    law_where_params: tuple = (),
 ) -> list[dict]:
     law_filter, law_params = _in_clause("l.id", law_ids)
+    law_filter += law_where
+    law_params = [*law_params, *law_where_params]
     if use_fts:
         rows = conn.execute(
             f"""
@@ -1694,6 +1737,143 @@ def _resolve_law_filter(
     }
 
 
+# ---------- 检索结果的效力、层级与版本折叠 ----------
+
+# Levels ranked first: 法律、行政法规、司法解释、监察法规. Local levels last.
+_PRIMARY_LEVELS = frozenset(
+    {"law", "admin_regulation", "judicial_interpretation", "supervisory_regulation"}
+)
+_STATUS_RANK = {
+    "current": 0,
+    "pending_effective": 1,
+    "unknown": 2,
+    "amended": 3,
+    "repealed": 3,
+}
+SEARCH_STATUS_VALUES = tuple(_STATUS_RANK)
+SEARCH_VERSIONS_VALUES = ("folded", "all")
+_SEARCH_POOL_MAX = 500
+
+
+def _law_search_context(
+    conn: sqlite3.Connection, law_id: str, as_of: date, cache: dict
+) -> dict:
+    """Work, version start and derived status of one law, memoized per search."""
+    if law_id in cache:
+        return cache[law_id]
+    row = conn.execute("SELECT * FROM laws WHERE id = ?", (law_id,)).fetchone()
+    members = _work_member_rows(conn, row)
+    work_key = row["work_id"] or "~" + min(member["id"] for member in members)
+    starts_key = ("starts", work_key)
+    if starts_key not in cache:
+        cache[starts_key] = _work_version_starts(conn, members)
+    status, note = _status_as_of(row, members, as_of, starts=cache[starts_key])
+    context = {
+        "work_key": work_key,
+        "work_id": row["work_id"],
+        "level": row["level"],
+        "status": status,
+        "note": note,
+        "start": _version_start(row) or date.min,
+        "status_checked_at": row["status_checked_at"],
+    }
+    cache[law_id] = context
+    return context
+
+
+def _segments_missing_from_text(hit: dict, terms: list[str]) -> int:
+    text = (hit.get("text") or "").lower()
+    return sum(1 for term in terms if term.lower() not in text) if "text" in hit else 0
+
+
+def _level_rank(level: str | None, *, region: str | None) -> int:
+    if level in _PRIMARY_LEVELS:
+        return 0
+    if level in LOCAL_LEVELS:
+        return 0 if region else 2
+    return 1
+
+
+def _rank_and_fold(
+    conn: sqlite3.Connection,
+    hits: list[dict],
+    *,
+    law_key: str,
+    as_of: date,
+    statuses: set[str] | None,
+    versions: str,
+    region: str | None,
+    limit: int,
+    cache: dict,
+    terms: list[str] = (),
+) -> list[dict]:
+    """Order hits by derived status, level and relevance; fold a work's versions.
+
+    Folding keeps one version per work: the one in force on ``as_of`` when it
+    has hits, otherwise the latest version that has. The others are counted
+    in ``other_versions``. Asking for non-current statuses or ``versions=all``
+    turns folding off, since the old versions are then what was asked for.
+    """
+    annotated = []
+    for index, hit in enumerate(hits):
+        context = _law_search_context(conn, hit[law_key], as_of, cache)
+        if statuses is not None and context["status"] not in statuses:
+            continue
+        hit["work_id"] = context["work_id"]
+        hit["effective_status_as_of"] = context["status"]
+        hit["status_checked_at"] = context["status_checked_at"]
+        if context["note"]:
+            hit["effective_status_note"] = context["note"]
+        annotated.append((index, hit, context))
+
+    fold = versions == "folded" and (statuses is None or "current" in statuses)
+    if fold:
+        chosen: dict[str, tuple] = {}
+        laws_by_work: dict[str, set[str]] = {}
+        for _index, hit, context in annotated:
+            laws_by_work.setdefault(context["work_key"], set()).add(hit[law_key])
+            preference = (_STATUS_RANK.get(context["status"], 2), -context["start"].toordinal())
+            current = chosen.get(context["work_key"])
+            if current is None or preference < current[0]:
+                chosen[context["work_key"]] = (preference, hit[law_key])
+        annotated = [
+            item for item in annotated if chosen[item[2]["work_key"]][1] == item[1][law_key]
+        ]
+        for _index, hit, context in annotated:
+            hit["other_versions"] = len(laws_by_work[context["work_key"]]) - 1
+
+    annotated.sort(
+        key=lambda item: (
+            _STATUS_RANK.get(item[2]["status"], 2),
+            # Segments found only in the law title rank below the article text.
+            _segments_missing_from_text(item[1], terms),
+            _level_rank(item[2]["level"], region=region),
+            item[1].get("score") or 0.0,
+            item[0],
+        )
+    )
+    return [hit for _index, hit, _context in annotated[:limit]]
+
+
+def _law_scope_filter(
+    levels: list[str] | None, region: str | None
+) -> tuple[str, tuple]:
+    """SQL on ``laws l`` for the level and region filters."""
+    clauses, params = "", ()
+    if levels is not None:
+        clauses += f" AND l.level IN ({', '.join('?' for _ in levels)})"
+        params += tuple(levels)
+    if region:
+        local = sorted(LOCAL_LEVELS)
+        pattern = _like_pattern(region)
+        clauses += (
+            f" AND (l.level NOT IN ({', '.join('?' for _ in local)})"
+            " OR l.issuing_body LIKE ? ESCAPE '\\' OR l.title LIKE ? ESCAPE '\\')"
+        )
+        params += (*local, pattern, pattern)
+    return clauses, params
+
+
 # ---------- 对外接口 ----------
 
 def search(
@@ -1705,11 +1885,17 @@ def search(
     in_part: str | None = None,
     *,
     include_norm: bool = True,
+    as_of: str | None = None,
+    status: list[str] | str | None = None,
+    level: list[str] | str | None = None,
+    region: str | None = None,
+    versions: str = "folded",
 ) -> dict:
-    """混合检索：同时在 articles_fts 与 laws_fts 上跑 FTS5 查询。
+    """精确检索：每个查询片段都须原样出现在条文（或其法规标题）中。
 
-    trigram tokenizer 要求每个 token 至少 3 个字符，因此对于 1~2 字短查询
-    （如"过错"/"工资"），自动回退到 SQL LIKE 子串匹配。
+    条文走二元组索引，法规标题与私域规范仍走 trigram 索引，1~2 字查询回退到
+    LIKE。公开法命中按 ``as_of``（默认今天，北京时间）推算效力，现行在前、
+    法律/行政法规/司法解释在前；同一法规作品的多个版本默认只保留一个。
 
     ``in_part`` 仅作用于 article_hits（章节字段在条文表上），用于在长法
     （如民法典 1260 条）内按编/章/节文本进一步限定检索。
@@ -1719,43 +1905,80 @@ def search(
     """
     query = query.strip()
     in_part = in_part.strip() if in_part else None
+    options = _search_options(as_of, status, level, region, versions)
 
     terms = _split_search_terms(query)
     use_fts = _should_use_fts(terms)
-    strategy = "fts5" if use_fts else "like"
+    articles_indexed = match_expression(terms) is not None
+    wants_articles = kind in ("article", "all")
+    strategy = "fts5" if (articles_indexed if wants_articles else use_fts) else "like"
+    retrieval = {
+        "as_of": options["as_of"].isoformat(),
+        "versions": options["versions"],
+        "status": sorted(options["statuses"]) if options["statuses"] is not None else None,
+        "level": options["levels"],
+        "region": options["region"],
+    }
+
+    citation = None
+    if wants_articles and in_laws is None and not in_part:
+        citation = _citation_hit(db_path, query, as_of=_parse_iso_date(as_of) if as_of else None)
 
     with connect(db_path) as conn:
         migrate(conn)
         law_ids, law_filter = _resolve_law_filter(conn, in_laws)
         if not query:
-            return _empty_search_result(
-                query, kind, law_filter=law_filter, in_part=in_part
-            )
-        article_hits = (
-            _search_articles(
+            result = _empty_search_result(query, kind, law_filter=law_filter, in_part=in_part)
+            result["retrieval"] = retrieval
+            return result
+        scope_sql, scope_params = _law_scope_filter(options["levels"], options["region"])
+        cache: dict = {}
+        rank = {
+            "as_of": options["as_of"],
+            "statuses": options["statuses"],
+            "versions": options["versions"],
+            "region": options["region"],
+            "limit": limit,
+            "cache": cache,
+            "terms": terms,
+        }
+        pool = min(max(limit * 5, 50), _SEARCH_POOL_MAX)
+        article_hits: list[dict] = []
+        if wants_articles:
+            candidates = _tiered_article_candidates(
                 conn,
                 query=query,
                 terms=terms,
-                use_fts=use_fts,
-                limit=limit,
+                pool=pool,
                 law_ids=law_ids,
                 in_part=in_part,
+                levels=options["levels"],
+                region=options["region"],
+                scope=(scope_sql, scope_params),
             )
-            if kind in ("article", "all")
-            else []
-        )
-        law_hits = (
-            _search_laws(
+            for hit in candidates:
+                hit["match_mode"] = "exact"
+            article_hits = _rank_and_fold(conn, candidates, law_key="law_id", **rank)
+            if citation is not None:
+                article_hits = [citation] + [
+                    hit
+                    for hit in article_hits
+                    if (hit["law_id"], hit["number"]) != (citation["law_id"], citation["number"])
+                ]
+                article_hits = article_hits[:limit]
+        law_hits = []
+        if kind in ("law", "all") and not in_part:
+            law_candidates = _search_laws(
                 conn,
                 query=query,
                 terms=terms,
                 use_fts=use_fts,
-                limit=limit,
+                limit=pool,
                 law_ids=law_ids,
+                law_where=scope_sql,
+                law_where_params=scope_params,
             )
-            if kind in ("law", "all") and not in_part
-            else []
-        )
+            law_hits = _rank_and_fold(conn, law_candidates, law_key="id", **rank)
         if include_norm and kind in ("norm", "all") and law_filter is None and not in_part:
             norm_clause_hits = _search_norm_clauses(
                 conn,
@@ -1775,6 +1998,7 @@ def search(
             norm_clause_hits = []
             norm_source_hits = []
 
+    retrieval["citation"] = citation is not None
     result = _with_search_counts(
         {
             "query": query,
@@ -1786,12 +2010,134 @@ def search(
             "law_hits": law_hits,
             "norm_clause_hits": norm_clause_hits,
             "norm_source_hits": norm_source_hits,
+            "retrieval": retrieval,
         }
     )
     # 公开法与私域规范同时命中时给出顶层冲突提示（不做逐条语义判断）。
     if (article_hits or law_hits) and (norm_clause_hits or norm_source_hits):
         result["conflict_notice"] = NORM_CONFLICT_NOTICE
     return result
+
+
+_NUMERAL = r"[0-9〇零一二三四五六七八九十百千万两]+"
+_CITATION_RE = re.compile(
+    rf"^(?P<law>.+?)\s*(?P<number>第\s*{_NUMERAL}\s*条(?:\s*之\s*{_NUMERAL})?"
+    rf"|{_NUMERAL}\s*条(?:\s*之\s*{_NUMERAL})?|[0-9]+\s*之\s*{_NUMERAL})"
+    rf"(?:\s*第?\s*{_NUMERAL}\s*[款项目])*$"
+)
+
+
+def _citation_hit(db_path: Path | str, query: str, *, as_of: date | None) -> dict | None:
+    """``民法典第五百零四条`` / ``公司法 15 条``: the cited article itself.
+
+    Only a confident law name counts: a loose title match is not guessed at.
+    """
+    match = _CITATION_RE.match(query.strip())
+    if match is None:
+        return None
+    law_name = match.group("law").strip()
+    number = re.sub(r"\s+", "", match.group("number"))
+    with connect(db_path) as conn:
+        migrate(conn)
+        row, via = _resolve_law_row_with_via(conn, law_name)
+    if row is None or via == "like_fallback":
+        return None
+    found = _get_article_internal(db_path, row["id"] if as_of else law_name, number,
+                                  as_of=as_of, include_norm=False)
+    if not found or not found.get("article"):
+        return None
+    law, article = found["law"], found["article"]
+    return {
+        "law_id": law["id"],
+        "law_title": law["title"],
+        "law_short_title": law.get("short_title"),
+        "law_status": law.get("status"),
+        "number": article["number"],
+        "number_display": article["number_display"],
+        "part": article.get("part"),
+        "text": article["text"],
+        "source_url": law.get("source_url"),
+        "freshness_days": law.get("freshness_days"),
+        "score": None,
+        "match_kind": "primary",
+        "match_mode": "citation",
+        "work_id": law.get("work_id"),
+        "effective_status_as_of": law.get("effective_status_as_of"),
+        "status_checked_at": law.get("status_checked_at"),
+    }
+
+
+def _search_options(
+    as_of: str | None,
+    status: list[str] | str | None,
+    level: list[str] | str | None,
+    region: str | None,
+    versions: str,
+) -> dict:
+    parsed = legal_today() if not as_of else _parse_iso_date(as_of)
+    if parsed is None:
+        raise ValueError("as_of must be YYYY-MM-DD")
+    statuses = _split_filter_values(status)
+    if statuses is not None:
+        unknown = sorted(set(statuses) - set(SEARCH_STATUS_VALUES))
+        if unknown:
+            raise ValueError(f"unknown status: {', '.join(unknown)}")
+    levels = _split_filter_values(level)
+    if levels is not None:
+        from chinalaw.contracts import LAW_LEVEL_VALUES
+
+        unknown = sorted(set(levels) - LAW_LEVEL_VALUES)
+        if unknown:
+            raise ValueError(f"unknown level: {', '.join(unknown)}")
+    if versions not in SEARCH_VERSIONS_VALUES:
+        raise ValueError("versions must be folded or all")
+    return {
+        "as_of": parsed,
+        "statuses": set(statuses) if statuses is not None else None,
+        "levels": levels,
+        "region": (region or "").strip() or None,
+        "versions": versions,
+    }
+
+
+def _tiered_article_candidates(
+    conn: sqlite3.Connection,
+    *,
+    query: str,
+    terms: list[str],
+    pool: int,
+    law_ids: list[str] | None,
+    in_part: str | None,
+    levels: list[str] | None,
+    region: str | None,
+    scope: tuple[str, tuple],
+) -> list[dict]:
+    """National candidates first; local ones fill the pool, or compete with a region."""
+    tiers = []
+    if levels is None or any(level not in LOCAL_LEVELS for level in levels):
+        tiers.append("national")
+    if levels is None or any(level in LOCAL_LEVELS for level in levels):
+        tiers.append("local")
+    hits: list[dict] = []
+    for tier in tiers:
+        room = pool if (tier == "national" or region) else pool - len(hits)
+        if room <= 0:
+            continue
+        hits.extend(
+            _search_articles(
+                conn,
+                query=query,
+                terms=terms,
+                use_fts=True,
+                limit=room,
+                law_ids=law_ids,
+                in_part=in_part,
+                tier=tier,
+                law_where=scope[0],
+                law_where_params=scope[1],
+            )
+        )
+    return hits
 
 
 def get_law(db_path: Path | str, identifier: str) -> dict | None:

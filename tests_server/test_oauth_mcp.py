@@ -304,6 +304,7 @@ def test_mcp_http_rejects_anonymous_and_exposes_only_read_tools(owner_api):
         "chinalaw_article",
         "chinalaw_list",
         "chinalaw_document",
+        "chinalaw_applicable",
     }
     assert all(tool["annotations"]["readOnlyHint"] for tool in tools)
     query = owner_api.post(
