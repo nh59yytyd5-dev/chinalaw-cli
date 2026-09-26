@@ -41,6 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_queries_at ON queries(at);
 # copying normative text into the log.
 _OUTCOME_KEYS = {
     "search": ("strategy", "counts"),
+    "applicable": ("ok", "match_count"),
     "resolve": ("matched", "via", "id"),
     "article": ("kind", "found", "law_id", "reason", "error"),
     "list": ("total",),

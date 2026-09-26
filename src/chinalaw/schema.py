@@ -9,7 +9,7 @@ v0.1 策略：
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 SCHEMA_V1_SQL = """
@@ -555,3 +555,23 @@ SCHEMA_V15_DELTA_COLUMNS = (
 SCHEMA_V15_DELTA_SQL = """
 CREATE INDEX IF NOT EXISTS idx_laws_work_id ON laws(work_id);
 """
+
+# v16: the article index moves from a trigram table that copied every article
+# to a contentless table of Python-made bigram tokens (see search_tokens.py).
+# ``tier`` holds ``national`` or ``local`` so national hits can be fetched
+# first. Rows map to articles through ``articles_fts_rows`` as before.
+# ``contentless_delete`` needs SQLite 3.43; older libraries get a table that
+# keeps its own copy of the tokens, which deletes the same way.
+SCHEMA_V16_ARTICLES_FTS_SQL = """
+CREATE VIRTUAL TABLE articles_fts USING fts5(
+    tier,
+    title,
+    text,
+    tokenize = 'unicode61'{options}
+);
+"""
+
+
+def articles_fts_ddl(sqlite_version: tuple[int, ...]) -> str:
+    options = ", content = '', contentless_delete = 1" if sqlite_version >= (3, 43) else ""
+    return SCHEMA_V16_ARTICLES_FTS_SQL.format(options=options)

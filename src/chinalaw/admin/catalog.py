@@ -234,6 +234,11 @@ def search_library(
     include_private: bool = False,
     kind: str = "all",
     limit: int = 20,
+    as_of: str | None = None,
+    status: str | None = None,
+    level: str | None = None,
+    region: str | None = None,
+    versions: str = "folded",
 ) -> dict:
     if kind not in {"all", "law", "article", "norm"} or not 1 <= limit <= 100:
         raise LibraryError("invalid_search", "检索类型或数量不正确。")
@@ -241,5 +246,23 @@ def search_library(
         raise LibraryError("private_access_denied", "此凭据未获私域规范访问权限。", status=403)
     if len(query) > 200:
         raise LibraryError("query_too_long", "检索词最多 200 字。")
-    with read_only_operation():
-        return service.search(db_path, query, limit=limit, kind=kind, include_norm=include_private)
+    if any(len(value or "") > 200 for value in (as_of, status, level, region, versions)):
+        raise LibraryError("invalid_search", "检索条件过长。")
+    try:
+        with read_only_operation():
+            return service.search(
+                db_path,
+                query,
+                limit=limit,
+                kind=kind,
+                include_norm=include_private,
+                as_of=as_of,
+                status=status,
+                level=level,
+                region=region,
+                versions=versions,
+            )
+    except ValueError as exc:
+        if "schema" in str(exc):
+            raise
+        raise LibraryError("invalid_search", f"检索条件不正确：{exc}") from exc

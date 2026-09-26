@@ -104,10 +104,34 @@ def _full_article_footer(law: dict) -> list[str]:
     return lines
 
 
+_SEARCH_STATUS_LABELS = {
+    "amended": "已被修改",
+    "repealed": "已废止",
+    "pending_effective": "尚未施行",
+    "unknown": "效力待核",
+}
+
+
+def _search_status_mark(hit: dict) -> str:
+    label = _SEARCH_STATUS_LABELS.get(hit.get("effective_status_as_of") or "")
+    return (f"【{label}】" if label else "") + _other_versions_note(hit)
+
+
+def _other_versions_note(hit: dict) -> str:
+    count = hit.get("other_versions")
+    return f"（另有 {count} 个版本命中，已折叠）" if count else ""
+
+
+def _search_scope_lines(result: dict) -> list[str]:
+    as_of = (result.get("retrieval") or {}).get("as_of")
+    return [f"_效力判断日期：{as_of}_"] if as_of else []
+
+
 def search_to_markdown(result: dict) -> str:
     lines: list[str] = []
     query = result.get("query", "")
     lines.append(f"# 检索：{query}")
+    lines.extend(_search_scope_lines(result))
     if result.get("in_part"):
         lines.append(f"_章节限定：{result.get('in_part')}_")
     counts = result.get("counts") or {}
@@ -135,7 +159,10 @@ def search_to_markdown(result: dict) -> str:
             title = h.get("title")
             short = h.get("short_title")
             label = f"{title}" + (f"（{short}）" if short else "")
-            lines.append(f"- **{label}** — {h.get('status')}　[来源]({h.get('source_url')})")
+            status = h.get("effective_status_as_of") or h.get("status")
+            lines.append(
+                f"- **{label}** — {status}{_other_versions_note(h)}　[来源]({h.get('source_url')})"
+            )
             lines.append("")
 
     # 公开法与私域规范同时命中时，在首个私域小节前渲染同一冲突提示。
@@ -170,10 +197,12 @@ def search_to_markdown(result: dict) -> str:
             title = h.get("law_short_title") or f"《{h.get('law_title')}》"
             num = h.get("number_display")
             text = h.get("text", "").strip()
-            lines.append(f"### {title} {num}")
+            lines.append(f"### {title} {num}{_search_status_mark(h)}")
             lines.append("")
             lines.append(f"> {text}")
             lines.append("")
+            if h.get("match_mode") == "citation":
+                lines.append("- 按引用直接取条")
             lines.append(
                 f"- 来源：{h.get('source_url')}"
                 f"　（距上次核查：{h.get('freshness_days')} 天）"

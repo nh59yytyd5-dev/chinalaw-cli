@@ -79,18 +79,69 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
         return logged("resolve", {"name": name}, lambda: resolve(name))
 
     @server.tool(annotations=READ_ONLY)
-    def chinalaw_search(query: str, kind: str = "all", limit: int = 10) -> dict:
-        """Search grounded text. Private hits appear only with private-read authorization."""
+    def chinalaw_search(
+        query: str,
+        kind: str = "all",
+        limit: int = 10,
+        as_of: str | None = None,
+        status: str | None = None,
+        level: str | None = None,
+        region: str | None = None,
+        versions: str = "folded",
+    ) -> dict:
+        """Exact search: every space-separated segment must occur verbatim.
+
+        Private hits appear only with private-read authorization. Public hits
+        are judged on ``as_of`` (YYYY-MM-DD, default today in Beijing): laws in
+        force and national levels come first, and each law shows one version
+        (``versions="all"`` shows every version). ``status`` (current,
+        amended, repealed, pending_effective, unknown), ``level`` (e.g.
+        law,judicial_interpretation) and ``region`` (e.g. 上海市) filter. A
+        citation such as 民法典第五百零四条 returns that article first.
+        """
+        options = {
+            "as_of": as_of,
+            "status": status,
+            "level": level,
+            "region": region,
+            "versions": versions,
+        }
+        given = {key: value for key, value in options.items() if value and value != "folded"}
         return logged(
             "search",
-            {"query": query, "kind": kind, "limit": limit},
+            {"query": query, "kind": kind, "limit": limit, **given},
             lambda: catalog.search_library(
                 config.db_path,
                 query,
                 kind=kind,
                 limit=limit,
                 include_private=_private_allowed(),
+                **options,
             ),
+        )
+
+    def applicable(date: str, topic: str | None, law: str | None, domain: str | None) -> dict:
+        _private_allowed()
+        if any(len(value or "") > 200 for value in (date, topic, law, domain)):
+            raise ValueError("arguments must be at most 200 characters")
+        with read_only_operation():
+            return service.applicable(
+                config.db_path, as_of=date, topic=topic, law=law, domain=domain
+            )
+
+    @server.tool(annotations=READ_ONLY)
+    def chinalaw_applicable(
+        date: str, topic: str | None = None, law: str | None = None, domain: str | None = None
+    ) -> dict:
+        """Rules on which law applies to facts of a given date (YYYY-MM-DD).
+
+        Curated transition rules, e.g. 民法典 and 公司法 2023 time-effect
+        provisions and 刑法 retroactivity. Filter by topic, law or domain.
+        """
+        return logged(
+            "applicable",
+            {"date": date, "topic": topic, "law": law, "domain": domain},
+            lambda: applicable(date, topic, law, domain),
         )
 
     def article(law: str, number: str, as_of: str | None) -> dict:

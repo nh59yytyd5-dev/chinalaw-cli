@@ -23,7 +23,7 @@ chinalaw-server serve --db ./var/my-library.db --open
 
 `init` 是显式写入操作。新库默认建立空库，`--with-fixtures` 会加载随包公开规范。旧 schema 升级前自动产生同目录的 `*.before-upgrade-时间.sqlite3` 数据库备份；来源附件目录保持原位。`init` 默认输出人类可读摘要，加 `--json` 输出机器可读 JSON（含 `db_path`、`schema_version`、`upgrade_backup` 与库状态），便于脚本判断。`serve` 不会自动初始化或升级资料库。
 
-默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到当前 schema（15）后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌，以及检索日志 `queries.db`），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
+默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到当前 schema（16）后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌，以及检索日志 `queries.db`），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
 
 升级资料库（再次运行 `init`）前必须先停止运行中的 `serve`：`init` 与服务的维护 worker 共用同一把 `<db>.worker.lock`，服务未停时 `init` 会报"此资料库已有维护服务运行"。
 

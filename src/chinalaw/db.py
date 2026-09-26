@@ -26,6 +26,7 @@ from chinalaw.schema import (
     SCHEMA_V15_DELTA_COLUMNS,
     SCHEMA_V15_DELTA_SQL,
     SCHEMA_VERSION,
+    articles_fts_ddl,
 )
 
 DEFAULT_DB_PATH = Path.home() / ".chinalaw" / "chinalaw.db"
@@ -569,6 +570,17 @@ def _migrate_v14_to_v15(conn: sqlite3.Connection) -> None:
     _execute_script(conn, SCHEMA_V15_DELTA_SQL)
 
 
+def _migrate_v15_to_v16(conn: sqlite3.Connection) -> None:
+    """Replace the trigram article index with the bigram one and fill it."""
+    from chinalaw.search_indexes import rebuild_article_search_index
+    from chinalaw.search_tokens import TOKENIZER_VERSION
+
+    conn.execute("DROP TABLE IF EXISTS articles_fts")
+    conn.execute(articles_fts_ddl(sqlite3.sqlite_version_info))
+    rebuild_article_search_index(conn)
+    set_meta(conn, "search_tokenizer_version", TOKENIZER_VERSION)
+
+
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """空 DB → 一次性落最新累积 DDL。
 
@@ -606,6 +618,7 @@ _MIGRATORS: dict[int, Callable[[sqlite3.Connection], None]] = {
     12: _migrate_v12_to_v13,
     13: _migrate_v13_to_v14,
     14: _migrate_v14_to_v15,
+    15: _migrate_v15_to_v16,
 }
 
 def build_current_schema(conn: sqlite3.Connection) -> None:
