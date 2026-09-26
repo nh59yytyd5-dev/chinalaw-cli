@@ -37,14 +37,16 @@ description: "chinalaw 多源爬取补全 skill。何时使用：本地缺法规
 | 文件类型 | source | CLI |
 |---------|--------|-----|
 | 全国人大 / 国务院立法（法律 / 行政法规 / 部分司法解释） | `flk_npc` | `chinalaw fetch <name> --source flk_npc` |
-| 一般部门规章（非证监会） | `flk_npc` | flk 含部分部门规章；0 命中再人工判断 |
+| 一般部门规章（非证监会） | 无全量源 | flk 不收录部门规章。已知 gov.cn 国家规章库正文页编号时用 `chinalaw fetch <name> --source gov_xzfgk --prefer-id gov_cn:content_<编号>`；否则报 `unfindable`，不要去 flk 搜 |
+| 金融监管总局 / 原银保监会规章 | `nfra_gov_cn` | `chinalaw fetch <name> --source nfra_gov_cn` |
 | CSRC 证监会令 / 部门规章 | `csrc_gov_cn` | `chinalaw fetch <name> --source csrc_gov_cn` |
 | 北交所自律规则 | `bse_cn` | `chinalaw fetch <name> --source bse_cn` |
 | 上交所自律规则 | `sse_com_cn` | `chinalaw fetch <name> --source sse_com_cn` |
 | 深交所自律规则 | `szse_cn` | `chinalaw fetch <name> --source szse_cn` |
 | 中证登业务规则 | `chinaclear_cn` | `chinalaw fetch <name> --source chinaclear_cn` |
 | 证券业协会自律规则 | `sac_net_cn` | `chinalaw fetch <name> --source sac_net_cn` |
-| 地方人大 / 地方政府规章 | `flk_npc` | 同上 |
+| 地方人大（地方性法规） | `flk_npc` | 同上 |
+| 地方政府规章 | 无全量源 | flk 不收录；同一般部门规章 |
 | 会议纪要（九民纪要 / 破产纪要） | `court_gongbao` | `chinalaw fetch <name> --source court_gongbao` |
 | 最高法批复 / 复函 / 通知 | `court_gongbao` | 同上 |
 | 公报案例 | `court_gongbao` | 同上 |

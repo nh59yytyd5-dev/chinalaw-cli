@@ -154,10 +154,10 @@ chinalaw relation 民法典 --format json
 | `law` | 民法典、刑法、公司法 | flk_npc |
 | `admin_regulation` | 行政法规（如反垄断法实施条例） | flk_npc |
 | `judicial_interpretation` | 民法典合同编通则解释、刑九 | flk_npc / court_gongbao / court_main / spp_gov_cn |
-| `department_rule` | 部门规章（CSRC / CAC） | flk_npc / csrc_gov_cn（证监会）/ 其它部门源暂未实装 |
+| `department_rule` | 部门规章（CSRC / CAC） | csrc_gov_cn（证监会）/ nfra_gov_cn（金融监管总局）/ gov_xzfgk（已知 gov.cn 正文页编号时）；flk_npc 不收录部门规章 |
 | `self_regulatory_rule` | 证券交易所 / 中证登 / 证券业协会业务规则 | bse_cn / sse_com_cn / szse_cn / chinaclear_cn / sac_net_cn |
 | `local_regulation` | 省人大法规 | flk_npc |
-| `local_government_rule` | 省政府规章 | flk_npc |
+| `local_government_rule` | 省政府规章 | 暂无全量源；flk_npc 不收录地方政府规章 |
 
 **说理依据（agent 可引用为参考，但不是唯一适用根据）**：
 

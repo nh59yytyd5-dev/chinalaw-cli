@@ -265,6 +265,30 @@ def _validate_categories(payload: dict) -> None:
         )
 
 
+def _validate_relations(payload: dict) -> None:
+    relations = payload.get("relations", [])
+    if not isinstance(relations, list):
+        raise ValueError("canonical law payload relations must be an array")
+    for index, relation in enumerate(relations, start=1):
+        if not isinstance(relation, dict):
+            raise ValueError(f"canonical law relation #{index} must be an object")
+        for field in ("relation_type", "to_law_id"):
+            value = relation.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"canonical law relation #{index} field {field!r} must be a non-empty string"
+                )
+        for field in ("to_law_title", "notes"):
+            value = relation.get(field)
+            if value is not None and not isinstance(value, str):
+                raise ValueError(
+                    f"canonical law relation #{index} field {field!r} must be a string or null"
+                )
+        validate_iso_date_value(
+            relation.get("effective_at"), f"canonical law relation #{index} field 'effective_at'"
+        )
+
+
 def validate_law_payload(payload: dict, *, require_articles: bool = False) -> dict:
     """Validate a normalized canonical law payload and return it unchanged."""
 
@@ -286,12 +310,19 @@ def validate_law_payload(payload: dict, *, require_articles: bool = False) -> di
         "version_label",
         "revision_id",
         "revision_notes",
+        "work_id",
     ):
         _optional_text(payload, field)
     for field in ("released_at", "effective_at", "repealed_at", "revision_released_at"):
         _iso_date(payload, field)
+    work_id = payload.get("work_id")
+    if work_id is not None and not work_id.strip():
+        raise ValueError("canonical law payload field 'work_id' must not be blank")
+    if payload.get("status_checked_at") is not None:
+        _iso_datetime(payload, "status_checked_at")
 
     _validate_aliases(payload)
     _validate_articles(payload, require_articles=require_articles)
     _validate_categories(payload)
+    _validate_relations(payload)
     return payload

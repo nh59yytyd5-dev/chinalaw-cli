@@ -48,7 +48,7 @@
 ## 2. 数据模型（SQLite DDL）
 
 > 所有表 schema 由 `chinalaw.schema` 模块在显式写入流程调用 `migrate()` 时创建。
-> 当前 schema 版本 = **12**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
+> 当前 schema 版本 = **15**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
 >
 > `law_relations` / `applicability_rules` 已进入 alpha 协议，用于时间效力检索线索。`alias_records` / `call_log` 仍属后续方向。
 
@@ -72,7 +72,9 @@ CREATE TABLE laws (
     source_checked_at TEXT NOT NULL,      -- ISO 8601 datetime
     source_hash TEXT NOT NULL,            -- 内容指纹（SHA-256 hex）
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    work_id TEXT,                         -- v15：所属法规作品，见下
+    status_checked_at TEXT                -- v15：status 最近一次与上游核对的时间
 );
 ```
 
@@ -80,8 +82,10 @@ CREATE TABLE laws (
 
 - `id`：稳定 ID，跨数据源应保持一致。推荐 `<source-prefix>-<slug>-<year>`（如 `flk-company-law-2024`）。
 - `aliases`：JSON 数组（不是逗号分隔串）。清洗阶段会为常用法律简称 / 司法解释简称派生 alias；schema v11 同时维护 `law_alias_index` 供 exact / derived 解析，无法走索引的旧只读库才回退到兼容扫描；模糊匹配仍可使用 `LIKE`。
-- `level` / `status`：见 §2.9。
+- `level` / `status`：见 §2.9。`status` 是上游给出的时效性，入库后只随同步更新；某一日期的实际效力由日期推算，见 §3 的 `as_of` 语义。
 - `source_*`：见 §3。
+- `work_id`（v15）：同一部法规的各个版本共用一个 `work_id`。flk 把每个版本存为独立记录，版本之间靠它关联；更名的法规（如国家安全法 1993 与反间谍法 2014）也用它连起来。为空时，标题、`level`、`issuing_body` 都相同的记录视为同一作品。
+- `status_checked_at`（v15）：`status` 最近一次与上游核对的时间，与正文的 `source_checked_at` 分开记录；导入时未提供则取 `source_checked_at`。
 
 ### 2.2 `articles` — 法规条文
 
@@ -396,11 +400,25 @@ CREATE TABLE meta (
 | `source_hash` | 必填 | SHA-256 hex；公开法规推荐对源响应体计算，私域对条款 JSON 标准化序列化后计算 |
 | `freshness_days` | 由系统派生 | `source_checked_at` 距今天的天数（仅在 JSON 输出中存在） |
 
-**`as_of` 语义**（`get` / `article` 命令）：
+**`as_of` 语义**（`get` / `article` / `history` / `diff` / `trace` 命令）：
 
-- 输入：`YYYY-MM-DD`（公历日期，无时区，按当地解读为该日 00:00 之前的最新版本）。
-- 选择规则：`revisions` 中 `effective_at ≤ as_of`（无 `effective_at` 退化为 `released_at ≤ as_of`）的最近一个。
-- 命中失败：返回 404（exit code 1，JSON `{"found": false, ...}`）。
+- 输入：`YYYY-MM-DD`（公历日期，按北京时间解读）。
+- 选择范围：同一法规作品（`work_id`，见 §2.1）的全部记录及其 `revisions`。
+- 选择规则：`effective_at ≤ as_of`（无 `effective_at` 退化为 `released_at ≤ as_of`）的最近一个版本；日期相同时优先调用方解析到的那条记录。
+- 命中失败：返回 404（exit code 1，JSON `{"found": false, ...}`）。诊断中的 `earliest_version_effective_at` 给出本地最早版本的施行日期。**不得用现行版本替代该时点的条文。**
+- 不带 `as_of` 时，法规名解析到“今天有效”的版本；显式传入 `id` 时保持该记录不变。
+
+**按日期推算的效力**：`get` / `article` / `history` 的 `law` 对象附带：
+
+| 字段 | 说明 |
+| --- | --- |
+| `effective_status_as_of` | 该版本在 `effective_status_date` 当天的效力：`current` / `amended` / `pending_effective` / `repealed` / `unknown` |
+| `effective_status_date` | 推算所依据的日期；不带 `as_of` 时为北京时间的今天 |
+| `effective_status_note` | 推算依据不足时的说明，例如上游标注已废止但缺少废止日期 |
+| `work_id` / `work_versions` | 所属作品及其全部版本（`id`、`effective_at`、`released_at`、`status`） |
+| `status_checked_at` | 见 §2.1 |
+
+推算规则：施行日期晚于该日为 `pending_effective`；同一作品中有更晚、且在该日已施行的版本为 `amended`；`repealed_at` 不晚于该日为 `repealed`；上游标注已废止但没有 `repealed_at` 时，今天为 `repealed`，过去的日期为 `unknown`。`status` 字段保留上游原值，两者可能不同。
 
 ---
 
@@ -2093,6 +2111,12 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
   "source_name": "flk.npc.gov.cn",
   "source_checked_at": "2026-04-26T00:00:00+08:00",
   "source_hash": "sha256...",             // 可选
+  "work_id": "flk-work:…",                 // 可选；同一作品的各版本相同，见 §2.1
+  "status_checked_at": "2026-09-25T06:00:00+08:00", // 可选；缺省取 source_checked_at
+  "relations": [                          // 可选；提供时替换本法规此前经本字段写入的关系
+    {"relation_type": "repealed_by", "to_law_id": "flk-civil-code-2020",
+     "to_law_title": "中华人民共和国民法典", "effective_at": "2021-01-01", "notes": null}
+  ],
 
   "categories": [                         // 可选；分类树节点
     {"id": "flk:1", "name": "法律", "parent_id": null, "description": null}

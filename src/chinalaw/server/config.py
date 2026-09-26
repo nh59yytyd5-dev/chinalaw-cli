@@ -16,6 +16,7 @@ class ServerConfig:
     port: int = 8765
     local_mode: bool = True
     start_worker: bool = True
+    query_log: bool = True
 
     def __post_init__(self) -> None:
         if self.db_path.resolve() == self.auth_path.resolve():
@@ -56,6 +57,10 @@ class ServerConfig:
     @property
     def auth_path(self) -> Path:
         return self.state_dir / "auth.db"
+
+    @property
+    def query_log_path(self) -> Path:
+        return self.state_dir / "queries.db"
 
     @property
     def artifacts_dir(self) -> Path:
