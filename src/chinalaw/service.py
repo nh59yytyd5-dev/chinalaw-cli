@@ -1071,6 +1071,8 @@ def _status_as_of(
         if as_of >= legal_today():
             return "repealed", None
         return "unknown", "上游标注已废止，但缺少废止日期，无法判断该日期是否仍然有效。"
+    if member["status"] == "unknown":
+        return "unknown", "上游未标注效力状态，不能仅根据日期认定现行有效。"
     if start is None:
         return member["status"], "缺少施行日期，沿用上游标注的状态。"
     return "current", None
