@@ -25,6 +25,15 @@ $ chinalaw article 民法典 524 --format card
 source: current | flk.npc.gov.cn | https://flk.npc.gov.cn/detail?id=ff808081729d1efe01729d50b5c500bf | 核查 145 天前
 ```
 
+## 公开数据与在线文档
+
+- [项目介绍](https://law.newcombmath.com/about/) · [MCP 接入文档](https://law.newcombmath.com/about/mcp.html)
+- [v0.7.0 下载](https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/tag/v0.7.0)：软件 wheel / sdist，以及独立的公开法规 JSON / SQLite 快照。
+- 本期公开快照：2486 条法规记录、87956 条条文记录，包含历史版本；数据截止 2026-09-26，不是全量中国规范或实时更新保证。
+- 默认推荐离线或自托管。托管 MCP 仅向少量用户发放独立公开库只读令牌，有速率/并发限制；不发布共享令牌。
+- 感谢原文备份仓库 [lawtext/legal-data-docx](https://github.com/lawtext/legal-data-docx)。官方出处、核查时间和来源哈希保留在数据包中；详见 [数据来源与权利说明](data/public-release/NOTICE.md)。
+
+
 ## 特性
 
 - **本地优先**。资料库就是一个 SQLite 文件，默认在 `~/.chinalaw/chinalaw.db`；合同、案件材料和公司制度不出本机。

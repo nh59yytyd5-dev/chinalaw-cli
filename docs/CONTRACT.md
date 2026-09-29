@@ -23,7 +23,7 @@
 ### 协议不包含
 
 - Python 实现细节、SQLite 内部结构、任何模块名 / 类名 / 函数名
-- FTS5 tokenizer 的具体选择（trigram 是当前实现，未来可换 ngram / jieba）
+- FTS5 tokenizer 的具体选择（当前：条文为二元组，法规标题与私域规范为 trigram）
 - 同步真实数据源（flk_npc）的内部协议
 - 内部 helper 函数与日志格式
 - 任何只在仓库内部使用、不被外部消费的字段
@@ -48,7 +48,7 @@
 ## 2. 数据模型（SQLite DDL）
 
 > 所有表 schema 由 `chinalaw.schema` 模块在显式写入流程调用 `migrate()` 时创建。
-> 当前 schema 版本 = **12**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
+> 当前 schema 版本 = **16**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
 >
 > `law_relations` / `applicability_rules` 已进入 alpha 协议，用于时间效力检索线索。`alias_records` / `call_log` 仍属后续方向。
 
@@ -72,7 +72,9 @@ CREATE TABLE laws (
     source_checked_at TEXT NOT NULL,      -- ISO 8601 datetime
     source_hash TEXT NOT NULL,            -- 内容指纹（SHA-256 hex）
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    work_id TEXT,                         -- v15：所属法规作品，见下
+    status_checked_at TEXT                -- v15：status 最近一次与上游核对的时间
 );
 ```
 
@@ -80,8 +82,10 @@ CREATE TABLE laws (
 
 - `id`：稳定 ID，跨数据源应保持一致。推荐 `<source-prefix>-<slug>-<year>`（如 `flk-company-law-2024`）。
 - `aliases`：JSON 数组（不是逗号分隔串）。清洗阶段会为常用法律简称 / 司法解释简称派生 alias；schema v11 同时维护 `law_alias_index` 供 exact / derived 解析，无法走索引的旧只读库才回退到兼容扫描；模糊匹配仍可使用 `LIKE`。
-- `level` / `status`：见 §2.9。
+- `level` / `status`：见 §2.9。`status` 是上游给出的时效性，入库后只随同步更新；某一日期的实际效力由日期推算，见 §3 的 `as_of` 语义。
 - `source_*`：见 §3。
+- `work_id`（v15）：同一部法规的各个版本共用一个 `work_id`。flk 把每个版本存为独立记录，版本之间靠它关联；更名的法规（如国家安全法 1993 与反间谍法 2014）也用它连起来。为空时，标题、`level`、`issuing_body` 都相同的记录视为同一作品。
+- `status_checked_at`（v15）：`status` 最近一次与上游核对的时间，与正文的 `source_checked_at` 分开记录；导入时未提供则取 `source_checked_at`。
 
 ### 2.2 `articles` — 法规条文
 
@@ -306,6 +310,7 @@ CREATE TABLE meta (
 - `schema_version`：当前 SQLite schema 版本（整数串）。
 - `last_sync_at`：最近一次 `sync` 命令完成时间。
 - `last_applicability_sync_at`：最近一次 `sync --applicability` 完成时间。
+- `search_tokenizer_version`（v16）：条文索引的切分规则版本（当前 `bigram-1`）。规则改变须伴随 schema 迁移重建条文索引。
 - `source:<source>:last_page` / `next_page` / `last_mode` / `last_incremental_to`：sync 进度元数据。
 
 ### 2.9 受控枚举
@@ -396,11 +401,25 @@ CREATE TABLE meta (
 | `source_hash` | 必填 | SHA-256 hex；公开法规推荐对源响应体计算，私域对条款 JSON 标准化序列化后计算 |
 | `freshness_days` | 由系统派生 | `source_checked_at` 距今天的天数（仅在 JSON 输出中存在） |
 
-**`as_of` 语义**（`get` / `article` 命令）：
+**`as_of` 语义**（`get` / `article` / `history` / `diff` / `trace` 命令）：
 
-- 输入：`YYYY-MM-DD`（公历日期，无时区，按当地解读为该日 00:00 之前的最新版本）。
-- 选择规则：`revisions` 中 `effective_at ≤ as_of`（无 `effective_at` 退化为 `released_at ≤ as_of`）的最近一个。
-- 命中失败：返回 404（exit code 1，JSON `{"found": false, ...}`）。
+- 输入：`YYYY-MM-DD`（公历日期，按北京时间解读）。
+- 选择范围：同一法规作品（`work_id`，见 §2.1）的全部记录及其 `revisions`。
+- 选择规则：`effective_at ≤ as_of`（无 `effective_at` 退化为 `released_at ≤ as_of`）的最近一个版本；日期相同时优先调用方解析到的那条记录。
+- 命中失败：返回 404（exit code 1，JSON `{"found": false, ...}`）。诊断中的 `earliest_version_effective_at` 给出本地最早版本的施行日期。**不得用现行版本替代该时点的条文。**
+- 不带 `as_of` 时，法规名解析到“今天有效”的版本；显式传入 `id` 时保持该记录不变。
+
+**按日期推算的效力**：`get` / `article` / `history` 的 `law` 对象附带：
+
+| 字段 | 说明 |
+| --- | --- |
+| `effective_status_as_of` | 该版本在 `effective_status_date` 当天的效力：`current` / `amended` / `pending_effective` / `repealed` / `unknown` |
+| `effective_status_date` | 推算所依据的日期；不带 `as_of` 时为北京时间的今天 |
+| `effective_status_note` | 推算依据不足时的说明，例如上游标注已废止但缺少废止日期 |
+| `work_id` / `work_versions` | 所属作品及其全部版本（`id`、`effective_at`、`released_at`、`status`） |
+| `status_checked_at` | 见 §2.1 |
+
+推算规则：施行日期晚于该日为 `pending_effective`；同一作品中有更晚、且在该日已施行的版本为 `amended`；`repealed_at` 不晚于该日为 `repealed`；上游标注已废止但没有 `repealed_at` 时，今天为 `repealed`，过去的日期为 `unknown`。公开检索/解析/取条/目录返回的 `status`（条文命中为 `law_status`）与 `effective_status_as_of` 一致；`source_status` 保留入库标注，不能单独用来判断文本是否当前可引用。管理文档为保留编辑语义仍返回入库 `status`，界面使用 `effective_status_as_of` 展示。
 
 ---
 
@@ -589,6 +608,15 @@ JSON 输出：
 | `--limit` | int | 20 | 各类命中各自的上限 |
 | `--kind` | enum | `all` | `article` / `law` / `norm` / `all` |
 | `--in` | str | 无 | 限定公开法规范围；多个法规名 / id / alias 用逗号分隔 |
+| `--as-of` | YYYY-MM-DD | 今天（北京时间） | 按该日期判断效力、选取版本，即按案件时间检索 |
+| `--status` | str | 不过滤 | 只要这些效力状态（按 `--as-of` 推算），逗号分隔：`current` / `amended` / `repealed` / `pending_effective` / `unknown` |
+| `--level` | str | 不过滤 | 只要这些层级（§2.9 LawLevel），逗号分隔 |
+| `--region` | str | 不过滤 | 地方性法规、地方政府规章只保留制定机关或标题含该地名的，且不再降权；全国层级不受影响 |
+| `--versions` | enum | `folded` | `folded`：同一法规作品只保留一个版本；`all`：各版本都列出 |
+
+远端 MCP 的 `chinalaw_search`、REST `/api/v1/search`、stdio MCP 的 `chinalaw_search`
+接受同名参数（`as_of`、`status`、`level`、`region`、`versions`）。取值不合法时报错，
+不静默忽略。
 
 JSON 输出 schema：
 
@@ -621,18 +649,72 @@ JSON 输出 schema：
       "text": "string",
       "source_url": "string",
       "freshness_days": "integer|null",
-      "score": "number",
-      "match_kind": "primary|relevant"
+      "score": "number|null",
+      "match_kind": "primary|relevant",
+      "match_mode": "citation|exact|fuzzy",
+      "work_id": "string|null",
+      "effective_status_as_of": "current|amended|repealed|pending_effective|unknown",
+      "effective_status_note": "string | 仅在状态无法由日期确定时出现",
+      "status_checked_at": "ISO datetime|null",
+      "other_versions": "integer | 折叠时出现：同一作品另有几个版本也命中"
     }
   ],
-  "law_hits": [Law],
+  "law_hits": [Law + {"work_id", "effective_status_as_of", "status_checked_at", "other_versions"}],
   "norm_clause_hits": [{...}],
   "norm_source_hits": [NormSource],
+  "retrieval": {
+    "as_of": "YYYY-MM-DD",
+    "versions": "folded|all",
+    "status": ["string"] | null,
+    "level": ["string"] | null,
+    "region": "string|null",
+    "citation": "boolean"
+  },
   "conflict_notice": "string | 仅公开法与私域规范同时命中时出现，见 §2.9"
 }
 ```
 
-**FTS5 vs LIKE**：所有 term ≥ 3 字 → FTS5（trigram，`AND` 连接）；任一 term < 3 字 → LIKE 子串匹配。`strategy` 字段告知调用方使用了哪种。
+**匹配语义（精确检索）**：按空白拆分出的每个片段，都必须原样出现在条文正文或其法规标题中
+（英文字母不区分大小写）。条文用二元组索引缩小候选、再逐条做子串核对，命中集合与子串
+扫描相同；只有无法用索引缩小的查询（单个汉字、只有数字等）才走全表扫描。`strategy`：
+条文检索用上索引时为 `fts5`，否则为 `like`；只查法规（`--kind law`）时沿用标题索引的规则
+（所有 term ≥ 3 字 → `fts5`）。
+
+**最小近似补充**：公开条文精确命中不足 `min(5, limit)` 时，从正文索引召回最多 500 个
+候选。查询限 80 字以内，按空白和常见标点分段；每段须完整出现在同一条正文，或完整拆成
+至少 2 字的片段，每个片段都出现在该正文中。不要求片段相邻或按查询顺序出现；未分隔的 4 字以内短词仅允许跨至多 2 个字符，
+避免“表现代理”被同条中相距很远的两个词误召回。不漏字、
+不猜错别字、不作同义词替换。全半角与大小写归一，百分号等数值符号保留。
+近似结果附 `match_mode: "fuzzy"`、`fuzzy.matched`（可逐项核对的片段），在精确结果后
+去重追加，总条数不超过 `limit`，沿用法规、章节、日期、效力、层级、地域与版本过滤。
+已有精确命中的作品不会被补入另一版本。超长查询保持精确检索，不截断后误召回。
+顶层 `fuzzy` 含 `applied`、`min_exact_hits`、`count`，条文检索另含 `segments`；
+`strategy` 仍描述精确通道。私域规范本轮保持精确检索。
+所有类型均无命中时返回 `hint`，提示改用法条原文说法或较短片段再查、用 `article` 核对。
+
+**名称候选**：公开法规解析失败时，`resolve.candidates`、取条诊断与 `articles` 的
+`candidate_laws`、`search.law_filter.unresolved_candidates` 返回最多 5 个本地名称候选。
+候选含 `id`、`official_title`、`short_title`、`status`、`level`、`score`、`matched_name`；
+名称归一化后比较全称和别名，低于阈值不返回，同名版本仅展示一个。
+候选仅供核对，绝不自动用于解析、取条或放宽过滤；原 `matched`、错误码和退出码不变。
+候选可能均不正确，调用方仍可用 `fetch --list-matches` 查外部来源。
+
+上游状态为 `unknown` 且没有明确的版本替代或废止依据时，即使日期已到仍保持
+`effective_status_as_of: unknown`，并附未标注效力的提示，不能仅凭日期显示为现行。
+
+已修改但没有后续版本日期的记录，不因发布日期已到而升为 current；历史时点标 unknown。缺施行日期时，发布日期仅作检索定位，不能证明历史有效。经核实的 `revised_by` 关系可以结束旧文本的当前性；缺少新全文时明示“现行全文待补”，不把法规说成已废止。
+
+**排序与折叠**（公开法命中）：先按 `effective_status_as_of`（现行 → 尚未施行 → 待核 →
+已修改 / 已废止），再把只在法规标题里命中的条文排在正文命中之后，再按层级（法律、行政法规、
+司法解释、监察法规在前；地方性法规、地方政府规章在后，指定 `--region` 时不降权），最后看
+相关度。`--versions folded` 时，同一作品（§2.1 `work_id`）只保留一个版本：优先 `as_of`
+当日有效的版本，否则取最近的版本；其余版本计入 `other_versions`。`--status` 不含 `current`
+时不折叠，因为此时要的正是旧版本。
+
+**引用识别**：查询形如“民法典第五百零四条”“公司法 15 条”“刑法133条之一”，且法规名能
+确定解析（不是 `like_fallback`）时，该条排在最前，`match_mode = "citation"`，
+`retrieval.citation = true`；指定 `--as-of` 时取该日期有效的版本。指定 `--in` 或
+`--in-part` 时不做引用识别。
 
 **`--in` 语义**：只限制公开法规 / 公开条文命中范围，不读取私域规范。未解析的过滤项进入 `law_filter.unresolved`；如果全部过滤项均未解析，公开法规 / 条文命中为空。
 
@@ -2093,6 +2175,12 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
   "source_name": "flk.npc.gov.cn",
   "source_checked_at": "2026-04-26T00:00:00+08:00",
   "source_hash": "sha256...",             // 可选
+  "work_id": "flk-work:…",                 // 可选；同一作品的各版本相同，见 §2.1
+  "status_checked_at": "2026-09-25T06:00:00+08:00", // 可选；缺省取 source_checked_at
+  "relations": [                          // 可选；提供时替换本法规此前经本字段写入的关系
+    {"relation_type": "repealed_by", "to_law_id": "flk-civil-code-2020",
+     "to_law_title": "中华人民共和国民法典", "effective_at": "2021-01-01", "notes": null}
+  ],
 
   "categories": [                         // 可选；分类树节点
     {"id": "flk:1", "name": "法律", "parent_id": null, "description": null}
@@ -2126,7 +2214,7 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
 
 以下是当前实现细节，不进入兼容承诺：
 
-- **FTS5 tokenizer 选择**（trigram）：未来可能切到 ngram / jieba，调用方应假设"中文检索可用"，不假设具体策略。
+- **FTS5 tokenizer 选择**（条文二元组、其余 trigram）：可能调整，调用方应假设"中文检索可用"，不假设具体策略；精确检索的命中语义（§4.1）不随之改变。
 - **LIKE 回退阈值**（< 3 字）：可能调整。`strategy` 字段告知实际策略。
 - **真实数据源同步内部协议**：flk_npc 适配器、bbbs / search_list / 增量窗口等，本期不承诺稳定。
   但建立在其上的 `fetch` 命令（参 §4.11）是协议级接口，其输入 / 输出 / 退出码受协议保护。

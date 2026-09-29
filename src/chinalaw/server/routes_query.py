@@ -60,14 +60,45 @@ def revisions(request: Request, kind: str, id: str) -> dict:
 
 
 @router.get("/search")
-def search(request: Request, q: str, kind: str = "all", limit: int = 20) -> dict:
+def search(
+    request: Request,
+    q: str,
+    kind: str = "all",
+    limit: int = 20,
+    as_of: str | None = None,
+    status: str | None = None,
+    level: str | None = None,
+    region: str | None = None,
+    versions: str = "folded",
+) -> dict:
     value = principal(request)
-    return catalog.search_library(
-        request.app.state.config.db_path,
-        q,
-        kind=kind,
-        include_private=value.can_read_private,
-        limit=limit,
+    options = {
+        "as_of": as_of,
+        "status": status,
+        "level": level,
+        "region": region,
+        "versions": versions,
+    }
+
+    def call() -> dict:
+        return catalog.search_library(
+            request.app.state.config.db_path,
+            q,
+            kind=kind,
+            include_private=value.can_read_private,
+            limit=limit,
+            **options,
+        )
+
+    query_log = request.app.state.query_log
+    if query_log is None:
+        return call()
+    return query_log.run(
+        call,
+        channel="http",
+        client=value.log_label or value.client_id,
+        tool="search",
+        params={"query": q, "kind": kind, "limit": limit, **_set(options)},
     )
 
 
@@ -88,3 +119,8 @@ def options(request: Request) -> dict:
         "fetch_sources": list(sources.VERIFIABLE_SOURCES),
         "pdf_text_available": shutil.which("pdftotext") is not None,
     }
+
+
+def _set(options: dict) -> dict:
+    """Only the options a caller actually gave, to keep log rows short."""
+    return {key: value for key, value in options.items() if value and value != "folded"}

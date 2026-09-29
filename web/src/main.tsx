@@ -114,6 +114,7 @@ function Login({
               </button>
             </form>
           )}
+          <p><a href="/about/">项目介绍、公开数据与 MCP 接入文档</a></p>
           <p className="login-note">
             <Icon name="lock" size={14} />
             资料存储在你配置的本机或服务器中

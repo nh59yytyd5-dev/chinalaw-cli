@@ -492,16 +492,16 @@ class LoaderAndServiceTests(unittest.TestCase):
             "意思表示" in h["text"] for h in r["article_hits"]
         ), r["article_hits"])
 
-    def test_search_like_short_query(self):
+    def test_search_short_query_uses_bigram_index(self):
         r = service.search(self.db_path, "过错", kind="article")
-        self.assertEqual(r["strategy"], "like")
+        self.assertEqual(r["strategy"], "fts5")
         self.assertTrue(any(
             "过错" in h["text"] for h in r["article_hits"]
         ))
 
     def test_search_multi_term_falls_back_from_phrase_only_matching(self):
         r = service.search(self.db_path, "工作 时间", kind="article")
-        self.assertEqual(r["strategy"], "like")
+        self.assertEqual(r["strategy"], "fts5")
         self.assertTrue(r["article_hits"])
         self.assertTrue(
             any("工作" in h["text"] and "时间" in h["text"] for h in r["article_hits"])

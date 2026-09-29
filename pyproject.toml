@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chinalaw"
-version = "0.6.0"
+version = "0.7.0"
 description = "中国法律法规检索 CLI，为 AI agent 设计，减少幻觉、按条款引用。"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 server = [
   "fastapi>=0.141.1,<0.142",
+  "starlette>=1.7,<1.8",
   "uvicorn>=0.52.4,<0.53",
   "mcp>=2.2,<2.3",
   "python-multipart>=0.0.20,<1",
@@ -77,6 +78,8 @@ include = [
   "/CHANGELOG.md",
   "/pyproject.toml",
   "/web",
+  "/website",
+  "/data/public-release",
   "/deploy",
   "/Dockerfile",
   "/.dockerignore",

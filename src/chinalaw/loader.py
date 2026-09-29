@@ -39,6 +39,7 @@ from chinalaw.document_numbers import index_document_number
 from chinalaw.search_indexes import (
     delete_article_search_indexes,
     insert_article_search_index,
+    reindex_law_articles,
     replace_law_search_indexes,
 )
 
@@ -136,6 +137,9 @@ def _build_snapshot_json(payload: dict, source_hash: str) -> str:
 def _upsert_revision(conn: sqlite3.Connection, payload: dict, source_hash: str) -> None:
     law_id = payload["id"]
     revision_id = payload.get("revision_id") or f"{law_id}@{source_hash[:16]}"
+    existing = conn.execute("SELECT law_id FROM revisions WHERE id = ?", (revision_id,)).fetchone()
+    if existing is not None and existing["law_id"] != law_id:
+        raise ValueError("revision id already belongs to another law; use a distinct revision id")
     released_at = (
         payload.get("revision_released_at")
         or payload.get("released_at")
@@ -173,6 +177,17 @@ def _upsert_revision(conn: sqlite3.Connection, payload: dict, source_hash: str) 
     )
 
 
+def _stored_text_differs(conn: sqlite3.Connection, law_id: str, articles: list[dict]) -> bool:
+    stored = [tuple(row) for row in conn.execute(
+        "SELECT number, text, part, title, position FROM articles "
+        "WHERE law_id = ? ORDER BY position",
+        (law_id,),
+    )]
+    incoming = [(str(a["number"]), a["text"], a.get("part"), a.get("title"), a.get("position", pos))
+                for pos, a in enumerate(articles, 1)]
+    return stored != incoming
+
+
 def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
     """Refresh law/source metadata without replacing articles or revisions.
 
@@ -198,13 +213,20 @@ def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
     validate_law_payload(normalized, require_articles=False)
 
     law_id = normalized["id"]
+    # The same raw source hash can produce corrected text after a parser fix.
+    # A metadata-only shortcut must not retain the old, incorrect extraction.
+    if normalized["articles"] and _stored_text_differs(conn, law_id, normalized["articles"]):
+        load_law_from_dict(conn, normalized)
+        return
+    before = conn.execute("SELECT title, level FROM laws WHERE id = ?", (law_id,)).fetchone()
     conn.execute(
         """
         UPDATE laws SET
             title = ?, short_title = ?, aliases = ?, level = ?, issuing_body = ?,
             document_number = ?, released_at = ?, effective_at = ?, repealed_at = ?,
             status = ?, source_url = ?, source_name = ?, source_checked_at = ?,
-            source_hash = ?, updated_at = CURRENT_TIMESTAMP
+            source_hash = ?, work_id = COALESCE(?, work_id), status_checked_at = ?,
+            updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
         """,
         (
@@ -222,6 +244,8 @@ def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
             normalized.get("source_name", "unknown"),
             normalized["source_checked_at"],
             normalized["source_hash"],
+            normalized.get("work_id"),
+            normalized.get("status_checked_at") or normalized["source_checked_at"],
             law_id,
         ),
     )
@@ -240,6 +264,9 @@ def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
         short_title=normalized.get("short_title"),
         aliases=normalized.get("aliases", []),
     )
+    # Article index rows carry the law title and level tier.
+    if before is not None and tuple(before) != (normalized["title"], normalized["level"]):
+        reindex_law_articles(conn, law_id)
 
 
 def prepare_law_payload(payload: dict) -> dict:
@@ -265,6 +292,63 @@ def prepare_law_payload(payload: dict) -> dict:
     return payload
 
 
+def _replace_payload_relations(conn: sqlite3.Connection, payload: dict) -> None:
+    """Relations declared by a law payload replace those it declared before.
+
+    Only rows this path wrote (``metadata_json.origin``) are replaced; relations
+    from applicability files or other sources are left alone.
+    """
+    if "relations" not in payload:
+        return
+    law_id = payload["id"]
+    conn.execute(
+        "DELETE FROM law_relations WHERE from_law_id = ? "
+        "AND json_extract(metadata_json, '$.origin') = 'law_payload'",
+        (law_id,),
+    )
+    for relation in payload["relations"]:
+        key = "|".join(
+            str(part or "")
+            for part in (
+                relation["relation_type"],
+                law_id,
+                relation["to_law_id"],
+                relation.get("effective_at"),
+            )
+        )
+        conn.execute(
+            """
+            INSERT INTO law_relations(
+                id, relation_type, from_law_id, from_law_title, to_law_id, to_law_title,
+                effective_at, source_name, source_url, source_checked_at, notes, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                from_law_title=excluded.from_law_title,
+                to_law_title=excluded.to_law_title,
+                source_name=excluded.source_name,
+                source_url=excluded.source_url,
+                source_checked_at=excluded.source_checked_at,
+                notes=excluded.notes,
+                metadata_json=excluded.metadata_json,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (
+                "rel-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16],
+                relation["relation_type"],
+                law_id,
+                payload["title"],
+                relation["to_law_id"],
+                relation.get("to_law_title"),
+                relation.get("effective_at"),
+                payload.get("source_name", "unknown"),
+                payload["source_url"],
+                payload["source_checked_at"],
+                relation.get("notes"),
+                json.dumps({"origin": "law_payload"}),
+            ),
+        )
+
+
 def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
     """写入单部法规 + 条文 + FTS。返回写入的条文数。"""
     payload = prepare_law_payload(payload)
@@ -282,8 +366,9 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
         INSERT INTO laws (
             id, title, short_title, aliases, level, issuing_body,
             document_number, released_at, effective_at, repealed_at,
-            status, source_url, source_name, source_checked_at, source_hash
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            status, source_url, source_name, source_checked_at, source_hash,
+            work_id, status_checked_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title,
             short_title=excluded.short_title,
@@ -299,6 +384,8 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
             source_name=excluded.source_name,
             source_checked_at=excluded.source_checked_at,
             source_hash=excluded.source_hash,
+            work_id=COALESCE(excluded.work_id, laws.work_id),
+            status_checked_at=excluded.status_checked_at,
             updated_at=CURRENT_TIMESTAMP
         """,
         (
@@ -317,10 +404,13 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
             payload.get("source_name", "unknown"),
             source_checked_at,
             source_hash,
+            payload.get("work_id"),
+            payload.get("status_checked_at") or source_checked_at,
         ),
     )
     index_document_number(conn, payload)
     _upsert_revision(conn, payload, source_hash)
+    _replace_payload_relations(conn, payload)
     if categories:
         _upsert_categories(conn, categories)
     if category_ids:
@@ -366,7 +456,7 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
             article_id=article_id,
             law_id=law_id,
             law_title=payload["title"],
-            number_display=number_display,
+            law_level=payload.get("level"),
             text=text,
         )
         count += 1

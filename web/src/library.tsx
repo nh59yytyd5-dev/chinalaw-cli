@@ -882,7 +882,8 @@ export function DocumentPage({ kind, id }: { kind: Kind; id: string }) {
       <div className="document-heading">
         <div className="button-row">
           <KindBadge kind={kind} />
-          {doc.status && <Badge>{label(doc.status)}</Badge>}
+          {doc.status && <Badge>{label(doc.effective_status_as_of || doc.status)}</Badge>}
+          {doc.effective_status_note && <span>{doc.effective_status_note}</span>}
           <Badge tone={data.review ? "green" : "amber"}>
             {revision
               ? "历史快照"
@@ -1024,6 +1025,7 @@ export function SearchPage({ initial }: { initial: string }) {
     norm_source_name?: string;
     name?: string;
     number_display?: string;
+    match_mode?: string;
     snippet?: string;
     text?: string;
   };
@@ -1087,6 +1089,7 @@ export function SearchPage({ initial }: { initial: string }) {
           {rows.map(({ hit, kind, id }, i) => (
             <div className="search-result" key={i}>
               <KindBadge kind={kind} />
+              {hit.match_mode === "fuzzy" && <span>近似匹配</span>}
               <button
                 className="document-title"
                 onClick={() => id && openDocument(kind, id)}
@@ -1104,7 +1107,7 @@ export function SearchPage({ initial }: { initial: string }) {
         </section>
       ) : (
         <Empty title="未找到匹配内容">
-          <p>尝试较短的关键词，或先将资料导入当前库。</p>
+          <p>请改用法条原文的说法或较短片段再查，或先将资料导入当前库。</p>
         </Empty>
       )}
     </>

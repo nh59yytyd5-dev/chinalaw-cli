@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Read-only real-corpus search evaluation and bounded candidate-pool comparison."""
+import argparse
+import json
+import statistics
+import time
+from pathlib import Path
+
+from chinalaw import service
+from chinalaw.db import connect_readonly, read_only_operation
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--db', required=True)
+parser.add_argument('--queries', default='docs/research/step5-validation/queries.json')
+parser.add_argument('--output', required=True)
+parser.add_argument('--pool', type=int, default=500)
+parser.add_argument('--repeat', type=int, default=3)
+args = parser.parse_args()
+service._SEARCH_POOL_MAX = args.pool
+cases = json.loads(Path(args.queries).read_text())
+with connect_readonly(args.db) as conn:
+    corpus = {t: conn.execute(f'SELECT count(*) FROM {t}').fetchone()[0]
+              for t in ('laws', 'articles')}
+results = []
+with read_only_operation():
+    for case in cases:
+        timings = []
+        for _ in range(args.repeat):
+            start = time.perf_counter()
+            result = (service.resolve(args.db, case['query']) if case.get('type') == 'name'
+                      else service.search(args.db, case['query'], kind='article', limit=20,
+                                          **case.get('options', {})))
+            timings.append(round((time.perf_counter() - start) * 1000, 2))
+        row = {**case, 'latency_ms': timings}
+        if case.get('type') == 'name':
+            candidates = [result] if result['matched'] else result.get('candidates', [])
+            row.update(matched=result['matched'], candidates=candidates,
+                       target_rank=next((i for i, hit in enumerate(candidates, 1)
+                                         if case['target'] in hit['official_title']), None))
+        else:
+            hits = result['article_hits']
+            row.update(counts=result['counts'], fuzzy=result.get('fuzzy'), hint=result.get('hint'),
+                       hits=[{k: h.get(k) for k in ('law_id', 'law_short_title', 'number',
+                             'match_mode', 'fuzzy', 'text')} for h in hits])
+            if 'number' in case:
+                def target(h, case=case):
+                    return h['law_short_title'] == case['law'] and h['number'] == case['number']
+                row['target_rank'] = next((i for i, h in enumerate(hits, 1) if target(h)), None)
+                exact = [h for h in hits if h['match_mode'] != 'fuzzy']
+                row['exact_target_rank'] = next(
+                    (i for i, h in enumerate(exact, 1) if target(h)), None
+                )
+        results.append(row)
+        print(case['query'], row.get('target_rank'), timings, flush=True)
+all_times = sorted(t for row in results for t in row['latency_ms'])
+Path(args.output).write_text(json.dumps({
+    'corpus': corpus, 'pool': args.pool, 'repeat': args.repeat,
+    'median_ms': statistics.median(all_times),
+    'p95_ms': all_times[int((len(all_times) - 1) * .95)], 'results': results,
+}, ensure_ascii=False, indent=2) + '\n')

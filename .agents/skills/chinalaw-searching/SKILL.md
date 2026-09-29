@@ -8,6 +8,19 @@ description: 中国法规检索方法 skill。何时使用：用户提法律问�
 > 检索的本质是 **"问题 → 候选 → 精确条文 → 关联解释"**，不是"google 一下"。
 > 6 大方法对应 6 类常见错误。
 
+## 默认入口：记忆定位，原文核验
+
+调用方模型通常已经知道候选法规和大致条号。可以用这种记忆选择 `article` 的入参，
+先核对法规身份、原文是否对应争点、版本日期与来源；法名不确定时先 `resolve`。
+有把握的候选条号不必先绕一轮 `search`，也不要求项目把学理术语自动映射成法条。
+**记忆只能提供定位线索，不能充当最终引用证据。** 返回成功也不表示内容一定对题；
+新旧法可能沿用同一条号表达不同事项，必须读正文。条号记不准、正文不对题、依据有缺漏，
+或需要寻找配套解释时，再按原文片段 `search`，并用 `article` 核验候选。
+
+本项目目前不建设学术术语检索、术语映射表或语义召回；术语零命中不单独视为功能缺陷。
+评测重点是常见记忆入口能否被正确核验、错误条号能否被识别、版本与来源是否清楚，
+以及不确定时检索能否帮助补齐依据。
+
 ## 一条铁律：search 命中即定位锚点
 
 `chinalaw search <kw> --kind article` 返回的 `article_hits` 列表里**每一条
@@ -41,7 +54,7 @@ description: 中国法规检索方法 skill。何时使用：用户提法律问�
 
 | 命令 | 合法过滤 |
 |------|----------|
-| `search <kw>` | `--kind` / `--in <law>` / `--in-part <part>` / `--limit` |
+| `search <kw>` | `--kind` / `--in <law>` / `--in-part <part>` / `--limit` / `--as-of` / `--status` / `--level` / `--region` / `--versions` |
 | `laws` | `--level` / `--status` / `--limit`；没有 `--query` |
 | `discover` | `--query` / `--status` / `--limit`；没有位置参数 |
 | `applicable` | `--date` / `--topic` / `--law` / `--domain` |
@@ -50,6 +63,15 @@ description: 中国法规检索方法 skill。何时使用：用户提法律问�
 套到 `laws`。`--top`、`--law-filter`、`--headless` 都不是 chinalaw CLI flag。
 多关键词 query 推荐作为一个 shell 参数传入：`chinalaw search "保证期间届满 签字" --kind article --format json`。
 CLI 对未加引号的多个 query token 做空格合并容错，但加引号更清晰。
+
+search 优先精确检索；公开条文精确结果不足 `min(5, limit)` 时，补充同条正文中的
+片段共现结果。`match_mode: fuzzy` 表示近似，`fuzzy.matched` 列出实际匹配片段；
+只放宽连续性，不补同义词或错别字，近似结果不能当作查询原句出现在法条中的证明。
+0 命中时依照 `hint` 改用法条原文的用语或较短片段再试，不要堆砌口语词。
+命中默认按今天推算效力（`effective_status_as_of`），现行和
+全国层级在前，同一法规只留一个版本（`other_versions` 是被折叠的版本数）；事实发生在
+过去时加 `--as-of <日期>`。查询写成“民法典第五百零四条”会直接把该条排在最前
+（`match_mode: citation`），仍要用 `article` 取全文核对。
 
 ### 方法 1：法规名称归一化
 
@@ -67,7 +89,10 @@ chinalaw resolve 合通解释 --format json
 
 `via` 字段标示命中路径（`id_match` / `title_match` / `short_title_match`
 / `alias_exact` / `alias_derived` / `like_fallback`）。看到 `like_fallback`
-要警觉是否选错。`matched=false` → 退回到下面的 search / fetch 候选。
+要警觉是否选错。`matched=false` 时先核对 `candidates`；它们未自动采用，可能都不正确。
+按完整名称和效力版本核对后，使用所选候选的 `id` 取条；没有合适候选再走 search / fetch。
+取条失败的 `candidate_laws`、检索法规过滤的 `unresolved_candidates` 同样仅为提示，
+不能把候选当成已经解析成功，也不能因为候选存在就忽略未解析的过滤条件。
 
 **fallback：用 search 找法规候选**：
 
@@ -154,10 +179,10 @@ chinalaw relation 民法典 --format json
 | `law` | 民法典、刑法、公司法 | flk_npc |
 | `admin_regulation` | 行政法规（如反垄断法实施条例） | flk_npc |
 | `judicial_interpretation` | 民法典合同编通则解释、刑九 | flk_npc / court_gongbao / court_main / spp_gov_cn |
-| `department_rule` | 部门规章（CSRC / CAC） | flk_npc / csrc_gov_cn（证监会）/ 其它部门源暂未实装 |
+| `department_rule` | 部门规章（CSRC / CAC） | csrc_gov_cn（证监会）/ nfra_gov_cn（金融监管总局）/ gov_xzfgk（已知 gov.cn 正文页编号时）；flk_npc 不收录部门规章 |
 | `self_regulatory_rule` | 证券交易所 / 中证登 / 证券业协会业务规则 | bse_cn / sse_com_cn / szse_cn / chinaclear_cn / sac_net_cn |
 | `local_regulation` | 省人大法规 | flk_npc |
-| `local_government_rule` | 省政府规章 | flk_npc |
+| `local_government_rule` | 省政府规章 | 暂无全量源；flk_npc 不收录地方政府规章 |
 
 **说理依据（agent 可引用为参考，但不是唯一适用根据）**：
 
@@ -182,6 +207,7 @@ chinalaw relation 民法典 --format json
 | `outline <law> --with-text|--full-text --part <章节>` | 章节内全文 | 章节级深读 |
 | `search <kw> --in <law>` | 法规内全文搜 | 已知法规缩小范围 |
 | `search <kw> --in-part <章节>` | 章节内全文搜 | 长法（民法典 1260 条）的章节级精检 |
+| `search <kw> --as-of <案件日期>` | 按案件时间检索 | 每部法规取该日有效的版本，效力按该日推算 |
 | `cited-by <law>:<num>` | 反向引用 | 看某条被哪些条引用 |
 
 经典 fly weight：先

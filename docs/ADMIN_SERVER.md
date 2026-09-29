@@ -23,7 +23,7 @@ chinalaw-server serve --db ./var/my-library.db --open
 
 `init` 是显式写入操作。新库默认建立空库，`--with-fixtures` 会加载随包公开规范。旧 schema 升级前自动产生同目录的 `*.before-upgrade-时间.sqlite3` 数据库备份；来源附件目录保持原位。`init` 默认输出人类可读摘要，加 `--json` 输出机器可读 JSON（含 `db_path`、`schema_version`、`upgrade_backup` 与库状态），便于脚本判断。`serve` 不会自动初始化或升级资料库。
 
-默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到 schema 14 后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
+默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到当前 schema（16）后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌，以及检索日志 `queries.db`），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
 
 升级资料库（再次运行 `init`）前必须先停止运行中的 `serve`：`init` 与服务的维护 worker 共用同一把 `<db>.worker.lock`，服务未停时 `init` 会报"此资料库已有维护服务运行"。
 
@@ -111,6 +111,20 @@ MCP 暴露 `chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、`chinal
 
 已用 MCP SDK 2.2.0 的标准客户端测试 `legacy`（2025-11-25）与 `auto`（2026-07-28）两种 HTTP 协议模式，并覆盖匿名拒绝、私域隔离、完整正文和只读工具集合。既有 stdio 协议仍保持 2025-06-18。具体商业 Work 平台的账号权限、连接入口和托管 OAuth 接入未作实际登录验证，不作全平台兼容承诺。
 
+## 检索日志
+
+服务记录每次只读查询，用来了解资料库的实际用法：MCP 的五个工具和 REST `/api/v1/search`。每条记录包含时间、渠道、客户端、工具、查询参数、命中概况（数量或是否找到）、错误代码和耗时；不记录条文或私域规范的正文。
+
+日志存放在服务状态目录的 `queries.db`，与 `auth.db` 并列，不进入资料备份。导出为 JSON Lines：
+
+```bash
+chinalaw-server queries --db /srv/chinalaw/library.sqlite3 --since 2026-10-01
+```
+
+个人令牌记为 `personal:<令牌名称>`（给每位使用者单独发令牌即可区分），OAuth 客户端记为其 client id，面板查询记为 `owner`。
+
+启动时加 `--no-query-log` 可关闭记录。
+
 ## 备份迁移
 
 “下载备份”生成 ZIP，包含 SQLite 在线一致性快照、所有受管附件、版本/维护记录及 SHA-256 文件清单。认证数据库 `auth.db` 不在备份内；来源端的密码、会话、配对链接与令牌不会在目标环境生效。目标环境继续使用自身的所有者身份和凭据配置。
@@ -140,3 +154,24 @@ npm test
 需要前端热更新时，后端用 `chinalaw-server serve --public-url http://127.0.0.1:5173` 启动，再在 `web/` 执行 `npm run dev`。配对链接和浏览器均使用 `http://127.0.0.1:5173`，Vite 把 API 与 MCP/OAuth 请求转发到后端 8765，并保留 Host/Origin 校验。
 
 Docker 镜像构建/启动门禁在 CI；本机没有容器运行时的环境只能验证直接 Python 运行和服务器配置，不能将其记为容器实测。
+
+
+## 公开介绍页与轻量分发（0.7.0）
+
+软件内置 `/about/` 项目页、`/about/data.html` 数据页与 `/about/mcp.html` 接入文档，匿名可读。
+控制台仍在 `/`，MCP 仍在 `/mcp`，查询/管理鉴权不因文档公开而放开。
+托管生产实例用 nginx 直接提供这几个静态页面；大文件由 GitHub Release 分发，避免占用查询服务器带宽。
+
+初始 4 核 / 24 GB 策略：独立 public-read 令牌，客户端建议并发 2，nginx 按令牌 5 请求/秒、突发 20，
+全局同时查询请求 8；429 附 Retry-After。配置模板：`deploy/nginx-public-site.conf` 放在 http 级，
+`deploy/nginx-public-locations.conf` include 到 HTTPS server 级。原控制台代理 location 保留。
+只有 POST /mcp 与 GET /api/v1/search 计入并发，避免闲置 SSE 连接占满查询槽。
+具体容量应根据真实查询耗时再调整，不承诺多人高并发 SLA。
+
+外部令牌只能授予 `chinalaw:public:read`，在管理页“连接与备份”创建与撤销，不应共享所有者密码或现有私域令牌。
+默认 query log 会记录查询参数与耗时；网站必须说明这一点。批量任务优先离线/自托管。
+
+公开数据从审查后的 law JSON **重新构建**，不可直接复制生产库再删除私域表。运行
+`scripts/build-public-data --from-dir <审查目录> --output <新目录> --snapshot YYYY-MM-DD --provenance <来源清单>`，
+输出 JSON / SQLite 压缩包、manifest 与 SHA256SUMS。构建器拒绝意外字段、非审查来源和不完整记录，
+并检查私域/运行表为空。来源与许可证必须随包分发。

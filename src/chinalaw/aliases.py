@@ -293,8 +293,13 @@ def common_law_aliases(title: str | None) -> list[str]:
 
     special_aliases = _special_subject_aliases(text, issuer)
     if special_aliases:
+        ordinal = _extract_ordinal(text)
         for alias in special_aliases:
-            append_unique(aliases, alias)
+            if ordinal:
+                append_unique(aliases, f"{alias}{ordinal}")
+                append_unique(aliases, f"{alias}（{ordinal}）")
+            else:
+                append_unique(aliases, alias)
         return aliases
 
     base = _extract_host_law(text)

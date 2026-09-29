@@ -26,6 +26,7 @@ from chinalaw.server.dependencies import owner
 from chinalaw.server.guard import RequestGuard
 from chinalaw.server.mcp_http import make_mcp
 from chinalaw.server.oauth import OwnerOAuth
+from chinalaw.server.query_log import QueryLog
 
 LOG = logging.getLogger(__name__)
 
@@ -38,7 +39,8 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
     if not config.local_mode and not auth.has_password():
         raise ValueError("Server mode requires an owner password; initialize credentials first")
     oauth = OwnerOAuth(auth, config.origin)
-    mcp, mcp_app = make_mcp(config, oauth)
+    query_log = QueryLog(config.query_log_path) if config.query_log else None
+    mcp, mcp_app = make_mcp(config, oauth, query_log)
     gate = MaintenanceGate()
     worker = (
         JobWorker(config.db_path, config.artifacts_dir, gate=gate) if config.start_worker else None
@@ -68,6 +70,7 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
     )
     app.state.config, app.state.auth, app.state.oauth = config, auth, oauth
     app.state.worker = worker
+    app.state.query_log = query_log
     app.state.gate = gate
     app.add_middleware(RequestGuard, config=config)
     app.include_router(routes_auth.router)
@@ -169,6 +172,8 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
             )
         return FileResponse(file, headers={"Cache-Control": "no-cache"})
 
+    app.mount("/about", StaticFiles(directory=static / "about", html=True, check_dir=False),
+              name="public_site")
     app.mount("/assets", StaticFiles(directory=static / "assets", check_dir=False), name="assets")
     # The SDK also hosts authorization/discovery routes. This catch-all mount
     # must follow every application route. Its lifespan is owned above.

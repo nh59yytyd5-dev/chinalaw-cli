@@ -33,6 +33,9 @@ from chinalaw.schema import (
     SCHEMA_V11_SQL,
     SCHEMA_V12_SQL,
     SCHEMA_V13_SQL,
+    SCHEMA_V14_SQL,
+    SCHEMA_V15_DELTA_COLUMNS,
+    SCHEMA_V15_DELTA_SQL,
     SCHEMA_VERSION,
 )
 
@@ -50,6 +53,13 @@ SCHEMA_SQL_BY_VERSION = {
     11: SCHEMA_V11_SQL,
     12: SCHEMA_V12_SQL,
     13: SCHEMA_V13_SQL,
+    14: SCHEMA_V14_SQL,
+    15: SCHEMA_V14_SQL
+    + "".join(
+        f"ALTER TABLE laws ADD COLUMN {name} {declaration};\n"
+        for name, declaration in SCHEMA_V15_DELTA_COLUMNS
+    )
+    + SCHEMA_V15_DELTA_SQL,
 }
 
 
