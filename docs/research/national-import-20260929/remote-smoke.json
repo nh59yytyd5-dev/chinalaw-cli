@@ -1,0 +1,74 @@
+[
+  {
+    "tool": "chinalaw_search",
+    "arguments": {
+      "query": "二倍工资",
+      "kind": "article"
+    },
+    "passed": true,
+    "elapsed_ms": 1363.04
+  },
+  {
+    "tool": "chinalaw_search",
+    "arguments": {
+      "query": "不安抗辩权",
+      "kind": "article"
+    },
+    "passed": true,
+    "elapsed_ms": 248.04
+  },
+  {
+    "tool": "chinalaw_resolve",
+    "arguments": {
+      "name": "个保法"
+    },
+    "passed": true,
+    "elapsed_ms": 323.96
+  },
+  {
+    "tool": "chinalaw_article",
+    "arguments": {
+      "law": "个保法",
+      "number": "1"
+    },
+    "passed": true,
+    "elapsed_ms": 327.72
+  },
+  {
+    "tool": "chinalaw_article",
+    "arguments": {
+      "law": "民法典",
+      "number": "504"
+    },
+    "passed": true,
+    "elapsed_ms": 235.19
+  },
+  {
+    "tool": "chinalaw_article",
+    "arguments": {
+      "law": "0bf45d4df087423dbd2489391422664e",
+      "number": "正文"
+    },
+    "passed": true,
+    "elapsed_ms": 218.89
+  },
+  {
+    "tool": "chinalaw_search",
+    "arguments": {
+      "query": "诉讼时效",
+      "kind": "article",
+      "as_of": "2020-01-01",
+      "versions": "all"
+    },
+    "passed": true,
+    "elapsed_ms": 288.51
+  },
+  {
+    "rest_query": "二倍工资",
+    "passed": true
+  },
+  {
+    "rest_query": "不安抗辩权",
+    "passed": true
+  }
+]
