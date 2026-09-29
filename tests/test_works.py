@@ -149,6 +149,15 @@ class WorkVersionTests(unittest.TestCase):
         self.assertIn("缺少废止日期", past["effective_status_note"])
         self.assertEqual(self.article("测试担保法")["law"]["effective_status_as_of"], "repealed")
 
+    def test_unknown_status_does_not_become_current_from_dates_alone(self) -> None:
+        self.load(_law("unknown", effective_at="2010-01-01", status="unknown"))
+        for as_of in (None, "2020-01-01"):
+            law = self.article("unknown", as_of)["law"]
+            self.assertEqual(law["effective_status_as_of"], "unknown")
+            self.assertIn("未标注", law["effective_status_note"])
+        hits = service.search(self.db, "第一条正文", kind="article", status="current")
+        self.assertEqual(hits["counts"]["total"], 0)
+
     def test_same_title_from_another_body_is_a_different_law(self) -> None:
         self.load(
             _law("national", effective_at="2010-01-01"),
