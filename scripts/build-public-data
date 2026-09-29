@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Build public artifacts from reviewed law JSON, never from a live database."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import shutil
+import sqlite3
+import tarfile
+from pathlib import Path
+from urllib.parse import urlsplit
+
+from chinalaw import __version__, cleaning, loader
+from chinalaw.contracts import validate_law_payload
+from chinalaw.db import connect, migrate
+from chinalaw.schema import SCHEMA_VERSION, articles_fts_ddl
+
+ROOT = Path(__file__).resolve().parents[1]
+
+FIELDS = set(
+    [
+        "id",
+        "title",
+        "short_title",
+        "aliases",
+        "level",
+        "status",
+        "issuing_body",
+        "document_number",
+        "released_at",
+        "effective_at",
+        "repealed_at",
+        "source_url",
+        "source_name",
+        "source_checked_at",
+        "source_hash",
+        "articles",
+        "work_id",
+        "categories",
+        "category_ids",
+        "status_checked_at",
+        "relations",
+        "revision_id",
+        "version_label",
+        "revision_released_at",
+        "revision_notes",
+        "notes",
+        "consolidation_basis",
+    ]
+)
+PRIVATE_TABLES = (
+    "norm_packs",
+    "norm_pack_items",
+    "norm_sources",
+    "norm_clauses",
+    "norm_source_revisions",
+    "commentary_books",
+    "article_commentaries",
+    "library_artifacts",
+    "library_drafts",
+    "library_operations",
+    "library_reviews",
+    "library_jobs",
+    "norm_sources_fts_rows",
+    "norm_clauses_fts_rows",
+)
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def reviewed_payload(path: Path) -> dict:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or set(data) - FIELDS:
+        raise ValueError(f"Unexpected non-public fields: {path.name}")
+    if data.get("status") in {"seed", "stub"} or not data.get("articles"):
+        raise ValueError(f"Incomplete law: {path.name}")
+    if path.name.startswith("flk-"):
+        if (
+            urlsplit(data.get("source_url", "")).hostname != "flk.npc.gov.cn"
+            or path.stem != "flk-" + data["id"]
+        ):
+            raise ValueError(f"Not an official reviewed record: {path.name}")
+    elif path.name.startswith("fx-"):
+        original = ROOT / "data" / "fixtures" / (path.name[3:])
+        if not original.is_file():
+            raise ValueError(f"Not a bundled public fixture: {path.name}")
+        trusted = json.loads(original.read_text(encoding="utf-8"))
+        if trusted.get("source_hash") != data.get("source_hash"):
+            raise ValueError(f"Fixture source changed: {path.name}")
+    else:
+        raise ValueError(f"Unrecognized input: {path.name}")
+    data = cleaning.canonicalize(data, source_kind="external_json")
+    validate_law_payload(data, require_articles=True)
+    for article in data["articles"]:
+        if not article.get("text", "").strip():
+            raise ValueError(f"Empty article: {path.name}")
+    return data
+
+
+def public_database_check(conn: sqlite3.Connection) -> dict:
+    for name in PRIVATE_TABLES:
+        if conn.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]:
+            raise ValueError(f"Private/runtime content present: {name}")
+    if conn.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise ValueError("Database integrity check failed")
+    if conn.execute("PRAGMA foreign_key_check").fetchone():
+        raise ValueError("Database foreign key check failed")
+    return {
+        name: conn.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
+        for name in ("laws", "articles", "revisions")
+    }
+
+
+def archive(directory: Path) -> Path:
+    target = directory.with_suffix(".tar.gz")
+    with tarfile.open(target, "w:gz") as bundle:
+        for path in sorted(directory.rglob("*")):
+            if path.is_file():
+                info = bundle.gettarinfo(str(path), str(path.relative_to(directory.parent)))
+                info.uid = info.gid = 0
+                info.uname = info.gname = ""
+                info.mode = 0o644
+                with path.open("rb") as stream:
+                    bundle.addfile(info, stream)
+    return target
+
+
+def build(source: Path, output: Path, snapshot: str, provenance: Path | None = None) -> dict:
+    if output.exists():
+        raise ValueError("Use a new output directory; existing artifacts are never overwritten")
+    files = sorted(source.glob("*.json"))
+    if not files:
+        raise ValueError("No reviewed JSON records")
+    # Validate the entire input set before creating any distributable artifact.
+    payloads = [(path, reviewed_payload(path)) for path in files]
+    json_dir = output / f"chinalaw-public-{snapshot}-json"
+    sqlite_dir = output / f"chinalaw-public-{snapshot}-sqlite"
+    (json_dir / "laws").mkdir(parents=True)
+    sqlite_dir.mkdir(parents=True)
+    file_manifest = []
+    for path, data in payloads:
+        target = json_dir / "laws" / path.name
+        target.write_text(json.dumps(data, ensure_ascii=False) + "\n", encoding="utf-8")
+        file_manifest.append(
+            {
+                "file": "laws/" + path.name,
+                "id": data["id"],
+                "sha256": digest(target),
+                "source_url": data["source_url"],
+                "source_checked_at": data["source_checked_at"],
+            }
+        )
+    db = sqlite_dir / "library.db"
+    with connect(db) as conn:
+        migrate(conn)
+        conn.execute("DROP TABLE articles_fts")
+        conn.execute(articles_fts_ddl((3, 34)))
+        for _, data in payloads:
+            loader.load_law_from_dict(conn, data)
+        counts = public_database_check(conn)
+    with sqlite3.connect(db) as conn:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("PRAGMA journal_mode=DELETE")
+    metadata = {
+        "snapshot_date": snapshot,
+        "software_version": __version__,
+        "schema_version": SCHEMA_VERSION,
+        "counts": counts,
+        "input_files": len(files),
+        "scope": "national-public-laws",
+        "private_and_runtime_tables_empty": True,
+        "upstream": "https://github.com/lawtext/legal-data-docx",
+        "official_source": "https://flk.npc.gov.cn/",
+        "files": file_manifest,
+        "sqlite_sha256": digest(db),
+    }
+    for folder in (json_dir, sqlite_dir):
+        for name in ("README.md", "NOTICE.md"):
+            shutil.copyfile(ROOT / "data/public-release" / name, folder / name)
+        shutil.copyfile(ROOT / "LICENSE", folder / "LICENSE")
+        if provenance:
+            shutil.copyfile(provenance, folder / "provenance.jsonl")
+        (folder / "manifest.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    outputs = [archive(json_dir), archive(sqlite_dir)]
+    (output / "SHA256SUMS").write_text(
+        "".join(f"{digest(path)}  {path.name}\n" for path in outputs), encoding="utf-8"
+    )
+    (output / "manifest.json").write_text(
+        json.dumps(
+            {k: v for k, v in metadata.items() if k != "files"}, ensure_ascii=False, indent=2
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return {"counts": counts, "archives": [str(path) for path in outputs]}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--from-dir", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--snapshot", required=True)
+    parser.add_argument("--provenance", type=Path)
+    args = parser.parse_args()
+    from datetime import date
+
+    date.fromisoformat(args.snapshot)
+    print(
+        json.dumps(
+            build(args.from_dir, args.output, args.snapshot, args.provenance), ensure_ascii=False
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()

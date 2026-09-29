@@ -328,6 +328,8 @@ jobs:
               names = set(bundle.namelist())
           for required in (
               "chinalaw/server/static/index.html",
+              "chinalaw/server/static/about/index.html",
+              "chinalaw/server/static/about/mcp.html",
               "chinalaw/server/static/assets/third-party-licenses.txt",
           ):
               assert required in names, f"wheel is missing {required}"

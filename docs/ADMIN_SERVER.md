@@ -154,3 +154,24 @@ npm test
 需要前端热更新时，后端用 `chinalaw-server serve --public-url http://127.0.0.1:5173` 启动，再在 `web/` 执行 `npm run dev`。配对链接和浏览器均使用 `http://127.0.0.1:5173`，Vite 把 API 与 MCP/OAuth 请求转发到后端 8765，并保留 Host/Origin 校验。
 
 Docker 镜像构建/启动门禁在 CI；本机没有容器运行时的环境只能验证直接 Python 运行和服务器配置，不能将其记为容器实测。
+
+
+## 公开介绍页与轻量分发（0.7.0）
+
+软件内置 `/about/` 项目页、`/about/data.html` 数据页与 `/about/mcp.html` 接入文档，匿名可读。
+控制台仍在 `/`，MCP 仍在 `/mcp`，查询/管理鉴权不因文档公开而放开。
+托管生产实例用 nginx 直接提供这几个静态页面；大文件由 GitHub Release 分发，避免占用查询服务器带宽。
+
+初始 4 核 / 24 GB 策略：独立 public-read 令牌，客户端建议并发 2，nginx 按令牌 5 请求/秒、突发 20，
+全局同时查询请求 8；429 附 Retry-After。配置模板：`deploy/nginx-public-site.conf` 放在 http 级，
+`deploy/nginx-public-locations.conf` include 到 HTTPS server 级。原控制台代理 location 保留。
+只有 POST /mcp 与 GET /api/v1/search 计入并发，避免闲置 SSE 连接占满查询槽。
+具体容量应根据真实查询耗时再调整，不承诺多人高并发 SLA。
+
+外部令牌只能授予 `chinalaw:public:read`，在管理页“连接与备份”创建与撤销，不应共享所有者密码或现有私域令牌。
+默认 query log 会记录查询参数与耗时；网站必须说明这一点。批量任务优先离线/自托管。
+
+公开数据从审查后的 law JSON **重新构建**，不可直接复制生产库再删除私域表。运行
+`scripts/build-public-data --from-dir <审查目录> --output <新目录> --snapshot YYYY-MM-DD --provenance <来源清单>`，
+输出 JSON / SQLite 压缩包、manifest 与 SHA256SUMS。构建器拒绝意外字段、非审查来源和不完整记录，
+并检查私域/运行表为空。来源与许可证必须随包分发。
