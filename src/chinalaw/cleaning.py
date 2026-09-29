@@ -429,6 +429,13 @@ def parse_articles_from_docx(docx_bytes: bytes) -> list[dict]:
         if heading_name in {"题注", "目录"}:
             continue
 
+        if not statute_numbering and re.fullmatch(r"序\s*言", heading_name):
+            # A repeated heading in the contents is superseded by the real
+            # preamble heading; no arbitrary publication notice is inferred.
+            current = {"number": "序言", "number_display": "序言", "text": "",
+                       "part": None, "position": 1}
+            continue
+
         structural_heading = (
             heading_name if _is_structural_heading(heading_name, context) else text
         )
@@ -444,6 +451,8 @@ def parse_articles_from_docx(docx_bytes: bytes) -> list[dict]:
 
             if current is not None:
                 articles.append(current)
+                if current["number"] == "序言" and current["text"]:
+                    position = 2
 
             current = {
                 "number": normalize_article_number(number_display),

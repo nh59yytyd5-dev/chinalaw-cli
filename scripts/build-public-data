@@ -9,6 +9,7 @@ import json
 import shutil
 import sqlite3
 import tarfile
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -162,7 +163,7 @@ def build(source: Path, output: Path, snapshot: str, provenance: Path | None = N
         for _, data in payloads:
             loader.load_law_from_dict(conn, data)
         counts = public_database_check(conn)
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.execute("PRAGMA journal_mode=DELETE")
     metadata = {

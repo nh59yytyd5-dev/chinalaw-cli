@@ -137,6 +137,9 @@ def _build_snapshot_json(payload: dict, source_hash: str) -> str:
 def _upsert_revision(conn: sqlite3.Connection, payload: dict, source_hash: str) -> None:
     law_id = payload["id"]
     revision_id = payload.get("revision_id") or f"{law_id}@{source_hash[:16]}"
+    existing = conn.execute("SELECT law_id FROM revisions WHERE id = ?", (revision_id,)).fetchone()
+    if existing is not None and existing["law_id"] != law_id:
+        raise ValueError("revision id already belongs to another law; use a distinct revision id")
     released_at = (
         payload.get("revision_released_at")
         or payload.get("released_at")
