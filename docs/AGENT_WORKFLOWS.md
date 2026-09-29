@@ -9,8 +9,10 @@
 
 1. 抽取事实时间、争议焦点、关键词和可能相关的私域规范。
 2. 如存在时间效力风险，用 `chinalaw applicable` / `chinalaw relation` 查 grounding 线索。
-3. 用 `chinalaw search` 找候选规范。
-4. 用 `chinalaw article` 精确定位关键条文。
+3. 已有候选法规和条号时直接用 `chinalaw article` 核验；法名不确定先 `resolve`。
+   模型记忆可以作为定位线索，但必须核对正文是否对题，及法规版本、来源与事实时间。
+4. 条号不确定、内容不对题或需要寻找配套规范时，再用 `chinalaw search` 补齐候选并逐条核验。
+   不要求先搜索学理术语；术语零命中不单独视为项目缺陷。
 5. 如果条文缺失，用 `chinalaw fetch <law> --article <number>` 尝试补全。
 6. 如涉及公司制度、甲方要求、项目规则，先用 `chinalaw norm ingest/import` 纳入本地库。
 7. 如任务可复用，可用 `pack` 作为标签 / 收藏 / 问题域清单。
@@ -37,7 +39,6 @@ agent 不得直接读写 SQLite，也不得 import `_...` 私有 helper。需要
 ## 2. 合同审查最小流程
 
 ```bash
-PYTHONPATH=src python3 -m chinalaw search 合同 履行 --format json
 PYTHONPATH=src python3 -m chinalaw applicable --date 2022-01-01 --topic 合同效力 --format json
 PYTHONPATH=src python3 -m chinalaw article 民法典 第五百零九条 --format json
 PYTHONPATH=src python3 -m chinalaw fetch 民法典 --article 第五百八十五条 --format json

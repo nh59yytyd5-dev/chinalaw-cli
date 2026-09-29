@@ -38,7 +38,10 @@ chinalaw applicable --date <YYYY-MM-DD> --topic <主题> --format json
 chinalaw relation <法规名> --format json
 ```
 
-4. 用关键词检索候选：
+4. 模型已有候选法规和大致条号时，先直接 `article` 核验正文、身份、版本和来源；
+   法名不确定时先 `resolve`。记忆只是选取候选入参，最终引用仍须由返回原文支持。
+   不能把“返回了该条号”当成内容相关；旧条号在新法里可能指向别的事项。
+   条号不确定、原文不对题或需要补齐配套依据时，再用关键词检索候选：
 
 ```bash
 chinalaw search "<关键词或多关键词>" --kind all --format json
@@ -118,7 +121,7 @@ source_checked_at：
 
 ## 禁止事项
 
-- 不查询就凭模型记忆回答；不得凭模型记忆引用法条或来源。
+- 不查询就凭模型记忆回答；不得凭模型记忆引用法条或来源；允许用记忆选择待核验的法规名、条号。
 - 只凭 `search` 命中就引用。
 - 把私域制度、甲方要求或项目 memo 写成国家法。
 - 把 `applicable` 写成最终适用结论。
