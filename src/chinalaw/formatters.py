@@ -124,7 +124,21 @@ def _other_versions_note(hit: dict) -> str:
 
 def _search_scope_lines(result: dict) -> list[str]:
     as_of = (result.get("retrieval") or {}).get("as_of")
-    return [f"_效力判断日期：{as_of}_"] if as_of else []
+    lines = [f"_效力判断日期：{as_of}_"] if as_of else []
+    if result.get("hint"):
+        lines.append(result["hint"])
+    for name, candidates in (result.get("law_filter") or {}).get(
+        "unresolved_candidates", {}
+    ).items():
+        lines.append(f"法规名未解析：{name}；候选未自动采用。")
+        lines.extend(f"- {c['official_title']} [{c['id']}]" for c in candidates)
+    return lines
+
+
+def _approximate_match_lines(hit: dict) -> list[str]:
+    if hit.get("match_mode") == "fuzzy":
+        return ["- 近似匹配：" + " / ".join(hit["fuzzy"]["matched"])]
+    return []
 
 
 def search_to_markdown(result: dict) -> str:
@@ -201,6 +215,7 @@ def search_to_markdown(result: dict) -> str:
             lines.append("")
             lines.append(f"> {text}")
             lines.append("")
+            lines.extend(_approximate_match_lines(h))
             if h.get("match_mode") == "citation":
                 lines.append("- 按引用直接取条")
             lines.append(
@@ -579,6 +594,13 @@ def article_to_markdown(
     return "\n".join(lines) + "\n"
 
 
+def candidate_laws_to_markdown(payload: dict | None) -> str:
+    return "".join(
+        f"- 候选（未自动采用）：{item['official_title']} [{item['id']}] — {item['status']}\n"
+        for item in (payload or {}).get("candidate_laws", [])
+    )
+
+
 def articles_to_markdown(
     payload: dict,
     *,
@@ -587,7 +609,7 @@ def articles_to_markdown(
     with_title: bool = False,
 ) -> str:
     if payload is None or payload.get("law") is None:
-        return "_未找到指定法规或条文列表。_\n"
+        return "_未找到指定法规或条文列表。_\n" + candidate_laws_to_markdown(payload)
     law = payload["law"]
     lines: list[str] = []
     if footer != "none":
@@ -2112,6 +2134,9 @@ def resolve_to_markdown(payload: dict) -> str:
             "- 命中：未找到",
             "- 提示：试 `chinalaw fetch <俗称> --list-matches` 列候选",
         ]
+        for candidate in payload.get("candidates", []):
+            lines.append(f"- 候选（未自动采用）：{candidate['official_title']} "
+                         f"[{candidate['id']}] — {candidate['status']}")
         return "\n".join(lines) + "\n"
 
     level = payload.get("level") or "?"

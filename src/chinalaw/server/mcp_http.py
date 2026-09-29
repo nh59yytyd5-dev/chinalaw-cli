@@ -89,7 +89,10 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
         region: str | None = None,
         versions: str = "folded",
     ) -> dict:
-        """Exact search: every space-separated segment must occur verbatim.
+        """Exact-first search; sparse article hits add literal fragments marked fuzzy.
+
+        Fuzzy fragments must all occur in one article. Empty results suggest
+        retrying with statutory wording.
 
         Private hits appear only with private-read authorization. Public hits
         are judged on ``as_of`` (YYYY-MM-DD, default today in Beijing): laws in
@@ -157,7 +160,10 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
                 result = service.get_article(
                     config.db_path, law, number, include_norm=include_private
                 )
-        return result or {"kind": "article_missing", "error": "article_not_found", "law": law}
+            return result or {
+                "kind": "article_missing", "error": "article_not_found", "law": law,
+                **service.diagnose_article_miss(config.db_path, law, number, as_of=as_of),
+            }
 
     @server.tool(annotations=READ_ONLY)
     def chinalaw_article(law: str, number: str, as_of: str | None = None) -> dict:
