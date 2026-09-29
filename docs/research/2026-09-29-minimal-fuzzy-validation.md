@@ -69,3 +69,32 @@ CLI、stdio/HTTP MCP、面板、快照、CONTRACT、两份检索 skill 同步更
 78 passed / 2 skipped；lint、技能校验、前端构建通过。
 
 正式部署记录另见本文件后续“部署结果”；部署前完整保留旧 venv、数据库、认证状态、服务单元和旧 wheel。
+
+
+## 部署结果
+
+- 2026-09-29 10:58（北京时间）部署到甲骨文，入口 https://law.newcombmath.com 。
+- 部署代码提交：`5406d1a`，已推送 `origin/feat/verifiable-citations`。
+- wheel：`chinalaw-0.6.0-py3-none-any.whl`；本轮沿用 0.6.0 版本号，以提交和 SHA-256 唯一识别构建。
+- SHA-256：`3958ed21e0f5ff208d95df43074420718be79ff786fb999370b35f5e189559e4`，本机与服务器一致。
+- 服务器发布目录：`/srv/chinalaw/releases/20260929-step5-5406d1a/`。
+- 服务已启动，`quick_check=ok`，schema=16；法规 58、条文 8083，升级前后数量一致。
+- 6 项真实 MCP 调用、2 项 REST 检索通过，详见 `step5-validation/remote-smoke.json`。
+  公网单次 MCP 含网络约 222–230 ms；首个调用 1427 ms，不与服务层纯检索计时混算。
+- 浏览器用既有所有者密码登录，更新后会话仍有效；“二倍工资”显示劳动合同法第八十二条及
+  “近似匹配”，“不安抗辩权”显示改用法条原文检索提示。原查询令牌仍可使用。
+- 最后检查 `systemctl is-active chinalaw=active`，最近 10 分钟 error 级别日志无条目。
+- 回归问题登记为 GitHub #13，关联上述修复后关闭。检索 skill 已同步，用户级安装通过符号链接立即生效。
+
+### 回滚定位
+
+发布目录的 `backup/`（root-only）保留：
+
+- `library.db`：停止写入后用 SQLite backup API 创建的 v14 数据库副本；
+- `runtime-and-auth.tar.gz`：旧 venv 和完整 server-state，含原有密码、令牌、会话；
+- `chinalaw.service.bak.20260929`：服务单元；`previous-wheels/`：旧构建。
+
+需要回滚时先停 chinalaw，保留当前 venv、server-state 和库，再恢复上述运行环境、认证状态和库；
+清理被替换库的 WAL/SHM，恢复 chinalaw 所有权与 SELinux 标签，再启动并验证。
+不能只装回旧 wheel 而继续使用 v16 数据库。另有 init 自动创建的升级前数据库副本。
+本次无需回滚。国内迁移尚未执行；后续迁移应同时搬数据库、附件和认证状态，并在目标 SQLite 上重建索引。
