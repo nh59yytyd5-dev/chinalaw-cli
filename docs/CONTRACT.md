@@ -419,7 +419,7 @@ CREATE TABLE meta (
 | `work_id` / `work_versions` | 所属作品及其全部版本（`id`、`effective_at`、`released_at`、`status`） |
 | `status_checked_at` | 见 §2.1 |
 
-推算规则：施行日期晚于该日为 `pending_effective`；同一作品中有更晚、且在该日已施行的版本为 `amended`；`repealed_at` 不晚于该日为 `repealed`；上游标注已废止但没有 `repealed_at` 时，今天为 `repealed`，过去的日期为 `unknown`。`status` 字段保留上游原值，两者可能不同。
+推算规则：施行日期晚于该日为 `pending_effective`；同一作品中有更晚、且在该日已施行的版本为 `amended`；`repealed_at` 不晚于该日为 `repealed`；上游标注已废止但没有 `repealed_at` 时，今天为 `repealed`，过去的日期为 `unknown`。公开检索/解析/取条/目录返回的 `status`（条文命中为 `law_status`）与 `effective_status_as_of` 一致；`source_status` 保留入库标注，不能单独用来判断文本是否当前可引用。管理文档为保留编辑语义仍返回入库 `status`，界面使用 `effective_status_as_of` 展示。
 
 ---
 
@@ -701,6 +701,8 @@ JSON 输出 schema：
 
 上游状态为 `unknown` 且没有明确的版本替代或废止依据时，即使日期已到仍保持
 `effective_status_as_of: unknown`，并附未标注效力的提示，不能仅凭日期显示为现行。
+
+已修改但没有后续版本日期的记录，不因发布日期已到而升为 current；历史时点标 unknown。缺施行日期时，发布日期仅作检索定位，不能证明历史有效。经核实的 `revised_by` 关系可以结束旧文本的当前性；缺少新全文时明示“现行全文待补”，不把法规说成已废止。
 
 **排序与折叠**（公开法命中）：先按 `effective_status_as_of`（现行 → 尚未施行 → 待核 →
 已修改 / 已废止），再把只在法规标题里命中的条文排在正文命中之后，再按层级（法律、行政法规、

@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Rebuild the 2024 criminal-law consolidation from the official base and amendment XII."""
+import argparse
+import copy
+import hashlib
+import json
+import re
+import unicodedata
+from pathlib import Path
+
+from chinalaw.service import normalize_article_number
+
+
+def build(root: Path, fixture: Path) -> dict:
+    base = json.loads((root / 'flk-ff808181796a636a0179822a19640c92.json').read_text())
+    amendment = json.loads((root / 'flk-ff8081818c3ce31f018cb6a6bc412f55.json').read_text())
+    previous = json.loads(fixture.read_text())
+    articles = {a['number']: copy.deepcopy(a) for a in base['articles']}
+    blocks = re.split(r'(?m)^[一二三四五六七八]、', amendment['articles'][0]['text'])[1:]
+    changed = []
+    for block in blocks[:7]:
+        number = normalize_article_number(re.search(r'刑法(第[^条]+条)', block).group(1))
+        quoted = block[block.index('：“') + 2:block.rindex('”')]
+        text = re.sub(r'(?m)^“', '', quoted).strip()
+        if '第一款修改为' in block:
+            text += '\n' + articles[number]['text'].split('\n', 1)[1]
+        articles[number]['text'] = text
+        changed.append(number)
+    assert set(changed) == {'165', '166', '169', '387', '390', '391', '393'}
+    assert '2024年3月1日起施行' in blocks[7]
+
+    def normalized(text):
+        return re.sub(r'\s+', '', unicodedata.normalize('NFKC', re.sub(r'【[^】]+】', '', text)))
+
+    old = {a['number']: a['text'] for a in previous['articles']}
+    assert old.keys() == articles.keys()
+    for number, article in articles.items():
+        assert normalized(old[number]) == normalized(article['text']), number
+    result = copy.deepcopy(previous)
+    result['articles'] = list(articles.values())
+    result['source_url'] = base['source_url']
+    result['source_name'] = '官方2021基础文本＋刑法修正案（十二）核验合并（非官网现行全文）'
+    result['source_checked_at'] = '2026-09-29T00:00:00+08:00'
+    result['source_hash'] = hashlib.sha256(
+        (base['source_hash'] + amendment['source_hash'] + 'official-consolidation-v1').encode()
+    ).hexdigest()
+    result['revision_notes'] = (
+        '本项目核验合并文本，source_url 指向2021基础文本，不是2024全文。'
+        f'基础文本：{base["source_url"]}；修正案（十二）：{amendment["source_url"]}。'
+        '修改165、166、169、387第一款、390、391第一款、393条，2024-03-01施行；'
+        '其余498条与官方基础文本一致。移除非官方【条旨/罪名】标注。'
+        '刑法时间适用仍须独立判断从旧兼从轻。'
+    )
+    return result
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--corpus-dir', type=Path, required=True)
+    parser.add_argument('--fixture', type=Path, required=True)
+    parser.add_argument('--output', type=Path, required=True)
+    args = parser.parse_args()
+    result = build(args.corpus_dir, args.fixture)
+    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+    print('505 articles verified; 7 amended articles reconstructed; official source chain retained')

@@ -103,7 +103,8 @@ class WorkVersionTests(unittest.TestCase):
         )
         result = self.article("测试程序法")
         self.assertEqual(result["law"]["id"], "arrived")
-        self.assertEqual(result["law"]["status"], "pending_effective")
+        self.assertEqual(result["law"]["source_status"], "pending_effective")
+        self.assertEqual(result["law"]["status"], "current")
         self.assertEqual(result["law"]["effective_status_as_of"], "current")
 
     def test_explicit_id_keeps_the_requested_version(self) -> None:
@@ -233,3 +234,71 @@ class WorkVersionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_amended_without_successor_is_never_promoted_to_current(tmp_path):
+    db = tmp_path / 'law.db'
+    with connect(db) as conn:
+        migrate(conn)
+        loader.load_law_from_dict(conn, _law('orphan', effective_at='1997-01-01', status='amended'))
+    now = service.get_article(db, 'orphan', '1')['law']
+    assert now['status'] == now['effective_status_as_of'] == 'amended'
+    assert now['source_status'] == 'amended'
+    assert service.get_article_as_of(db, 'orphan', '1', '2000-01-01')['law']['status'] == 'unknown'
+    assert not service.list_laws(db, status='current')
+    assert service.resolve(db, 'orphan')['status'] == 'amended'
+
+
+def test_missing_effective_date_does_not_prove_historical_validity(tmp_path):
+    db = tmp_path / 'law.db'
+    with connect(db) as conn:
+        migrate(conn)
+        loader.load_law_from_dict(conn, _law('undated', effective_at=None, released_at='2000-01-01'))
+    law = service.get_article_as_of(db, 'undated', '1', '2000-01-02')['law']
+    assert law['status'] == 'unknown'
+    assert '发布日期' in law['effective_status_note']
+
+
+def test_old_upstream_current_label_is_not_exposed_as_current(tmp_path):
+    from chinalaw.admin import catalog
+    db = tmp_path / 'law.db'
+    with connect(db) as conn:
+        migrate(conn)
+        loader.load_law_from_dict(conn, _law('old', effective_at='1982-12-04', work_id='constitution'))
+        loader.load_law_from_dict(conn, _law('new', effective_at='2018-03-11', work_id='constitution'))
+    law = service.get_article(db, 'old', '1')['law']
+    assert law['status'] == 'amended'
+    assert law['source_status'] == 'current'
+    assert service.resolve(db, 'old')['status'] == 'amended'
+    assert {d['id'] for d in service.list_laws(db, status='current')} == {'new'}
+    inventory = catalog.list_documents(db, status='current')
+    assert {d['id'] for d in inventory['items']} == {'new'}
+    assert catalog.get_document(db, 'law', 'old')['document']['effective_status_as_of'] == 'amended'
+
+
+def test_verified_amendment_without_full_text_ends_currency_not_law(tmp_path):
+    db = tmp_path / 'law.db'
+    payload = _law('old-law', effective_at='2018-01-01', status='amended', relations=[{
+        'relation_type': 'revised_by', 'to_law_id': 'amendment', 'to_law_title': '修改决定',
+        'effective_at': '2026-09-01', 'notes': '本决定自2026年9月1日起施行。'}])
+    with connect(db) as conn:
+        migrate(conn)
+        loader.load_law_from_dict(conn, payload)
+    old = service.get_article_as_of(db, 'old-law', '1', '2025-01-01')['law']
+    assert old['status'] == 'current'
+    now = service.get_article(db, 'old-law', '1')['law']
+    assert now['status'] == 'amended'
+    assert '现行全文待补' in now['effective_status_note']
+
+
+def test_explicit_version_title_keeps_old_text_and_marks_it_old(tmp_path):
+    db = tmp_path / 'law.db'
+    with connect(db) as conn:
+        migrate(conn)
+        def load(payload):
+            loader.load_law_from_dict(conn, payload)
+        load(_law('old', title='测试法（1982年）', effective_at='1982-12-04', work_id='one'))
+        load(_law('new', title='测试法（2018年修正文本）', effective_at='2018-03-11', work_id='one'))
+    law = service.get_article(db, '测试法（1982年）', '1')['law']
+    assert law['id'] == 'old'
+    assert law['status'] == 'amended'

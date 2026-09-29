@@ -52,20 +52,32 @@ def list_documents(
         if value:
             conditions.append(f"d.{column} = ?")
             parameters.append(value)
-    if status and kind == "law":
-        conditions.append("d.status = ?")
-        parameters.append(status)
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
     with connect_readonly(db_path) as conn:
         conn.execute("BEGIN")
         total = conn.execute(f"SELECT COUNT(*) FROM {table} d {where}", parameters).fetchone()[0]
+        pagination_sql = "" if status and kind == "law" else " LIMIT ? OFFSET ?"
+        pagination_params = [] if not pagination_sql else [page_size, (page - 1) * page_size]
         rows = conn.execute(
             f"SELECT d.*, (SELECT COUNT(*) FROM {clause_table} c "
             f"WHERE c.{parent} = d.id) AS clause_count FROM {table} d {where} "
-            f"ORDER BY d.{title} COLLATE NOCASE, d.id LIMIT ? OFFSET ?",
-            [*parameters, page_size, (page - 1) * page_size],
+            f"ORDER BY d.{title} COLLATE NOCASE, d.id{pagination_sql}",
+            [*parameters, *pagination_params],
         ).fetchall()
         items = [_inventory_item(dict(row), kind) for row in rows]
+        if kind == "law":
+            cache = {}
+            for item in items:
+                context = service._law_search_context(
+                    conn, item["id"], service.legal_today(), cache
+                )
+                item.update(source_status=item["status"], status=context["status"],
+                            effective_status_as_of=context["status"],
+                            effective_status_note=context["note"])
+            if status:
+                items = [item for item in items if item["status"] == status]
+                total = len(items)
+                items = items[(page - 1) * page_size:page * page_size]
         library_id = get_meta(conn, "library_id")
     return {
         "kind": "library_inventory",
@@ -123,6 +135,10 @@ def get_document(
             "ORDER BY created_at DESC, id DESC LIMIT 1",
             (kind, identifier, digest),
         ).fetchone()
+        if kind == "law":
+            context = service._law_search_context(conn, identifier, service.legal_today(), {})
+            payload.update(effective_status_as_of=context["status"],
+                           effective_status_note=context["note"])
     if kind == "norm":
         payload["binding_note"] = models.norm_source_type_binding_note(payload["source_type"])
     return {
@@ -186,12 +202,23 @@ def revision_document(db_path: Path | str, kind: str, identifier: str, revision:
             revision_released_at=row["released_at"],
             revision_notes=row["notes"],
         )
+    fingerprint = content_fingerprint(payload, kind)
+    if kind == "law":
+        with connect_readonly(db_path) as conn:
+            member_row = conn.execute("SELECT * FROM laws WHERE id = ?", (identifier,)).fetchone()
+            status_fields = {"status": payload.get("status")}
+            service._annotate_effective_status(
+                conn, status_fields, member_row, service._work_member_rows(conn, member_row),
+                service.legal_today(), revision=payload,
+            )
+            payload.update({key: value for key, value in status_fields.items()
+                            if key.startswith("effective_status")})
     return {
         "kind": "library_revision",
         "document_kind": kind,
         "revision": revision,
         "document": payload,
-        "fingerprint": content_fingerprint(payload, kind),
+        "fingerprint": fingerprint,
     }
 
 

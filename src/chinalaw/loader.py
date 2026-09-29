@@ -174,6 +174,17 @@ def _upsert_revision(conn: sqlite3.Connection, payload: dict, source_hash: str) 
     )
 
 
+def _stored_text_differs(conn: sqlite3.Connection, law_id: str, articles: list[dict]) -> bool:
+    stored = [tuple(row) for row in conn.execute(
+        "SELECT number, text, part, title, position FROM articles "
+        "WHERE law_id = ? ORDER BY position",
+        (law_id,),
+    )]
+    incoming = [(str(a["number"]), a["text"], a.get("part"), a.get("title"), a.get("position", pos))
+                for pos, a in enumerate(articles, 1)]
+    return stored != incoming
+
+
 def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
     """Refresh law/source metadata without replacing articles or revisions.
 
@@ -199,6 +210,11 @@ def refresh_law_metadata(conn: sqlite3.Connection, payload: dict) -> None:
     validate_law_payload(normalized, require_articles=False)
 
     law_id = normalized["id"]
+    # The same raw source hash can produce corrected text after a parser fix.
+    # A metadata-only shortcut must not retain the old, incorrect extraction.
+    if normalized["articles"] and _stored_text_differs(conn, law_id, normalized["articles"]):
+        load_law_from_dict(conn, normalized)
+        return
     before = conn.execute("SELECT title, level FROM laws WHERE id = ?", (law_id,)).fetchone()
     conn.execute(
         """

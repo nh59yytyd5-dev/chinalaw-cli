@@ -36,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 server = [
   "fastapi>=0.141.1,<0.142",
+  "starlette>=1.7,<1.8",
   "uvicorn>=0.52.4,<0.53",
   "mcp>=2.2,<2.3",
   "python-multipart>=0.0.20,<1",

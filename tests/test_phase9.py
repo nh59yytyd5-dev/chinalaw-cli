@@ -110,7 +110,7 @@ class FormatterConsistencyTests(unittest.TestCase):
         )
         for rendered in outputs:
             with self.subTest(rendered=rendered[:30]):
-                self.assertIn("- 状态：repealed", rendered)
+                self.assertIn("- 文本状态：repealed", rendered)
                 self.assertIn("- 施行日期：2020-01-01", rendered)
                 self.assertIn("- 废止日期：2025-01-01", rendered)
                 self.assertIn("- 当前版本：2024-07-01 施行版", rendered)
