@@ -651,7 +651,7 @@ JSON 输出 schema：
       "freshness_days": "integer|null",
       "score": "number|null",
       "match_kind": "primary|relevant",
-      "match_mode": "citation|exact",
+      "match_mode": "citation|exact|fuzzy",
       "work_id": "string|null",
       "effective_status_as_of": "current|amended|repealed|pending_effective|unknown",
       "effective_status_note": "string | 仅在状态无法由日期确定时出现",
@@ -679,6 +679,25 @@ JSON 输出 schema：
 扫描相同；只有无法用索引缩小的查询（单个汉字、只有数字等）才走全表扫描。`strategy`：
 条文检索用上索引时为 `fts5`，否则为 `like`；只查法规（`--kind law`）时沿用标题索引的规则
 （所有 term ≥ 3 字 → `fts5`）。
+
+**最小近似补充**：公开条文精确命中不足 `min(5, limit)` 时，从正文索引召回最多 500 个
+候选。查询限 80 字以内，按空白和常见标点分段；每段须完整出现在同一条正文，或完整拆成
+至少 2 字的片段，每个片段都出现在该正文中。不要求片段相邻或按查询顺序出现；未分隔的 4 字以内短词仅允许跨至多 2 个字符，
+避免“表现代理”被同条中相距很远的两个词误召回。不漏字、
+不猜错别字、不作同义词替换。全半角与大小写归一，百分号等数值符号保留。
+近似结果附 `match_mode: "fuzzy"`、`fuzzy.matched`（可逐项核对的片段），在精确结果后
+去重追加，总条数不超过 `limit`，沿用法规、章节、日期、效力、层级、地域与版本过滤。
+已有精确命中的作品不会被补入另一版本。超长查询保持精确检索，不截断后误召回。
+顶层 `fuzzy` 含 `applied`、`min_exact_hits`、`count`，条文检索另含 `segments`；
+`strategy` 仍描述精确通道。私域规范本轮保持精确检索。
+所有类型均无命中时返回 `hint`，提示改用法条原文说法或较短片段再查、用 `article` 核对。
+
+**名称候选**：公开法规解析失败时，`resolve.candidates`、取条诊断与 `articles` 的
+`candidate_laws`、`search.law_filter.unresolved_candidates` 返回最多 5 个本地名称候选。
+候选含 `id`、`official_title`、`short_title`、`status`、`level`、`score`、`matched_name`；
+名称归一化后比较全称和别名，低于阈值不返回，同名版本仅展示一个。
+候选仅供核对，绝不自动用于解析、取条或放宽过滤；原 `matched`、错误码和退出码不变。
+候选可能均不正确，调用方仍可用 `fetch --list-matches` 查外部来源。
 
 **排序与折叠**（公开法命中）：先按 `effective_status_as_of`（现行 → 尚未施行 → 待核 →
 已修改 / 已废止），再把只在法规标题里命中的条文排在正文命中之后，再按层级（法律、行政法规、

@@ -1355,7 +1355,8 @@ def _handle_article(args, db_path: Path, fmt: str, parser: argparse.ArgumentPars
         }
 
         def _miss_md(_payload: dict) -> str:
-            base = formatters.article_to_markdown(None)
+            base = (formatters.article_to_markdown(None)
+                    + formatters.candidate_laws_to_markdown(diag))
             hint = diag.get("hint")
             reason = diag.get("reason", "?")
             if hint:

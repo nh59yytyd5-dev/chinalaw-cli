@@ -445,6 +445,8 @@ def _compact_search_hit(hit: dict) -> dict:
         "freshness_days": hit.get("freshness_days"),
         "score": hit.get("score"),
         "match_kind": hit.get("match_kind"),
+        "match_mode": hit.get("match_mode"),
+        "fuzzy": hit.get("fuzzy"),
         "text_hash": _hash_text(text),
         "text_excerpt": _excerpt(text),
     }

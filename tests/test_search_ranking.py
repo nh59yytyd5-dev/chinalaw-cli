@@ -66,7 +66,8 @@ class SearchTests(unittest.TestCase):
 
     def hits(self, query: str, **options) -> list[tuple[str, str]]:
         result = service.search(self.db, query, kind="article", limit=50, **options)
-        return [(hit["law_id"], hit["number"]) for hit in result["article_hits"]]
+        return [(hit["law_id"], hit["number"]) for hit in result["article_hits"]
+                if hit["match_mode"] != "fuzzy"]
 
     def test_hits_equal_a_substring_scan(self) -> None:
         self.load(

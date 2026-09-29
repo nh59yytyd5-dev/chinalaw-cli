@@ -740,8 +740,9 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "chinalaw_search",
         "title": "Search Chinese law database",
         "description": (
-            "Exact search of local laws/articles/norms: every space-separated "
-            "segment must occur verbatim. Use kind=article for legal basis "
+            "Exact-first search of local laws/articles/norms. Sparse article hits "
+            "are supplemented by same-article literal fragments, marked fuzzy. "
+            "If empty, retry with statutory wording. Use kind=article for legal basis "
             "discovery. Public hits are judged on as_of (default today): laws "
             "in force and national levels first, one version per law unless "
             "versions=all. A citation such as 民法典第五百零四条 returns that "

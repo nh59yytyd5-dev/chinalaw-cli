@@ -54,3 +54,22 @@ def test_rest_search_accepts_options(owner_api):
     assert response.json()["retrieval"]["versions"] == "all"
     bad = owner_api.get("/api/v1/search", params={"q": "公开全文", "level": "nonsense"})
     assert bad.status_code == 400
+
+
+def test_mcp_missing_law_returns_candidates_without_resolving(owner_api):
+    from chinalaw import loader
+    from chinalaw.db import connect
+    from tests.test_search_ranking import _law
+
+    with connect(owner_api.app.state.config.db_path) as conn:
+        loader.load_law_from_dict(conn, _law(
+            "privacy-fuzzy", ["个人信息受到保护。"], title="中华人民共和国个人信息保护法"
+        ))
+    response = _call(owner_api, _session(owner_api), "chinalaw_article",
+                     {"law": "个保法", "number": "1"}, 2)
+    result = response.json()["result"]
+    assert not result.get("isError"), result
+    payload = _payload(result)
+    assert payload["error"] == "article_not_found"
+    assert payload["candidate_laws"][0]["id"] == "privacy-fuzzy"
+    assert "article" not in payload

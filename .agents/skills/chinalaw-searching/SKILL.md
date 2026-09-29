@@ -51,8 +51,11 @@ description: 中国法规检索方法 skill。何时使用：用户提法律问�
 多关键词 query 推荐作为一个 shell 参数传入：`chinalaw search "保证期间届满 签字" --kind article --format json`。
 CLI 对未加引号的多个 query token 做空格合并容错，但加引号更清晰。
 
-search 是精确检索：每个片段都要原样出现在条文或法规标题里，0 命中时换成法条原文的
-用语再试，不要堆砌口语词。命中默认按今天推算效力（`effective_status_as_of`），现行和
+search 优先精确检索；公开条文精确结果不足 `min(5, limit)` 时，补充同条正文中的
+片段共现结果。`match_mode: fuzzy` 表示近似，`fuzzy.matched` 列出实际匹配片段；
+只放宽连续性，不补同义词或错别字，近似结果不能当作查询原句出现在法条中的证明。
+0 命中时依照 `hint` 改用法条原文的用语或较短片段再试，不要堆砌口语词。
+命中默认按今天推算效力（`effective_status_as_of`），现行和
 全国层级在前，同一法规只留一个版本（`other_versions` 是被折叠的版本数）；事实发生在
 过去时加 `--as-of <日期>`。查询写成“民法典第五百零四条”会直接把该条排在最前
 （`match_mode: citation`），仍要用 `article` 取全文核对。
@@ -73,7 +76,10 @@ chinalaw resolve 合通解释 --format json
 
 `via` 字段标示命中路径（`id_match` / `title_match` / `short_title_match`
 / `alias_exact` / `alias_derived` / `like_fallback`）。看到 `like_fallback`
-要警觉是否选错。`matched=false` → 退回到下面的 search / fetch 候选。
+要警觉是否选错。`matched=false` 时先核对 `candidates`；它们未自动采用，可能都不正确。
+按完整名称和效力版本核对后，使用所选候选的 `id` 取条；没有合适候选再走 search / fetch。
+取条失败的 `candidate_laws`、检索法规过滤的 `unresolved_candidates` 同样仅为提示，
+不能把候选当成已经解析成功，也不能因为候选存在就忽略未解析的过滤条件。
 
 **fallback：用 search 找法规候选**：
 

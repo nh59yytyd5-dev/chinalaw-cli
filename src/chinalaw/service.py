@@ -16,6 +16,7 @@ from pathlib import Path
 
 from chinalaw.aliases import display_short_title, merge_law_aliases
 from chinalaw.db import connect, connect_readonly, current_version, migrate
+from chinalaw.fuzzy import fragments, matching_fragments, name_score, recall_expression
 from chinalaw.models import norm_source_type_binding_note, normalize_norm_source_type
 from chinalaw.schema import SCHEMA_VERSION
 from chinalaw.search_tokens import LOCAL_LEVELS, is_exact_phrase, match_expression
@@ -632,6 +633,29 @@ def _resolve_law_row_with_via(
 def _resolve_law_row(conn: sqlite3.Connection, identifier: str) -> sqlite3.Row | None:
     row, _via = _resolve_law_row_with_via(conn, identifier)
     return row
+
+
+def _law_candidates(conn: sqlite3.Connection, query: str) -> list[dict]:
+    candidates = []
+    if len(query) > 200:
+        return candidates
+    for row in conn.execute("SELECT * FROM laws ORDER BY released_at DESC, id"):
+        names = [row["title"], *_aliases_for_law_row(row)]
+        score, name = max((name_score(query, name), name) for name in names if name)
+        if score >= 0.6:
+            candidates.append({
+                "id": row["id"], "official_title": row["title"],
+                "short_title": row["short_title"], "status": row["status"],
+                "level": row["level"], "score": round(score, 4), "matched_name": name,
+            })
+    candidates.sort(key=lambda item: -item["score"])
+    seen = set()
+    result = []
+    for item in candidates:
+        if item["official_title"] not in seen:
+            seen.add(item["official_title"])
+            result.append(item)
+    return result[:5]
 
 
 def _aliases_for_law_row(row: sqlite3.Row) -> list[str]:
@@ -1465,6 +1489,7 @@ def _search_articles(
     tier: str | None = None,
     law_where: str = "",
     law_where_params: tuple = (),
+    approximate: bool = False,
 ) -> list[dict]:
     """Exact article hits: every query segment occurs verbatim.
 
@@ -1479,8 +1504,12 @@ def _search_articles(
     if in_part:
         part_filter = " AND a.part LIKE ? ESCAPE '\\'"
         part_params = [_like_pattern(in_part)]
-    match = match_expression(terms)
+    match = recall_expression(terms) if approximate else match_expression(terms)
+    if approximate and match is None:
+        return []
     check, check_params = _segment_check(terms, indexed=match is not None)
+    if approximate:
+        check, check_params = "", []
     check = f" AND {check}" if check else ""
     extra = f"{law_filter}{part_filter}{law_where}"
     extra_params = [*law_params, *part_params, *law_where_params]
@@ -1520,7 +1549,16 @@ def _search_articles(
             """,
             [*check_params, *extra_params, *tier_params, limit],
         ).fetchall()
-    return [_article_hit_from_row(row, terms) for row in rows]
+    hits = []
+    for row in rows:
+        hit = _article_hit_from_row(row, terms)
+        if approximate:
+            matched = matching_fragments(terms, row["text"])
+            if matched is None:
+                continue
+            hit.update(match_mode="fuzzy", fuzzy={"matched": matched})
+        hits.append(hit)
+    return hits
 
 
 def _search_laws(
@@ -1734,6 +1772,7 @@ def _resolve_law_filter(
         "requested": requested,
         "resolved": resolved,
         "unresolved": unresolved,
+        "unresolved_candidates": {name: _law_candidates(conn, name) for name in unresolved},
     }
 
 
@@ -1876,6 +1915,35 @@ def _law_scope_filter(
 
 # ---------- 对外接口 ----------
 
+def _supplement_articles(conn, hits, query, limit, law_ids, in_part, scope, rank):
+    parts = fragments(query)
+    applied = len(hits) < min(5, limit) and recall_expression(parts) is not None
+    info = {"applied": applied, "min_exact_hits": 5, "count": 0, "segments": parts}
+    if not applied:
+        return hits, info
+    candidates = _search_articles(
+        conn, query=query, terms=parts, use_fts=True, limit=_SEARCH_POOL_MAX,
+        law_ids=law_ids, in_part=in_part, law_where=scope[0],
+        law_where_params=scope[1], approximate=True,
+    )
+    exact_keys = {(h["law_id"], h["number"]) for h in hits}
+    folded = rank["versions"] == "folded" and (
+        rank["statuses"] is None or "current" in rank["statuses"]
+    )
+    def work_key(hit):
+        return _law_search_context(conn, hit["law_id"], rank["as_of"], rank["cache"])["work_key"]
+
+    exact_works = {work_key(h): h["law_id"] for h in hits}
+    additions = _rank_and_fold(conn, candidates, law_key="law_id", **rank)
+    additions = [h for h in additions
+                 if (h["law_id"], h["number"]) not in exact_keys
+                 and not (folded and work_key(h) in exact_works
+                          and exact_works[work_key(h)] != h["law_id"])]
+    additions = additions[:max(0, limit - len(hits))]
+    info["count"] = len(additions)
+    return hits + additions, info
+
+
 def search(
     db_path: Path | str,
     query: str,
@@ -1891,7 +1959,7 @@ def search(
     region: str | None = None,
     versions: str = "folded",
 ) -> dict:
-    """精确检索：每个查询片段都须原样出现在条文（或其法规标题）中。
+    """精确优先；命中不足时补充片段同条共现的近似结果。
 
     条文走二元组索引，法规标题与私域规范仍走 trigram 索引，1~2 字查询回退到
     LIKE。公开法命中按 ``as_of``（默认今天，北京时间）推算效力，现行在前、
@@ -1920,6 +1988,7 @@ def search(
         "region": options["region"],
     }
 
+    fuzzy = {"applied": False, "min_exact_hits": 5, "count": 0}
     citation = None
     if wants_articles and in_laws is None and not in_part:
         citation = _citation_hit(db_path, query, as_of=_parse_iso_date(as_of) if as_of else None)
@@ -1966,6 +2035,11 @@ def search(
                     if (hit["law_id"], hit["number"]) != (citation["law_id"], citation["number"])
                 ]
                 article_hits = article_hits[:limit]
+        if wants_articles:
+            article_hits, fuzzy = _supplement_articles(
+                conn, article_hits, query, limit, law_ids, in_part,
+                (scope_sql, scope_params), rank,
+            )
         law_hits = []
         if kind in ("law", "all") and not in_part:
             law_candidates = _search_laws(
@@ -2011,8 +2085,11 @@ def search(
             "norm_clause_hits": norm_clause_hits,
             "norm_source_hits": norm_source_hits,
             "retrieval": retrieval,
+            "fuzzy": fuzzy,
         }
     )
+    if not result["counts"]["total"]:
+        result["hint"] = "未找到匹配内容。请改用法条原文的说法或较短片段再查，并用 article 核对。"
     # 公开法与私域规范同时命中时给出顶层冲突提示（不做逐条语义判断）。
     if (article_hits or law_hits) and (norm_clause_hits or norm_source_hits):
         result["conflict_notice"] = NORM_CONFLICT_NOTICE
@@ -2169,6 +2246,9 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
     with connect(db_path) as conn:
         migrate(conn)
         row, via = _resolve_law_row_with_via(conn, raw)
+        if row is None:
+            base["candidates"] = _law_candidates(conn, raw)
+            base["hint"] = "候选未自动采用；请核对名称，候选也可能都不正确。"
 
     if row is None:
         return base
@@ -2370,6 +2450,8 @@ def diagnose_article_miss(
     if law is None:
         return {
             "reason": "law_missing",
+            "candidate_laws": resolve(db_path, name).get("candidates", []),
+            "candidate_notice": "候选未自动采用，请核对名称。",
             "law_id": None,
             "as_of": as_of_value or None,
             "hint": (
@@ -2675,13 +2757,12 @@ def get_articles(
                     fallback["ok"] = fallback.get("missing_count", 0) == 0
                     fallback["found"] = True
                     return fallback
-            return _articles_error_payload(
-                "law_not_found",
-                law_identifier,
-                numbers,
-                as_of=as_of,
-                message="法规未入库或名称无法解析。",
+            error = _articles_error_payload(
+                "law_not_found", law_identifier, numbers, as_of=as_of,
+                message="法规未入库或名称无法解析。候选未自动采用，请核对名称。",
             )
+            error["candidate_laws"] = _law_candidates(conn, law_identifier)
+            return error
 
         revisions = _fetch_revisions(conn, row["id"])
         categories = _fetch_categories_for_law(conn, row["id"])
