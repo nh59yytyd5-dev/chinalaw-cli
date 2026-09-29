@@ -12,9 +12,9 @@ from chinalaw.service import normalize_article_number
 
 
 def build(root: Path, fixture: Path) -> dict:
-    base = json.loads((root / 'flk-ff808181796a636a0179822a19640c92.json').read_text())
-    amendment = json.loads((root / 'flk-ff8081818c3ce31f018cb6a6bc412f55.json').read_text())
-    previous = json.loads(fixture.read_text())
+    base = json.loads((root / 'flk-ff808181796a636a0179822a19640c92.json').read_text(encoding='utf-8'))
+    amendment = json.loads((root / 'flk-ff8081818c3ce31f018cb6a6bc412f55.json').read_text(encoding='utf-8'))
+    previous = json.loads(fixture.read_text(encoding='utf-8'))
     articles = {a['number']: copy.deepcopy(a) for a in base['articles']}
     blocks = re.split(r'(?m)^[一二三四五六七八]、', amendment['articles'][0]['text'])[1:]
     changed = []
@@ -61,5 +61,5 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     result = build(args.corpus_dir, args.fixture)
-    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print('505 articles verified; 7 amended articles reconstructed; official source chain retained')

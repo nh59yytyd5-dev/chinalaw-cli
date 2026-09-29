@@ -1180,8 +1180,9 @@ def _current_work_version(
     decide instead. An explicit id always keeps the requested record.
     """
     members = _work_member_rows(conn, row)
+    matched_name = row["short_title"] if via == "short_title_match" else row["title"]
     versioned_name = via in {"title_match", "short_title_match"} and re.search(
-        r"[（(](?:19|20)\d{2}年?(?:修正文本|修正|修订|修改)?[）)]$", row["title"]
+        r"[（(](?:19|20)\d{2}年?(?:修正文本|修正|修订|修改)?[）)]$", matched_name or ""
     )
     if via == "id_match" or versioned_name or len(members) < 2:
         return row, members

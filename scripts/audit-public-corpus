@@ -37,6 +37,13 @@ def audit(path: Path) -> dict:
             ):
                 failures.append({'code': 'word_artifact', 'id': row['law_id'],
                                  'article': row['number']})
+        for revision in conn.execute('SELECT id, law_id, snapshot_json FROM revisions'):
+            snapshot = json.loads(revision['snapshot_json'] or '{}')
+            if snapshot.get('id') != revision['law_id']:
+                failures.append({'code': 'snapshot_identity', 'revision': revision['id']})
+        for row in conn.execute('SELECT id FROM laws WHERE NOT EXISTS '
+                                '(SELECT 1 FROM revisions WHERE law_id = laws.id)'):
+            failures.append({'code': 'missing_revision', 'id': row['id']})
         count = conn.execute('SELECT count(*) FROM articles').fetchone()[0]
     return {'ok': not failures, 'laws': len(rows), 'articles': count,
             'text_statuses': dict(statuses), 'missing_dates': dict(missing_dates),
@@ -50,6 +57,6 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     result = audit(args.db)
-    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({k: v for k, v in result.items() if k != 'failures'}, ensure_ascii=False))
     raise SystemExit(0 if result['ok'] else 1)

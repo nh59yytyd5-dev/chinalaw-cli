@@ -53,3 +53,60 @@ def test_same_date_revision_uses_current_verified_source(tmp_path):
         load_law_from_dict(conn, fixed)
     result = service.get_article_as_of(db, 'law', '1', '2021-01-01')
     assert result['article']['text'] == '核验正文'
+
+
+def test_revision_identity_cannot_be_reused_by_another_law(tmp_path):
+    import pytest
+    db = tmp_path / 'law.db'
+    first = _law('first', ['第一部法律正文'], revision_id='shared')
+    other = _law('other', ['另一部法律正文'], revision_id='shared')
+    with connect(db) as conn:
+        migrate(conn)
+        load_law_from_dict(conn, first)
+    with pytest.raises(ValueError, match='another law'), connect(db) as conn:
+        load_law_from_dict(conn, other)
+    assert service.get_article_as_of(db, 'first', '1', '2021-01-01')['article']['text'] == '第一部法律正文'
+
+
+def test_generic_short_name_of_dated_old_record_still_selects_current(tmp_path):
+    db = tmp_path / 'law.db'
+    with connect(db) as conn:
+        migrate(conn)
+        load_law_from_dict(conn, _law('old', ['旧文'], title='测试法（2004年）',
+                                    short_title='测试法', work_id='same', effective_at='2004-01-01'))
+        load_law_from_dict(conn, _law('new', ['新文'], title='测试法（2018年修正文本）',
+                                    work_id='same', effective_at='2018-01-01'))
+    assert service.get_article(db, '测试法', '1')['law']['id'] == 'new'
+
+
+def test_docx_keeps_explicit_preamble_after_contents():
+    import io
+    import zipfile
+
+    from chinalaw.cleaning import parse_articles_from_docx
+    paragraphs = ['目录', '序 言', '第一章 总纲', '序　言', '这是正式序言的完整正文。', '第一章 总纲', '第一条 第一条正文。']
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w') as z:
+        z.writestr('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + ''.join('<w:p><w:r><w:t>'+p+'</w:t></w:r></w:p>' for p in paragraphs) + '</w:body></w:document>')
+    articles = parse_articles_from_docx(output.getvalue())
+    assert [(a['number'], a['text']) for a in articles] == [('序言', '这是正式序言的完整正文。'), ('1', '第一条正文。')]
+    assert [a['position'] for a in articles] == [1, 2]
+
+
+def test_reviewed_import_repairs_only_identifiable_legacy_snapshots(tmp_path):
+    import json
+    import runpy
+    from pathlib import Path
+    importer = runpy.run_path(str(Path(__file__).parents[1] / 'scripts/import-reviewed-public-data'))['import_reviewed']
+    db = tmp_path / 'law.db'
+    old = _law('owner', ['旧标注 正文'], source_hash='verified-raw', work_id='one')
+    corrected = _law('version', ['正文'], source_hash='verified-raw', work_id='one')
+    with connect(db) as conn:
+        migrate(conn)
+        load_law_from_dict(conn, old)
+        conn.execute("UPDATE revisions SET snapshot_json = json_set(snapshot_json, '$.id', 'version')")
+    source = tmp_path / 'input'
+    source.mkdir()
+    (source / 'reviewed.json').write_text(json.dumps(corrected), encoding='utf-8')
+    assert importer(db, source)['repaired_snapshots'] == 1
+    assert service.get_article_as_of(db, 'owner', '1', '2021-01-01')['article']['text'] == '正文'

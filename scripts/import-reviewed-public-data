@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Import reviewed public payloads and repair unambiguous legacy snapshot identity errors.
+
+Run on an isolated copy first, and stop the server and back up the database before production use.
+"""
+import argparse
+import json
+from pathlib import Path
+
+from chinalaw import loader
+from chinalaw.db import connect
+
+
+def import_reviewed(db: Path, source: Path) -> dict:
+    payloads = [loader.prepare_law_payload(json.loads(p.read_text(encoding='utf-8')))
+                for p in sorted(source.glob('*.json')) if not p.name.startswith('.')]
+    if not payloads:
+        raise ValueError('No reviewed public payloads')
+    with connect(db) as conn:
+        original_ids = {r[0] for r in conn.execute('SELECT id FROM laws')}
+        for payload in payloads:
+            loader.load_law_from_dict(conn, payload)
+        keys = {}
+        for p in payloads:
+            key = (p.get('work_id') or p['id'], p['source_hash'], p.get('effective_at'))
+            keys[key] = p
+        repaired = 0
+        for row in conn.execute(
+            'SELECT r.*, l.work_id FROM revisions r JOIN laws l ON l.id = r.law_id'
+        ).fetchall():
+            snapshot = json.loads(row['snapshot_json'] or '{}')
+            key = (row['work_id'] or row['law_id'], row['content_hash'], row['effective_at'])
+            payload = keys.get(key)
+            if payload is not None:
+                replacement = dict(payload, id=row['law_id'], revision_id=row['id'])
+                expected = json.loads(loader._build_snapshot_json(replacement, row['content_hash']))
+                if snapshot != expected:
+                    loader._upsert_revision(conn, replacement, row['content_hash'])
+                    repaired += 1
+            elif snapshot and snapshot.get('id') != row['law_id']:
+                raise ValueError(f'Unresolved snapshot identity: {row["id"]}')
+        if not original_ids <= {r[0] for r in conn.execute('SELECT id FROM laws')}:
+            raise ValueError('Existing public IDs were lost')
+        if conn.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
+            raise ValueError('Integrity check failed')
+        if conn.execute('PRAGMA foreign_key_check').fetchone():
+            raise ValueError('Foreign key check failed')
+        return {'preserved_ids': len(original_ids), 'repaired_snapshots': repaired,
+                'laws': conn.execute('SELECT count(*) FROM laws').fetchone()[0],
+                'articles': conn.execute('SELECT count(*) FROM articles').fetchone()[0]}
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--db', type=Path, required=True)
+    parser.add_argument('--from-dir', type=Path, required=True)
+    args = parser.parse_args()
+    print(json.dumps(import_reviewed(args.db, args.from_dir)))
