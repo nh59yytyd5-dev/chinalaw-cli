@@ -172,6 +172,8 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
             )
         return FileResponse(file, headers={"Cache-Control": "no-cache"})
 
+    app.mount("/about", StaticFiles(directory=static / "about", html=True, check_dir=False),
+              name="public_site")
     app.mount("/assets", StaticFiles(directory=static / "assets", check_dir=False), name="assets")
     # The SDK also hosts authorization/discovery routes. This catch-all mount
     # must follow every application route. Its lifespan is owned above.

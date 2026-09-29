@@ -54,6 +54,14 @@
 
 法律条文本身依据《中华人民共和国著作权法》第 5 条不适用著作权法，属于公有领域。
 
+### 公开数据下载包的原文来源
+
+全国法规快照的原文件获取部分使用 [lawtext/legal-data-docx](https://github.com/lawtext/legal-data-docx)。
+该仓库截至 2026-09-29 未声明许可证；本项目不将其整体标注为 MIT / Apache / CC0。
+我们分发独立清洗的官方文件正文和本项目结构，不分发其代码、README、原始 Word 目录或网站镜像。
+逐份原文件哈希、镜像路径、官方出处随数据包提供；原仓库的整理工作在包内与下载页明确致谢。
+详细说明见 [data/public-release/NOTICE.md](data/public-release/NOTICE.md)。
+
 ### 当前未接入但已评估的候选源
 
 - 国家网信办等存在稳定性或反爬挑战的官方站点：仅保留 catalog 线索，不绕过访问控制。
