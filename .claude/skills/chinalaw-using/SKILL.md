@@ -11,7 +11,8 @@ description: chinalaw CLI 总入口与决策树。何时使用：用户提中国
 ## 心法（4 句）
 
 1. **不查就答 = 错。** 模型记忆不是 grounding。任何法条引用、状态、条文文本都
-   必须从 `chinalaw` 命令产出。
+   必须从 `chinalaw` 命令产出。记忆可以提供待核对的法规名和条号，
+   已有候选时可直接 `article`，不要求先做术语检索。
 2. **search 命中 ≠ 条文。** 检索结果只是线索；最终引用必须落到 `article` /
    `articles` / `norm clause` / `pack show` 之一。
 3. **`applicable` / `relation` 是检索线索，不是适用结论。** payload 里有

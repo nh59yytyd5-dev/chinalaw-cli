@@ -11,13 +11,15 @@ import os
 import re
 import shlex
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from chinalaw.aliases import display_short_title, merge_law_aliases
 from chinalaw.db import connect, connect_readonly, current_version, migrate
+from chinalaw.fuzzy import fragments, matching_fragments, name_score, recall_expression
 from chinalaw.models import norm_source_type_binding_note, normalize_norm_source_type
 from chinalaw.schema import SCHEMA_VERSION
+from chinalaw.search_tokens import LOCAL_LEVELS, is_exact_phrase, match_expression
 
 # ---------- 辅助 ----------
 
@@ -99,7 +101,7 @@ def normalize_article_number(raw: str) -> str:
         s = article_with_suffix.group("article")
 
     inserted = re.fullmatch(
-        r"第?(?P<base>[0-9]+|[〇零一二三四五六七八九十百千万两]+)条之"
+        r"第?(?P<base>[0-9]+|[〇零一二三四五六七八九十百千万两]+)条?之"
         r"(?P<inserted>[0-9]+|[〇零一二三四五六七八九十百千万两]+)",
         s,
     )
@@ -633,6 +635,36 @@ def _resolve_law_row(conn: sqlite3.Connection, identifier: str) -> sqlite3.Row |
     return row
 
 
+def _law_candidates(conn: sqlite3.Connection, query: str) -> list[dict]:
+    candidates = []
+    if len(query) > 200:
+        return candidates
+    for row in conn.execute("SELECT * FROM laws ORDER BY released_at DESC, id"):
+        names = [row["title"], *_aliases_for_law_row(row)]
+        score, name = max((name_score(query, name), name) for name in names if name)
+        if score >= 0.6:
+            candidates.append({
+                "id": row["id"], "official_title": row["title"],
+                "short_title": row["short_title"], "status": row["status"],
+                "level": row["level"], "score": round(score, 4), "matched_name": name,
+                "released_at": row["released_at"], "effective_at": row["effective_at"],
+            })
+    candidates.sort(key=lambda item: -item["score"])
+    seen = set()
+    result = []
+    for item in candidates:
+        if item["official_title"] not in seen:
+            seen.add(item["official_title"])
+            result.append(item)
+    cache = {}
+    for item in result[:5]:
+        context = _law_search_context(conn, item["id"], legal_today(), cache)
+        item.update(source_status=item["status"], status=context["status"],
+                    effective_status_as_of=context["status"],
+                    effective_status_note=context["note"])
+    return result[:5]
+
+
 def _aliases_for_law_row(row: sqlite3.Row) -> list[str]:
     try:
         aliases = json.loads(row["aliases"]) if row["aliases"] else []
@@ -743,9 +775,10 @@ def _fetch_revisions(conn: sqlite3.Connection, law_id: str) -> list[dict]:
         SELECT *
         FROM revisions
         WHERE law_id = ?
-        ORDER BY COALESCE(effective_at, released_at, '') DESC, rowid DESC
+        ORDER BY COALESCE(effective_at, released_at, '') DESC,
+                 (content_hash = (SELECT source_hash FROM laws WHERE id = ?)) DESC, rowid DESC
         """,
-        (law_id,),
+        (law_id, law_id),
     ).fetchall()
     return [_row_to_revision(row) for row in rows]
 
@@ -967,6 +1000,202 @@ def _revision_sort_date(revision: dict) -> date | None:
     return _parse_iso_date(revision.get("effective_at")) or _parse_iso_date(
         revision.get("released_at")
     )
+
+
+# 法律上的“今天”以北京时间为准：施行日零点起生效，服务器时区不影响结果。
+_LEGAL_TZ = timezone(timedelta(hours=8))
+
+
+def legal_today() -> date:
+    return datetime.now(_LEGAL_TZ).date()
+
+
+def _work_member_rows(conn: sqlite3.Connection, row: sqlite3.Row) -> list[sqlite3.Row]:
+    """All stored versions of the law ``row`` belongs to (itself included).
+
+    ``work_id`` is authoritative when set. Without it, records that share
+    title, level and issuing body are treated as versions of one law — flk
+    keeps each version under its own id with an identical title.
+    """
+    if row["work_id"]:
+        rows = conn.execute(
+            "SELECT * FROM laws WHERE work_id = ? AND status != 'seed'", (row["work_id"],)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM laws
+            WHERE work_id IS NULL AND status != 'seed'
+              AND title = ? AND level = ? AND COALESCE(issuing_body, '') = COALESCE(?, '')
+            """,
+            (row["title"], row["level"], row["issuing_body"]),
+        ).fetchall()
+    return rows or [row]
+
+
+def _version_start(row) -> date | None:
+    return _parse_iso_date(row["effective_at"]) or _parse_iso_date(row["released_at"])
+
+
+def _work_version_starts(conn: sqlite3.Connection, members: list[sqlite3.Row]) -> set[date]:
+    """Start dates of every version in the work: each record and its stored revisions."""
+    starts = {start for member in members
+              if (start := _parse_iso_date(member["effective_at"])) is not None}
+    for member in members:
+        for revision in _fetch_revisions(conn, member["id"]):
+            start = _parse_iso_date(revision.get("effective_at"))
+            if start is not None:
+                starts.add(start)
+    # A verified amendment can end a text's currency even before its new full
+    # text is available. It is not a repeal of the law itself.
+    for member in members:
+        for row in conn.execute(
+            "SELECT effective_at FROM law_relations "
+            "WHERE from_law_id = ? AND relation_type = 'revised_by'",
+            (member["id"],),
+        ):
+            if (boundary := _parse_iso_date(row["effective_at"])) is not None:
+                starts.add(boundary)
+    return starts
+
+
+def _status_as_of(
+    member: sqlite3.Row,
+    members: list[sqlite3.Row],
+    as_of: date,
+    *,
+    start: date | None = None,
+    starts: set[date] | None = None,
+) -> tuple[str, str | None]:
+    """Effective status of one version on ``as_of``, derived from dates.
+
+    Returns ``(status, note)``. Scheduled changes (a version taking effect, the
+    previous one being superseded) follow from effective dates alone. A repeal
+    needs ``repealed_at``; when upstream says repealed without a date, only the
+    present is certain. ``start`` overrides the record's own date when the
+    version is a stored revision; ``starts`` lists every version of the work.
+    """
+    if start is None:
+        start = _parse_iso_date(member["effective_at"])
+    if starts is None:
+        starts = {s for other in members
+                  if (s := _parse_iso_date(other["effective_at"])) is not None}
+    if start is not None and start > as_of:
+        return "pending_effective", None
+    if start is not None and any(start < other <= as_of for other in starts):
+        latest = max(other for other in starts if other <= as_of)
+        available = any((_version_start(other) or date.min) >= latest for other in members)
+        note = None if available else "该文本已被修改；本库现行全文待补，不能作为当前原文引用。"
+        return "amended", note
+    repealed_at = _parse_iso_date(member["repealed_at"])
+    if repealed_at is not None:
+        return ("repealed", None) if repealed_at <= as_of else ("current", None)
+    if member["status"] == "repealed":
+        if as_of >= legal_today():
+            return "repealed", None
+        return "unknown", "上游标注已废止，但缺少废止日期，无法判断该日期是否仍然有效。"
+    if member["status"] == "unknown":
+        return "unknown", "上游未标注效力状态，不能仅根据日期认定现行有效。"
+    if member["status"] == "amended" and not any(
+        start is not None and other > start for other in starts
+    ):
+        if as_of >= legal_today():
+            return "amended", "上游标注已修改，本库缺少后续版本，不能作为当前文本。"
+        return "unknown", "上游标注已修改，但缺少后续版本起点，无法确定该时点的文本效力。"
+    if not member["effective_at"]:
+        if as_of < legal_today():
+            return "unknown", "缺少施行日期，发布日期不能证明该时点已经施行。"
+        return member["status"], "缺少施行日期；仅沿用上游当前状态，不推定历史施行区间。"
+    if start is None:
+        return member["status"], "缺少施行日期，沿用上游标注的状态。"
+    return "current", None
+
+
+def _select_work_version_as_of(
+    conn: sqlite3.Connection, row: sqlite3.Row, as_of: date
+) -> tuple[sqlite3.Row, list[dict], dict, list[sqlite3.Row]] | None:
+    """Pick the revision in force on ``as_of`` across every version of the work.
+
+    Returns ``(member_row, member_revisions, revision, members)``. On equal
+    dates the record the caller resolved wins, so an explicit id stays stable.
+    """
+    members = _work_member_rows(conn, row)
+    best: tuple | None = None
+    for member in members:
+        revisions = _fetch_revisions(conn, member["id"])
+        selected = _select_revision_as_of(revisions, as_of)
+        if selected is None:
+            continue
+        key = (_revision_sort_date(selected), member["id"] == row["id"])
+        if best is None or key > best[0]:
+            best = (key, member, revisions, selected)
+    if best is None:
+        return None
+    _key, member, revisions, selected = best
+    return member, revisions, selected, members
+
+
+def _annotate_effective_status(
+    conn: sqlite3.Connection,
+    law: dict,
+    member: sqlite3.Row,
+    members: list[sqlite3.Row],
+    as_of: date,
+    revision: dict | None = None,
+) -> None:
+    starts = _work_version_starts(conn, members)
+    status, note = _status_as_of(
+        member,
+        members,
+        as_of,
+        start=_revision_sort_date(revision) if revision is not None else None,
+        starts=starts,
+    )
+    law["source_status"] = law.get("status")
+    law["status"] = status
+    law["work_id"] = member["work_id"]
+    law["effective_status_as_of"] = status
+    law["effective_status_date"] = as_of.isoformat()
+    law["status_checked_at"] = member["status_checked_at"]
+    if note:
+        law["effective_status_note"] = note
+    law["work_versions"] = [
+        {
+            "id": other["id"],
+            "effective_at": other["effective_at"],
+            "released_at": other["released_at"],
+            "source_status": other["status"],
+            "status": _status_as_of(other, members, as_of, starts=starts)[0],
+        }
+        for other in sorted(members, key=lambda item: _version_start(item) or date.min)
+    ]
+
+
+def _current_work_version(
+    conn: sqlite3.Connection, row: sqlite3.Row, via: str | None
+) -> tuple[sqlite3.Row, list[sqlite3.Row]]:
+    """Without a date, a name means the version in force today.
+
+    Resolution ranks by the stored status, which lags scheduled changes; dates
+    decide instead. An explicit id always keeps the requested record.
+    """
+    members = _work_member_rows(conn, row)
+    matched_name = row["short_title"] if via == "short_title_match" else row["title"]
+    versioned_name = via in {"title_match", "short_title_match"} and re.search(
+        r"[（(](?:19|20)\d{2}年?(?:修正文本|修正|修订|修改)?[）)]$", matched_name or ""
+    )
+    if via == "id_match" or versioned_name or len(members) < 2:
+        return row, members
+    today = legal_today()
+    in_force = [
+        member
+        for member in members
+        if _status_as_of(member, members, today)[0] == "current"
+        and _count_articles_for_law(conn, member["id"]) > 0
+    ]
+    if not in_force or any(member["id"] == row["id"] for member in in_force):
+        return row, members
+    return max(in_force, key=lambda member: _version_start(member) or date.min), members
 
 
 def _select_revision_as_of(revisions: list[dict], as_of: date) -> dict | None:
@@ -1266,6 +1495,31 @@ def _in_clause(column: str, values: list[str] | None) -> tuple[str, list[str]]:
     return f" AND {column} IN ({placeholders})", list(values)
 
 
+_ARTICLE_HIT_COLUMNS = """
+    a.id, a.law_id, a.number, a.number_display, a.part, a.title, a.text, a.position,
+    l.title AS law_title, l.short_title AS law_short_title, l.level AS law_level,
+    l.status AS law_status, l.source_url AS law_source_url,
+    l.source_checked_at AS law_source_checked_at
+"""
+
+
+def _segment_check(terms: list[str], *, indexed: bool) -> tuple[str, list[str]]:
+    """Every segment verbatim in the article text or its law title.
+
+    ASCII letters compare case-insensitively, as the old trigram index did.
+    With the index, a segment that is a run of two or more Han characters
+    needs no check: its bigram phrase cannot match anything but the run.
+    """
+    clauses, params = [], []
+    for term in terms:
+        if indexed and is_exact_phrase(term):
+            continue
+        folded = term.lower()
+        clauses.append("(instr(lower(a.text), ?) > 0 OR instr(lower(l.title), ?) > 0)")
+        params.extend((folded, folded))
+    return " AND ".join(clauses), params
+
+
 def _search_articles(
     conn: sqlite3.Connection,
     *,
@@ -1275,52 +1529,79 @@ def _search_articles(
     limit: int,
     law_ids: list[str] | None = None,
     in_part: str | None = None,
+    tier: str | None = None,
+    law_where: str = "",
+    law_where_params: tuple = (),
+    approximate: bool = False,
 ) -> list[dict]:
+    """Exact article hits: every query segment occurs verbatim.
+
+    The bigram index narrows candidates and the segment check makes the set
+    identical to a substring scan (see search_tokens). ``use_fts`` is kept for
+    callers; the index is used whenever the query has a usable phrase.
+    """
+    del use_fts
     law_filter, law_params = _in_clause("a.law_id", law_ids)
     part_filter = ""
     part_params: list[str] = []
     if in_part:
         part_filter = " AND a.part LIKE ? ESCAPE '\\'"
         part_params = [_like_pattern(in_part)]
-    if use_fts:
+    match = recall_expression(terms) if approximate else match_expression(terms)
+    if approximate and match is None:
+        return []
+    check, check_params = _segment_check(terms, indexed=match is not None)
+    if approximate:
+        check, check_params = "", []
+    check = f" AND {check}" if check else ""
+    extra = f"{law_filter}{part_filter}{law_where}"
+    extra_params = [*law_params, *part_params, *law_where_params]
+    if match is not None:
+        if tier is not None:
+            match = f"tier : {tier} AND {{title text}} : ({match})"
+        else:
+            match = f"{{title text}} : ({match})"
         rows = conn.execute(
             f"""
-            SELECT a.id, a.law_id, a.number, a.number_display, a.part,
-                   a.title, a.text, a.position,
-                   l.title AS law_title, l.short_title AS law_short_title,
-                   l.status AS law_status, l.source_url AS law_source_url,
-                   l.source_checked_at AS law_source_checked_at,
-                   bm25(articles_fts) AS score
+            SELECT {_ARTICLE_HIT_COLUMNS}, bm25(articles_fts, 0.0, 0.1, 1.0) AS score
             FROM articles_fts
-            JOIN articles a ON a.id = articles_fts.article_id
+            JOIN articles_fts_rows r ON r.fts_rowid = articles_fts.rowid
+            JOIN articles a ON a.id = r.article_id
             JOIN laws l ON l.id = a.law_id
-            WHERE articles_fts MATCH ?
-              {law_filter}{part_filter}
+            WHERE articles_fts MATCH ?{check}{extra}
             ORDER BY score
             LIMIT ?
             """,
-            (_to_fts_query(query), *law_params, *part_params, limit),
+            (match, *check_params, *extra_params, limit),
         ).fetchall()
     else:
-        where, params = _build_like_all_clause("a.text", terms)
+        tier_filter, tier_params = "", []
+        if tier is not None:
+            local = sorted(LOCAL_LEVELS)
+            op = "IN" if tier == "local" else "NOT IN"
+            tier_filter = f" AND l.level {op} ({', '.join('?' for _ in local)})"
+            tier_params = local
         rows = conn.execute(
             f"""
-            SELECT a.id, a.law_id, a.number, a.number_display, a.part,
-                   a.title, a.text, a.position,
-                   l.title AS law_title, l.short_title AS law_short_title,
-                   l.status AS law_status, l.source_url AS law_source_url,
-                   l.source_checked_at AS law_source_checked_at,
-                   0.0 AS score
+            SELECT {_ARTICLE_HIT_COLUMNS}, 0.0 AS score
             FROM articles a
             JOIN laws l ON l.id = a.law_id
-            WHERE {where}
-              {law_filter}{part_filter}
+            WHERE 1{check}{extra}{tier_filter}
             ORDER BY l.released_at DESC, a.position ASC
             LIMIT ?
             """,
-            [*params, *law_params, *part_params, limit],
+            [*check_params, *extra_params, *tier_params, limit],
         ).fetchall()
-    return [_article_hit_from_row(row, terms) for row in rows]
+    hits = []
+    for row in rows:
+        hit = _article_hit_from_row(row, terms)
+        if approximate:
+            matched = matching_fragments(terms, row["text"])
+            if matched is None:
+                continue
+            hit.update(match_mode="fuzzy", fuzzy={"matched": matched})
+        hits.append(hit)
+    return hits
 
 
 def _search_laws(
@@ -1331,8 +1612,12 @@ def _search_laws(
     use_fts: bool,
     limit: int,
     law_ids: list[str] | None = None,
+    law_where: str = "",
+    law_where_params: tuple = (),
 ) -> list[dict]:
     law_filter, law_params = _in_clause("l.id", law_ids)
+    law_filter += law_where
+    law_params = [*law_params, *law_where_params]
     if use_fts:
         rows = conn.execute(
             f"""
@@ -1530,10 +1815,188 @@ def _resolve_law_filter(
         "requested": requested,
         "resolved": resolved,
         "unresolved": unresolved,
+        "unresolved_candidates": {name: _law_candidates(conn, name) for name in unresolved},
     }
 
 
+# ---------- 检索结果的效力、层级与版本折叠 ----------
+
+# Levels ranked first: 法律、行政法规、司法解释、监察法规. Local levels last.
+_PRIMARY_LEVELS = frozenset(
+    {"law", "admin_regulation", "judicial_interpretation", "supervisory_regulation"}
+)
+_STATUS_RANK = {
+    "current": 0,
+    "pending_effective": 1,
+    "unknown": 2,
+    "amended": 3,
+    "repealed": 3,
+}
+SEARCH_STATUS_VALUES = tuple(_STATUS_RANK)
+SEARCH_VERSIONS_VALUES = ("folded", "all")
+_SEARCH_POOL_MAX = 500
+
+
+def _law_search_context(
+    conn: sqlite3.Connection, law_id: str, as_of: date, cache: dict
+) -> dict:
+    """Work, version start and derived status of one law, memoized per search."""
+    if law_id in cache:
+        return cache[law_id]
+    row = conn.execute("SELECT * FROM laws WHERE id = ?", (law_id,)).fetchone()
+    members = _work_member_rows(conn, row)
+    work_key = row["work_id"] or "~" + min(member["id"] for member in members)
+    starts_key = ("starts", work_key)
+    if starts_key not in cache:
+        cache[starts_key] = _work_version_starts(conn, members)
+    status, note = _status_as_of(row, members, as_of, starts=cache[starts_key])
+    context = {
+        "work_key": work_key,
+        "work_id": row["work_id"],
+        "level": row["level"],
+        "status": status,
+        "note": note,
+        "start": _version_start(row) or date.min,
+        "status_checked_at": row["status_checked_at"],
+    }
+    cache[law_id] = context
+    return context
+
+
+def _segments_missing_from_text(hit: dict, terms: list[str]) -> int:
+    text = (hit.get("text") or "").lower()
+    names = {
+        (hit.get("law_title") or "").lower().removeprefix("中华人民共和国"),
+        (hit.get("law_short_title") or "").lower(),
+    }
+    return sum(
+        1 for term in terms if term.lower() not in text and term.lower() not in names
+    ) if "text" in hit else 0
+
+
+def _level_rank(level: str | None, *, region: str | None) -> int:
+    if level in _PRIMARY_LEVELS:
+        return 0
+    if level in LOCAL_LEVELS:
+        return 0 if region else 2
+    return 1
+
+
+def _rank_and_fold(
+    conn: sqlite3.Connection,
+    hits: list[dict],
+    *,
+    law_key: str,
+    as_of: date,
+    statuses: set[str] | None,
+    versions: str,
+    region: str | None,
+    limit: int,
+    cache: dict,
+    terms: list[str] = (),
+) -> list[dict]:
+    """Order hits by derived status, level and relevance; fold a work's versions.
+
+    Folding keeps one version per work: the one in force on ``as_of`` when it
+    has hits, otherwise the latest version that has. The others are counted
+    in ``other_versions``. Asking for non-current statuses or ``versions=all``
+    turns folding off, since the old versions are then what was asked for.
+    """
+    annotated = []
+    for index, hit in enumerate(hits):
+        context = _law_search_context(conn, hit[law_key], as_of, cache)
+        if statuses is not None and context["status"] not in statuses:
+            continue
+        status_key = "law_status" if law_key == "law_id" else "status"
+        hit.setdefault("source_status", hit.get(status_key))
+        hit[status_key] = context["status"]
+        hit["work_id"] = context["work_id"]
+        hit["effective_status_as_of"] = context["status"]
+        hit["status_checked_at"] = context["status_checked_at"]
+        if context["note"]:
+            hit["effective_status_note"] = context["note"]
+        annotated.append((index, hit, context))
+
+    fold = versions == "folded" and (statuses is None or "current" in statuses)
+    if fold:
+        chosen: dict[str, tuple] = {}
+        laws_by_work: dict[str, set[str]] = {}
+        for _index, hit, context in annotated:
+            laws_by_work.setdefault(context["work_key"], set()).add(hit[law_key])
+            preference = (_STATUS_RANK.get(context["status"], 2), -context["start"].toordinal())
+            current = chosen.get(context["work_key"])
+            if current is None or preference < current[0]:
+                chosen[context["work_key"]] = (preference, hit[law_key])
+        annotated = [
+            item for item in annotated if chosen[item[2]["work_key"]][1] == item[1][law_key]
+        ]
+        for _index, hit, context in annotated:
+            hit["other_versions"] = len(laws_by_work[context["work_key"]]) - 1
+
+    annotated.sort(
+        key=lambda item: (
+            _STATUS_RANK.get(item[2]["status"], 2),
+            # Segments found only in the law title rank below the article text.
+            _segments_missing_from_text(item[1], terms),
+            _level_rank(item[2]["level"], region=region),
+            # A merged document is context; prefer a directly numbered clause.
+            item[1].get("number") == "正文",
+            item[1].get("score") or 0.0,
+            item[0],
+        )
+    )
+    return [hit for _index, hit, _context in annotated[:limit]]
+
+
+def _law_scope_filter(
+    levels: list[str] | None, region: str | None
+) -> tuple[str, tuple]:
+    """SQL on ``laws l`` for the level and region filters."""
+    clauses, params = "", ()
+    if levels is not None:
+        clauses += f" AND l.level IN ({', '.join('?' for _ in levels)})"
+        params += tuple(levels)
+    if region:
+        local = sorted(LOCAL_LEVELS)
+        pattern = _like_pattern(region)
+        clauses += (
+            f" AND (l.level NOT IN ({', '.join('?' for _ in local)})"
+            " OR l.issuing_body LIKE ? ESCAPE '\\' OR l.title LIKE ? ESCAPE '\\')"
+        )
+        params += (*local, pattern, pattern)
+    return clauses, params
+
+
 # ---------- 对外接口 ----------
+
+def _supplement_articles(conn, hits, query, limit, law_ids, in_part, scope, rank):
+    parts = fragments(query)
+    applied = len(hits) < min(5, limit) and recall_expression(parts) is not None
+    info = {"applied": applied, "min_exact_hits": 5, "count": 0, "segments": parts}
+    if not applied:
+        return hits, info
+    candidates = _search_articles(
+        conn, query=query, terms=parts, use_fts=True, limit=_SEARCH_POOL_MAX,
+        law_ids=law_ids, in_part=in_part, law_where=scope[0],
+        law_where_params=scope[1], approximate=True,
+    )
+    exact_keys = {(h["law_id"], h["number"]) for h in hits}
+    folded = rank["versions"] == "folded" and (
+        rank["statuses"] is None or "current" in rank["statuses"]
+    )
+    def work_key(hit):
+        return _law_search_context(conn, hit["law_id"], rank["as_of"], rank["cache"])["work_key"]
+
+    exact_works = {work_key(h): h["law_id"] for h in hits}
+    additions = _rank_and_fold(conn, candidates, law_key="law_id", **rank)
+    additions = [h for h in additions
+                 if (h["law_id"], h["number"]) not in exact_keys
+                 and not (folded and work_key(h) in exact_works
+                          and exact_works[work_key(h)] != h["law_id"])]
+    additions = additions[:max(0, limit - len(hits))]
+    info["count"] = len(additions)
+    return hits + additions, info
+
 
 def search(
     db_path: Path | str,
@@ -1544,11 +2007,17 @@ def search(
     in_part: str | None = None,
     *,
     include_norm: bool = True,
+    as_of: str | None = None,
+    status: list[str] | str | None = None,
+    level: list[str] | str | None = None,
+    region: str | None = None,
+    versions: str = "folded",
 ) -> dict:
-    """混合检索：同时在 articles_fts 与 laws_fts 上跑 FTS5 查询。
+    """精确优先；命中不足时补充片段同条共现的近似结果。
 
-    trigram tokenizer 要求每个 token 至少 3 个字符，因此对于 1~2 字短查询
-    （如"过错"/"工资"），自动回退到 SQL LIKE 子串匹配。
+    条文走二元组索引，法规标题与私域规范仍走 trigram 索引，1~2 字查询回退到
+    LIKE。公开法命中按 ``as_of``（默认今天，北京时间）推算效力，现行在前、
+    法律/行政法规/司法解释在前；同一法规作品的多个版本默认只保留一个。
 
     ``in_part`` 仅作用于 article_hits（章节字段在条文表上），用于在长法
     （如民法典 1260 条）内按编/章/节文本进一步限定检索。
@@ -1558,43 +2027,86 @@ def search(
     """
     query = query.strip()
     in_part = in_part.strip() if in_part else None
+    options = _search_options(as_of, status, level, region, versions)
 
     terms = _split_search_terms(query)
     use_fts = _should_use_fts(terms)
-    strategy = "fts5" if use_fts else "like"
+    articles_indexed = match_expression(terms) is not None
+    wants_articles = kind in ("article", "all")
+    strategy = "fts5" if (articles_indexed if wants_articles else use_fts) else "like"
+    retrieval = {
+        "as_of": options["as_of"].isoformat(),
+        "versions": options["versions"],
+        "status": sorted(options["statuses"]) if options["statuses"] is not None else None,
+        "level": options["levels"],
+        "region": options["region"],
+    }
+
+    fuzzy = {"applied": False, "min_exact_hits": 5, "count": 0}
+    citation = None
+    if wants_articles and in_laws is None and not in_part:
+        citation = _citation_hit(db_path, query, as_of=_parse_iso_date(as_of) if as_of else None)
 
     with connect(db_path) as conn:
         migrate(conn)
         law_ids, law_filter = _resolve_law_filter(conn, in_laws)
         if not query:
-            return _empty_search_result(
-                query, kind, law_filter=law_filter, in_part=in_part
-            )
-        article_hits = (
-            _search_articles(
+            result = _empty_search_result(query, kind, law_filter=law_filter, in_part=in_part)
+            result["retrieval"] = retrieval
+            return result
+        scope_sql, scope_params = _law_scope_filter(options["levels"], options["region"])
+        cache: dict = {}
+        rank = {
+            "as_of": options["as_of"],
+            "statuses": options["statuses"],
+            "versions": options["versions"],
+            "region": options["region"],
+            "limit": limit,
+            "cache": cache,
+            "terms": terms,
+        }
+        pool = min(max(limit * 5, 50), _SEARCH_POOL_MAX)
+        article_hits: list[dict] = []
+        if wants_articles:
+            candidates = _tiered_article_candidates(
                 conn,
                 query=query,
                 terms=terms,
-                use_fts=use_fts,
-                limit=limit,
+                pool=pool,
                 law_ids=law_ids,
                 in_part=in_part,
+                levels=options["levels"],
+                region=options["region"],
+                scope=(scope_sql, scope_params),
             )
-            if kind in ("article", "all")
-            else []
-        )
-        law_hits = (
-            _search_laws(
+            for hit in candidates:
+                hit["match_mode"] = "exact"
+            article_hits = _rank_and_fold(conn, candidates, law_key="law_id", **rank)
+            if citation is not None:
+                article_hits = [citation] + [
+                    hit
+                    for hit in article_hits
+                    if (hit["law_id"], hit["number"]) != (citation["law_id"], citation["number"])
+                ]
+                article_hits = article_hits[:limit]
+        if wants_articles:
+            article_hits, fuzzy = _supplement_articles(
+                conn, article_hits, query, limit, law_ids, in_part,
+                (scope_sql, scope_params), rank,
+            )
+        law_hits = []
+        if kind in ("law", "all") and not in_part:
+            law_candidates = _search_laws(
                 conn,
                 query=query,
                 terms=terms,
                 use_fts=use_fts,
-                limit=limit,
+                limit=pool,
                 law_ids=law_ids,
+                law_where=scope_sql,
+                law_where_params=scope_params,
             )
-            if kind in ("law", "all") and not in_part
-            else []
-        )
+            law_hits = _rank_and_fold(conn, law_candidates, law_key="id", **rank)
         if include_norm and kind in ("norm", "all") and law_filter is None and not in_part:
             norm_clause_hits = _search_norm_clauses(
                 conn,
@@ -1614,6 +2126,7 @@ def search(
             norm_clause_hits = []
             norm_source_hits = []
 
+    retrieval["citation"] = citation is not None
     result = _with_search_counts(
         {
             "query": query,
@@ -1625,12 +2138,137 @@ def search(
             "law_hits": law_hits,
             "norm_clause_hits": norm_clause_hits,
             "norm_source_hits": norm_source_hits,
+            "retrieval": retrieval,
+            "fuzzy": fuzzy,
         }
     )
+    if not result["counts"]["total"]:
+        result["hint"] = "未找到匹配内容。请改用法条原文的说法或较短片段再查，并用 article 核对。"
     # 公开法与私域规范同时命中时给出顶层冲突提示（不做逐条语义判断）。
     if (article_hits or law_hits) and (norm_clause_hits or norm_source_hits):
         result["conflict_notice"] = NORM_CONFLICT_NOTICE
     return result
+
+
+_NUMERAL = r"[0-9〇零一二三四五六七八九十百千万两]+"
+_CITATION_RE = re.compile(
+    rf"^(?P<law>.+?)\s*(?P<number>第\s*{_NUMERAL}\s*条(?:\s*之\s*{_NUMERAL})?"
+    rf"|{_NUMERAL}\s*条(?:\s*之\s*{_NUMERAL})?|[0-9]+\s*之\s*{_NUMERAL})"
+    rf"(?:\s*第?\s*{_NUMERAL}\s*[款项目])*$"
+)
+
+
+def _citation_hit(db_path: Path | str, query: str, *, as_of: date | None) -> dict | None:
+    """``民法典第五百零四条`` / ``公司法 15 条``: the cited article itself.
+
+    Only a confident law name counts: a loose title match is not guessed at.
+    """
+    match = _CITATION_RE.match(query.strip())
+    if match is None:
+        return None
+    law_name = match.group("law").strip()
+    number = re.sub(r"\s+", "", match.group("number"))
+    with connect(db_path) as conn:
+        migrate(conn)
+        row, via = _resolve_law_row_with_via(conn, law_name)
+    if row is None or via == "like_fallback":
+        return None
+    found = _get_article_internal(db_path, row["id"] if as_of else law_name, number,
+                                  as_of=as_of, include_norm=False)
+    if not found or not found.get("article"):
+        return None
+    law, article = found["law"], found["article"]
+    return {
+        "law_id": law["id"],
+        "law_title": law["title"],
+        "law_short_title": law.get("short_title"),
+        "law_status": law.get("status"),
+        "number": article["number"],
+        "number_display": article["number_display"],
+        "part": article.get("part"),
+        "text": article["text"],
+        "source_url": law.get("source_url"),
+        "freshness_days": law.get("freshness_days"),
+        "score": None,
+        "match_kind": "primary",
+        "match_mode": "citation",
+        "work_id": law.get("work_id"),
+        "effective_status_as_of": law.get("effective_status_as_of"),
+        "status_checked_at": law.get("status_checked_at"),
+    }
+
+
+def _search_options(
+    as_of: str | None,
+    status: list[str] | str | None,
+    level: list[str] | str | None,
+    region: str | None,
+    versions: str,
+) -> dict:
+    parsed = legal_today() if not as_of else _parse_iso_date(as_of)
+    if parsed is None:
+        raise ValueError("as_of must be YYYY-MM-DD")
+    statuses = _split_filter_values(status)
+    if statuses is not None:
+        unknown = sorted(set(statuses) - set(SEARCH_STATUS_VALUES))
+        if unknown:
+            raise ValueError(f"unknown status: {', '.join(unknown)}")
+    levels = _split_filter_values(level)
+    if levels is not None:
+        from chinalaw.contracts import LAW_LEVEL_VALUES
+
+        unknown = sorted(set(levels) - LAW_LEVEL_VALUES)
+        if unknown:
+            raise ValueError(f"unknown level: {', '.join(unknown)}")
+    if versions not in SEARCH_VERSIONS_VALUES:
+        raise ValueError("versions must be folded or all")
+    return {
+        "as_of": parsed,
+        "statuses": set(statuses) if statuses is not None else None,
+        "levels": levels,
+        "region": (region or "").strip() or None,
+        "versions": versions,
+    }
+
+
+def _tiered_article_candidates(
+    conn: sqlite3.Connection,
+    *,
+    query: str,
+    terms: list[str],
+    pool: int,
+    law_ids: list[str] | None,
+    in_part: str | None,
+    levels: list[str] | None,
+    region: str | None,
+    scope: tuple[str, tuple],
+) -> list[dict]:
+    """National candidates first; local ones fill the pool, or compete with a region."""
+    tiers = []
+    if levels is None or any(level not in LOCAL_LEVELS for level in levels):
+        tiers.append("national")
+    if levels is None or any(level in LOCAL_LEVELS for level in levels):
+        tiers.append("local")
+    hits: list[dict] = []
+    for tier in tiers:
+        room = pool if (tier == "national" or region) else pool - len(hits)
+        if room <= 0:
+            continue
+        hits.extend(
+            _search_articles(
+                conn,
+                query=query,
+                terms=terms,
+                use_fts=True,
+                limit=room,
+                law_ids=law_ids,
+                in_part=in_part,
+                tier=tier,
+                law_where=scope[0],
+                law_where_params=scope[1],
+            )
+        )
+    return hits
 
 
 def get_law(db_path: Path | str, identifier: str) -> dict | None:
@@ -1662,6 +2300,14 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
     with connect(db_path) as conn:
         migrate(conn)
         row, via = _resolve_law_row_with_via(conn, raw)
+        if row is None:
+            base["candidates"] = _law_candidates(conn, raw)
+            base["hint"] = "候选未自动采用；请核对名称，候选也可能都不正确。"
+        else:
+            row, members = _current_work_version(conn, row, via)
+            status_fields = {}
+            _annotate_effective_status(conn, status_fields, row, members, legal_today())
+            status_fields["source_status"] = row["status"]
 
     if row is None:
         return base
@@ -1676,7 +2322,7 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
         "short_title": display_short_title(row["title"], row["short_title"]),
         "aliases": aliases_payload,
         "level": row["level"],
-        "status": row["status"],
+        **status_fields,
         "issuing_body": row["issuing_body"],
         "document_number": row["document_number"],
         "released_at": row["released_at"],
@@ -1744,21 +2390,24 @@ def _get_law_internal(
 
     with connect(db_path) as conn:
         migrate(conn)
-        row = _resolve_law_row(conn, identifier)
+        row, via = _resolve_law_row_with_via(conn, identifier)
         if row is None:
             return None
 
-        revisions = _fetch_revisions(conn, row["id"])
-        categories = _fetch_categories_for_law(conn, row["id"])
         if as_of is not None:
-            selected = _select_revision_as_of(revisions, as_of)
-            if selected is None:
+            picked = _select_work_version_as_of(conn, row, as_of)
+            if picked is None:
                 return None
-            law = _build_law_from_revision_snapshot(conn, row, revisions, selected)
+            member, revisions, selected, members = picked
+            law = _build_law_from_revision_snapshot(conn, member, revisions, selected)
             if law is not None:
-                law["categories"] = categories
+                law["categories"] = _fetch_categories_for_law(conn, member["id"])
+                _annotate_effective_status(conn, law, member, members, as_of, selected)
             return _law_without_revision_snapshots(law)
 
+        row, members = _current_work_version(conn, row, via)
+        revisions = _fetch_revisions(conn, row["id"])
+        categories = _fetch_categories_for_law(conn, row["id"])
         law = _row_to_law(row)
         articles = conn.execute(
             "SELECT * FROM articles WHERE law_id = ? ORDER BY position",
@@ -1772,6 +2421,7 @@ def _get_law_internal(
         law["current_revision"] = revisions[0] if revisions else None
         law["selected_revision"] = law["current_revision"]
         law["categories"] = categories
+        _annotate_effective_status(conn, law, row, members, legal_today())
         return _law_without_revision_snapshots(law)
 
 
@@ -1859,6 +2509,8 @@ def diagnose_article_miss(
     if law is None:
         return {
             "reason": "law_missing",
+            "candidate_laws": resolve(db_path, name).get("candidates", []),
+            "candidate_notice": "候选未自动采用，请核对名称。",
             "law_id": None,
             "as_of": as_of_value or None,
             "hint": (
@@ -1873,14 +2525,20 @@ def diagnose_article_miss(
     if parsed_as_of is not None:
         law_as_of = _get_law_internal(db_path, name, as_of=parsed_as_of)
         if law_as_of is None:
+            starts = [
+                version.get("effective_at") or version.get("released_at")
+                for version in law.get("work_versions") or []
+            ]
+            earliest = min((start for start in starts if start), default=None)
+            earliest_note = f"本地最早的版本自 {earliest} 起施行。" if earliest else ""
             return {
                 "reason": "version_not_found_as_of",
                 "law_id": law.get("id"),
                 "as_of": as_of_value,
+                "earliest_version_effective_at": earliest,
                 "hint": (
-                    f"法规已入库，但本地没有 {as_of_value} 时点可用版本。"
-                    f"先 `{history_cmd}` 查看版本；不要用 fetch 当前版本替代"
-                    "该时点判断。"
+                    f"法规已入库，但本地没有 {as_of_value} 时点可用版本。{earliest_note}"
+                    f"先 `{history_cmd}` 查看版本；不要用现行版本替代该时点的条文。"
                 ),
                 "suggested_history": history_cmd,
             }
@@ -2158,13 +2816,12 @@ def get_articles(
                     fallback["ok"] = fallback.get("missing_count", 0) == 0
                     fallback["found"] = True
                     return fallback
-            return _articles_error_payload(
-                "law_not_found",
-                law_identifier,
-                numbers,
-                as_of=as_of,
-                message="法规未入库或名称无法解析。",
+            error = _articles_error_payload(
+                "law_not_found", law_identifier, numbers, as_of=as_of,
+                message="法规未入库或名称无法解析。候选未自动采用，请核对名称。",
             )
+            error["candidate_laws"] = _law_candidates(conn, law_identifier)
+            return error
 
         revisions = _fetch_revisions(conn, row["id"])
         categories = _fetch_categories_for_law(conn, row["id"])
@@ -2432,7 +3089,7 @@ def _get_article_internal(
         return None
     with connect(db_path) as conn:
         migrate(conn)
-        row = _resolve_law_row(conn, law_identifier)
+        row, via = _resolve_law_row_with_via(conn, law_identifier)
         if row is None:
             # 公开法规未命中——尝试 norm fallback（仅当未指定 as_of）
             if include_norm and as_of is None:
@@ -2441,21 +3098,20 @@ def _get_article_internal(
                     return fallback
             return None
 
-        law = _row_to_law(
-            row, article_count=_count_articles_for_law(conn, row["id"])
-        )
-        revisions = _fetch_revisions(conn, row["id"])
-        categories = _fetch_categories_for_law(conn, row["id"])
         if as_of is not None:
-            selected = _select_revision_as_of(revisions, as_of)
-            if selected is None:
+            picked = _select_work_version_as_of(conn, row, as_of)
+            if picked is None:
                 return None
+            member, revisions, selected, members = picked
             law_from_revision = _build_law_from_revision_snapshot(
-                conn, row, revisions, selected
+                conn, member, revisions, selected
             )
             if law_from_revision is None:
                 return None
-            law_from_revision["categories"] = categories
+            law_from_revision["categories"] = _fetch_categories_for_law(conn, member["id"])
+            _annotate_effective_status(
+                conn, law_from_revision, member, members, as_of, selected
+            )
             if law_from_revision.get("error"):
                 return {
                     "kind": "article_result",
@@ -2485,11 +3141,17 @@ def _get_article_internal(
                 "requested_number": number,
             }
 
+        row, members = _current_work_version(conn, row, via)
+        law = _row_to_law(
+            row, article_count=_count_articles_for_law(conn, row["id"])
+        )
+        revisions = _fetch_revisions(conn, row["id"])
         law["revisions"] = revisions
         law["revision_count"] = len(revisions)
         law["current_revision"] = revisions[0] if revisions else None
         law["selected_revision"] = law["current_revision"]
-        law["categories"] = categories
+        law["categories"] = _fetch_categories_for_law(conn, row["id"])
+        _annotate_effective_status(conn, law, row, members, legal_today())
         art = conn.execute(
             "SELECT * FROM articles WHERE law_id = ? AND number = ?",
             (row["id"], norm),
@@ -2860,11 +3522,7 @@ def list_laws(
     if level:
         clauses.append("level = ?")
         params.append(level)
-    if status:
-        clauses.append("status = ?")
-        params.append(status)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    params.append(str(limit))
 
     with connect(db_path) as conn:
         migrate(conn)
@@ -2876,13 +3534,22 @@ def list_laws(
             FROM laws
             {where}
             ORDER BY released_at DESC, title ASC
-            LIMIT ?
             """,
             params,
         ).fetchall()
-        return [
-            _row_to_law(r, article_count=int(r["_article_count"])) for r in rows
-        ]
+        result = []
+        cache = {}
+        for row in rows:
+            item = _row_to_law(row, article_count=int(row["_article_count"]))
+            context = _law_search_context(conn, row["id"], legal_today(), cache)
+            item.update(source_status=item["status"], status=context["status"],
+                        effective_status_as_of=context["status"],
+                        effective_status_note=context["note"])
+            if status is None or item["status"] == status:
+                result.append(item)
+            if len(result) >= limit:
+                break
+        return result
 
 
 def relation(db_path: Path | str, identifier: str) -> dict:
@@ -3262,7 +3929,14 @@ def history(db_path: Path | str, identifier: str) -> dict | None:
         if row is None:
             return None
         law = _row_to_law(row, article_count=_count_articles_for_law(conn, row["id"]))
-        revisions = _fetch_revisions(conn, row["id"])
+        members = _work_member_rows(conn, row)
+        revisions = [
+            revision for member in members for revision in _fetch_revisions(conn, member["id"])
+        ]
+        revisions.sort(
+            key=lambda revision: _revision_sort_date(revision) or date.min, reverse=True
+        )
+        _annotate_effective_status(conn, law, row, members, legal_today())
         return {
             "law": law,
             "revisions": [

@@ -340,6 +340,11 @@ def _tool_payload(
             kind=kind,
             in_laws=_optional(arguments, "in_laws"),
             include_norm=allow_private_norms,
+            as_of=_optional(arguments, "as_of"),
+            status=_optional(arguments, "status"),
+            level=_optional(arguments, "level"),
+            region=_optional(arguments, "region"),
+            versions=_optional(arguments, "versions") or "folded",
         )
     if name == "chinalaw_applicable":
         return service.applicable(

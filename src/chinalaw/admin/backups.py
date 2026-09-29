@@ -28,8 +28,15 @@ from chinalaw import __version__, service
 from chinalaw.admin import artifacts
 from chinalaw.admin.errors import LibraryError
 from chinalaw.admin.payloads import encode_json, utc_now
-from chinalaw.db import connect, connect_readonly, current_version, get_meta, set_meta
-from chinalaw.schema import SCHEMA_V14_SQL, SCHEMA_VERSION
+from chinalaw.db import (
+    build_current_schema,
+    connect,
+    connect_readonly,
+    current_version,
+    get_meta,
+    set_meta,
+)
+from chinalaw.schema import SCHEMA_VERSION
 from chinalaw.search_indexes import rebuild_search_indexes
 
 FORMAT_VERSION = 1
@@ -52,7 +59,7 @@ _PENDING_GRACE = timedelta(hours=1)
 @lru_cache(maxsize=1)
 def _schema_spec() -> tuple[dict[str, tuple[str, ...]], frozenset[str]]:
     with closing(sqlite3.connect(":memory:")) as conn:
-        conn.executescript(SCHEMA_V14_SQL)
+        build_current_schema(conn)
         tables = frozenset(_user_tables(conn))
         base = {
             name: tuple(row[1] for row in conn.execute(f'PRAGMA table_info("{name}")'))

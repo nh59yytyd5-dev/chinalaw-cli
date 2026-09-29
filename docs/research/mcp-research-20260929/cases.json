@@ -1,0 +1,158 @@
+{
+  "date": "2026-09-29",
+  "endpoint": "https://law.newcombmath.com/mcp",
+  "transport": "native configured chinalaw MCP tools",
+  "workflow_decision": "Memory chooses candidate law/article; MCP verifies text, version and source; search fills gaps. Terminology search is not required.",
+  "exploratory_cases": [
+    {
+      "id": "civil",
+      "field": "民法·合同",
+      "question": "原材料价格暴涨导致履行合同亏损，能否请求法院调整价格或解除合同？",
+      "query": "情势变更"
+    },
+    {
+      "id": "company",
+      "field": "商法·公司",
+      "question": "公司欠款还不上，债权人能否要求认缴期限未到的股东提前出资？",
+      "query": "股东出资加速到期"
+    },
+    {
+      "id": "criminal",
+      "field": "刑法",
+      "question": "为他人提供支付结算服务，怎样判断构成帮信罪所需的明知？",
+      "query": "帮信罪 明知"
+    },
+    {
+      "id": "admin",
+      "field": "行政法",
+      "question": "行政机关作出较大数额罚款前没有告知听证权，处罚程序有何问题？",
+      "query": "行政处罚 听证 告知"
+    },
+    {
+      "id": "labor",
+      "field": "劳动法",
+      "question": "员工签了自愿不缴社保协议，后来以未缴社保解除劳动合同，能否主张经济补偿？",
+      "query": "不缴纳社会保险 经济补偿"
+    },
+    {
+      "id": "tax",
+      "field": "财税法",
+      "question": "企业不服税务机关认定的应纳税额，必须先缴税才能申请复议或起诉吗？",
+      "query": "纳税争议 先缴税 复议"
+    },
+    {
+      "id": "environment",
+      "field": "环境法",
+      "question": "环保社会组织对污染行为提起公益诉讼，需要符合什么资格条件？",
+      "query": "环境公益诉讼 社会组织 资格"
+    },
+    {
+      "id": "ip",
+      "field": "知识产权法",
+      "question": "工程师离职半年后完成与原岗位有关的发明，是否属于原单位的职务发明？",
+      "query": "离职 一年 职务发明"
+    },
+    {
+      "id": "antitrust",
+      "field": "经济法·反垄断",
+      "question": "生产商要求经销商不得低于指定价格转售，是否当然违法，有何抗辩空间？",
+      "query": "限定最低转售价格"
+    },
+    {
+      "id": "social",
+      "field": "社会法·工伤",
+      "question": "职工上班时突发疾病送医，抢救超过48小时死亡，工伤认定条文如何规定？",
+      "query": "突发疾病 四十八小时 工伤"
+    },
+    {
+      "id": "civil_procedure",
+      "field": "民事诉讼法",
+      "question": "判决生效后才发现关键新证据，申请再审的六个月从什么时候计算？",
+      "query": "新证据 申请再审 六个月"
+    },
+    {
+      "id": "criminal_procedure",
+      "field": "刑事诉讼法",
+      "question": "被刑讯逼供作出有罪供述后，谁承担取证合法性的证明责任？",
+      "query": "刑讯逼供 证明责任"
+    },
+    {
+      "id": "constitutional",
+      "field": "宪法及相关法",
+      "question": "哪些机关可以依法检查公民通信，检查的法定事由是什么？",
+      "query": "通信自由 检查"
+    },
+    {
+      "id": "conflict_laws",
+      "field": "涉外法律适用",
+      "question": "涉外合同当事人能否选择外国法，外国法无法查明时怎么办？",
+      "query": "外国法律 不能查明"
+    }
+  ],
+  "direct_cases": [
+    {
+      "id": "direct_civil",
+      "field": "民法",
+      "question": "同时约定定金和违约金，违约后能否一并主张？",
+      "law": "民法典",
+      "number": "588"
+    },
+    {
+      "id": "direct_criminal",
+      "field": "刑法",
+      "question": "正当防卫、防卫过当与特殊防卫的规范条件分别是什么？",
+      "law": "刑法",
+      "number": "20"
+    },
+    {
+      "id": "direct_admin",
+      "field": "行政法",
+      "question": "初次违法是否一律不罚，还是需要符合额外条件？",
+      "law": "行政处罚法",
+      "number": "33"
+    },
+    {
+      "id": "direct_labor",
+      "field": "劳动法",
+      "question": "用人单位违法解除劳动合同，赔偿金按照什么标准计算？",
+      "law": "劳动合同法",
+      "number": "87"
+    },
+    {
+      "id": "direct_social",
+      "field": "社会保障法",
+      "question": "单位最迟何时为新入职员工申请社会保险登记？",
+      "law": "社会保险法",
+      "number": "58"
+    },
+    {
+      "id": "direct_tax",
+      "field": "财税法",
+      "question": "税款逾期缴纳，滞纳金按什么比例加收？",
+      "law": "税收征收管理法",
+      "number": "32"
+    },
+    {
+      "id": "direct_ip",
+      "field": "知识产权法",
+      "question": "专利侵权赔偿难以证明时，法定赔偿的上下限是多少？",
+      "law": "专利法",
+      "number": "71"
+    },
+    {
+      "id": "direct_conflict",
+      "field": "涉外法律适用",
+      "question": "选择外国法是否可以排除中国法律的强制性规定？",
+      "law": "涉外民事关系法律适用法",
+      "number": "4"
+    },
+    {
+      "id": "old_number_control",
+      "field": "仲裁程序·旧条号对照",
+      "question": "2026年订立的仲裁协议应包含哪些事项？核对旧法记忆中的第16条。",
+      "law": "仲裁法",
+      "number": "16",
+      "control": true
+    }
+  ]
+}

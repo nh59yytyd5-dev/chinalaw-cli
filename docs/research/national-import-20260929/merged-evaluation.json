@@ -1,0 +1,2014 @@
+{
+  "corpus": {
+    "laws": 2522,
+    "articles": 93049
+  },
+  "pool": 500,
+  "repeat": 1,
+  "median_ms": 116.035,
+  "p95_ms": 159.26,
+  "results": [
+    {
+      "query": "公司为他人提供担保 董事会 股东会决议",
+      "law": "公司法",
+      "number": "15",
+      "latency_ms": [
+        123.65
+      ],
+      "counts": {
+        "article": 2,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 2
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 2,
+        "segments": [
+          "公司为他人提供担保",
+          "董事会",
+          "股东会决议"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "15",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司为",
+              "他人提供担保",
+              "董事会",
+              "股东会决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "163",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "为他人",
+              "提供",
+              "担保",
+              "董事会",
+              "股东会决议"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "用人单位未与劳动者订立书面劳动合同",
+      "law": "劳动合同法",
+      "number": "82",
+      "latency_ms": [
+        133.86
+      ],
+      "counts": {
+        "article": 6,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 6
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 6,
+        "segments": [
+          "用人单位未与劳动者订立书面劳动合同"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "2c909fdd678bf17901678bf74d7106b3",
+          "law_short_title": "劳动合同法",
+          "number": "82",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "用人单位",
+              "未与劳动者订立书面劳动合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f40927caf049c",
+          "law_short_title": "劳动合同法实施条例",
+          "number": "6",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "用人单位",
+              "未与劳动者订立书面劳动合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80818198a7eafa0199329bcc11687f",
+          "law_short_title": "劳动争议解释",
+          "number": "9",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "用人单位未",
+              "与劳动者订立",
+              "书面劳动合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f40927caf049c",
+          "law_short_title": "劳动合同法实施条例",
+          "number": "7",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "用人单位",
+              "未与劳动者订立书面劳动合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80818198a7eafa0199329bcc11687f",
+          "law_short_title": "劳动争议解释",
+          "number": "6",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "用人单位未",
+              "与劳动者订立书面劳动合同"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf74d7106b3",
+          "law_short_title": "劳动合同法",
+          "number": "11",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "用人单位未",
+              "与劳动者",
+              "订立书面劳动合同"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "显失公平撤销",
+      "law": "民法典",
+      "number": "151",
+      "latency_ms": [
+        74.54
+      ],
+      "counts": {
+        "article": 8,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 8
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 8,
+        "segments": [
+          "显失公平撤销"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8080816f3cbb3c016f402ac5580116",
+          "law_short_title": "行政协议规定",
+          "number": "14",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "151",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "1349e6aadd4947fe83ff811739825d3c",
+          "law_short_title": "海商法",
+          "number": "185",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e75f88017800739d621b12",
+          "law_short_title": "劳动争议解释",
+          "number": "35",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf674710415",
+          "law_short_title": "民法通则",
+          "number": "59",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf8479b09dd",
+          "law_short_title": "民法总则",
+          "number": "151",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "54",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffca575fb1177",
+          "law_short_title": "劳动争议解释",
+          "number": "10",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        }
+      ],
+      "target_rank": 2,
+      "exact_target_rank": null
+    },
+    {
+      "query": "二倍工资",
+      "law": "劳动合同法",
+      "number": "82",
+      "latency_ms": [
+        46.03
+      ],
+      "counts": {
+        "article": 4,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 4
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 1,
+        "segments": [
+          "二倍工资"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff80818198a7eafa0199329bcc11687f",
+          "law_short_title": "劳动争议解释",
+          "number": "6",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff80818198a7eafa0199329bcc11687f",
+          "law_short_title": "劳动争议解释",
+          "number": "7",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff80818198a7eafa0199329bcc11687f",
+          "law_short_title": "劳动争议解释",
+          "number": "9",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf74d7106b3",
+          "law_short_title": "劳动合同法",
+          "number": "82",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "二倍",
+              "工资"
+            ]
+          }
+        }
+      ],
+      "target_rank": 4,
+      "exact_target_rank": null
+    },
+    {
+      "query": "约定的违约金过分高于造成的损失",
+      "law": "民法典",
+      "number": "585",
+      "latency_ms": [
+        180.25
+      ],
+      "counts": {
+        "article": 7,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 7
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 3,
+        "segments": [
+          "约定的违约金过分高于造成的损失"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808181799def980179b09685cf1802",
+          "law_short_title": "买卖合同纠纷解释",
+          "number": "20",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "585",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff808181799df6140179b08345562ab8",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "114",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "65",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "约定的违约金过分高于",
+              "造成的损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "64",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "约定的违约金过分高于",
+              "造成的损失"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffbfc34890358",
+          "law_short_title": "合同法解释二",
+          "number": "29",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "约定的违约金过",
+              "分高于造成的损失"
+            ]
+          }
+        }
+      ],
+      "target_rank": 2,
+      "exact_target_rank": 2
+    },
+    {
+      "query": "法定代表人超越权限订立合同",
+      "law": "民法典",
+      "number": "504",
+      "latency_ms": [
+        115.98
+      ],
+      "counts": {
+        "article": 6,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 6
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 6,
+        "segments": [
+          "法定代表人超越权限订立合同"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "504",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "法定代表人",
+              "超越权限订立",
+              "合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "7",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "法定代表人超越权限",
+              "订立",
+              "合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "22",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "法定代表人",
+              "超越权限",
+              "订立合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "20",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "法定代表人",
+              "超越",
+              "权限",
+              "订立合同"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "50",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "法定代表人",
+              "超越权限订立",
+              "合同"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffc04741203e1",
+          "law_short_title": "担保法解释",
+          "number": "11",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "法定代表人",
+              "超越权限订立",
+              "合同"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "劳动者提前三十日书面通知解除劳动合同",
+      "law": "劳动合同法",
+      "number": "37",
+      "latency_ms": [
+        118.54
+      ],
+      "counts": {
+        "article": 4,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 4
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 4,
+        "segments": [
+          "劳动者提前三十日书面通知解除劳动合同"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "2c909fdd678bf17901678bf74d7106b3",
+          "law_short_title": "劳动合同法",
+          "number": "37",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "劳动者提前三十日",
+              "书面",
+              "通知",
+              "解除劳动合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f135f46016f20f16ee11737",
+          "law_short_title": "劳动法",
+          "number": "31",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "劳动者",
+              "提前三十日",
+              "书面",
+              "通知",
+              "解除劳动合同"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f135f46016f20f16ee11737",
+          "law_short_title": "劳动法",
+          "number": "26",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "劳动者",
+              "提前三十日",
+              "书面",
+              "通知",
+              "解除劳动合同"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf74d7106b3",
+          "law_short_title": "劳动合同法",
+          "number": "40",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "劳动者",
+              "提前三十日",
+              "书面",
+              "通知",
+              "解除劳动合同"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "诉讼时效期间为三年",
+      "law": "民法典",
+      "number": "188",
+      "latency_ms": [
+        37.32
+      ],
+      "counts": {
+        "article": 5,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 5
+      },
+      "fuzzy": {
+        "applied": false,
+        "min_exact_hits": 5,
+        "count": 0,
+        "segments": [
+          "诉讼时效期间为三年"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808181799df6140179b09b45d92b5e",
+          "law_short_title": "融资租赁合同纠纷解释",
+          "number": "14",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff80808177e75f880178006736f21aaf",
+          "law_short_title": "婚姻家庭编解释一",
+          "number": "84",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "188",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff808181799df6140179b08345562ab8",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf8479b09dd",
+          "law_short_title": "民法总则",
+          "number": "188",
+          "match_mode": "exact",
+          "fuzzy": null
+        }
+      ],
+      "target_rank": 3,
+      "exact_target_rank": 3
+    },
+    {
+      "query": "债权转让善意第三人",
+      "law": "民法典",
+      "number": "545",
+      "latency_ms": [
+        91.34
+      ],
+      "counts": {
+        "article": 5,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 5
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 5,
+        "segments": [
+          "债权转让善意第三人"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "545",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "债权",
+              "转让",
+              "善意第三人"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e75f880178006e5ae91ae3",
+          "law_short_title": "物权编解释一",
+          "number": "6",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "债权",
+              "转让",
+              "善意第三人"
+            ]
+          }
+        },
+        {
+          "law_id": "1349e6aadd4947fe83ff811739825d3c",
+          "law_short_title": "海商法",
+          "number": "13",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "债权",
+              "转让",
+              "善意第三人"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808181799df4000179ac1fec26115e",
+          "law_short_title": "企业破产法解释二",
+          "number": "30",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "债权",
+              "转让",
+              "善意",
+              "第三人"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffb5c4c015ffb946c0104ef",
+          "law_short_title": "物权法解释一",
+          "number": "6",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "债权",
+              "转让",
+              "善意第三人"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "没有代理权 相对人有理由相信",
+      "law": "民法典",
+      "number": "172",
+      "latency_ms": [
+        39.53
+      ],
+      "counts": {
+        "article": 5,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 5
+      },
+      "fuzzy": {
+        "applied": false,
+        "min_exact_hits": 5,
+        "count": 0,
+        "segments": [
+          "没有代理权",
+          "相对人有理由相信"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "172",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff80818181cdceb30181d801c31c4070",
+          "law_short_title": "民事诉讼法解释",
+          "number": "62",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff80818181cdceb30181d2c0af9e2339",
+          "law_short_title": "总则编解释",
+          "number": "28",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf8479b09dd",
+          "law_short_title": "民法总则",
+          "number": "172",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "49",
+          "match_mode": "exact",
+          "fuzzy": null
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": 1
+    },
+    {
+      "query": "经济补偿 每满一年 一个月工资",
+      "law": "劳动合同法",
+      "number": "47",
+      "latency_ms": [
+        83.5
+      ],
+      "counts": {
+        "article": 1,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 1
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 0,
+        "segments": [
+          "经济补偿",
+          "每满一年",
+          "一个月工资"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "2c909fdd678bf17901678bf74d7106b3",
+          "law_short_title": "劳动合同法",
+          "number": "47",
+          "match_mode": "exact",
+          "fuzzy": null
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": 1
+    },
+    {
+      "query": "公司股东滥用法人独立地位",
+      "law": "公司法",
+      "number": "23",
+      "latency_ms": [
+        85.21
+      ],
+      "counts": {
+        "article": 1,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 1
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 1,
+        "segments": [
+          "公司股东滥用法人独立地位"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "23",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司股东滥用",
+              "法人独立地位"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "继续履行采取补救措施赔偿损失",
+      "law": "民法典",
+      "number": "577",
+      "latency_ms": [
+        149.6
+      ],
+      "counts": {
+        "article": 9,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 9
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 9,
+        "segments": [
+          "继续履行采取补救措施赔偿损失"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "577",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取补救措施",
+              "赔偿损失"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf858550a0f",
+          "law_short_title": "行政诉讼法",
+          "number": "78",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取补救措施",
+              "赔偿损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818a21e6c3018a508d491a0c98",
+          "law_short_title": "行政复议法",
+          "number": "71",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取补救措施",
+              "赔偿损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f402ac5580116",
+          "law_short_title": "行政协议规定",
+          "number": "19",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取",
+              "补救措施",
+              "赔偿",
+              "损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f135f46016f1d08f6da12f6",
+          "law_short_title": "旅游法",
+          "number": "70",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取补救措施",
+              "赔偿损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f402ac5580116",
+          "law_short_title": "行政协议规定",
+          "number": "16",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取补救措施",
+              "赔偿",
+              "损失"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "107",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取补救措施",
+              "赔偿损失"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffc5663180a5a",
+          "law_short_title": null,
+          "number": "3",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取补救措施",
+              "赔偿损失"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffb5c4c015ffb63df57008f",
+          "law_short_title": "行政诉讼法解释",
+          "number": "15",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "继续履行",
+              "采取",
+              "补救措施",
+              "赔偿",
+              "损失"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "借款合同利息约定不明确",
+      "law": "民法典",
+      "number": "680",
+      "latency_ms": [
+        91.11
+      ],
+      "counts": {
+        "article": 2,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 2
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 2,
+        "segments": [
+          "借款合同利息约定不明确"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "680",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "借款合同",
+              "利息约定不明确"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "211",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "借款合同",
+              "利息",
+              "约定不明确"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "民法典第五百零四条",
+      "law": "民法典",
+      "number": "504",
+      "latency_ms": [
+        159.39
+      ],
+      "counts": {
+        "article": 5,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 5
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 2,
+        "segments": [
+          "民法典第五百零四条"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "504",
+          "match_mode": "citation",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "22",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "20",
+          "match_mode": "exact",
+          "fuzzy": null
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "7",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "民法典第",
+              "五百零四条"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808181799df6140179b08345562ab8",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "民法典第五",
+              "百零",
+              "四条"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": 1
+    },
+    {
+      "query": "显失公平，撤销",
+      "law": "民法典",
+      "number": "151",
+      "latency_ms": [
+        72.79
+      ],
+      "counts": {
+        "article": 8,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 8
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 8,
+        "segments": [
+          "显失公平",
+          "撤销"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8080816f3cbb3c016f402ac5580116",
+          "law_short_title": "行政协议规定",
+          "number": "14",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "151",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "1349e6aadd4947fe83ff811739825d3c",
+          "law_short_title": "海商法",
+          "number": "185",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e75f88017800739d621b12",
+          "law_short_title": "劳动争议解释",
+          "number": "35",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf674710415",
+          "law_short_title": "民法通则",
+          "number": "59",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf8479b09dd",
+          "law_short_title": "民法总则",
+          "number": "151",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "54",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffca575fb1177",
+          "law_short_title": "劳动争议解释",
+          "number": "10",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "显失公平",
+              "撤销"
+            ]
+          }
+        }
+      ],
+      "target_rank": 2,
+      "exact_target_rank": null
+    },
+    {
+      "query": "二倍工资",
+      "law": "劳动合同法",
+      "number": "82",
+      "options": {
+        "in_laws": "劳动合同法"
+      },
+      "latency_ms": [
+        11.39
+      ],
+      "counts": {
+        "article": 1,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 1
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 1,
+        "segments": [
+          "二倍工资"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "2c909fdd678bf17901678bf74d7106b3",
+          "law_short_title": "劳动合同法",
+          "number": "82",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "二倍",
+              "工资"
+            ]
+          }
+        }
+      ],
+      "target_rank": 1,
+      "exact_target_rank": null
+    },
+    {
+      "query": "违约金过分高于损失",
+      "law": "民法典",
+      "number": "585",
+      "options": {
+        "in_part": "违约责任"
+      },
+      "latency_ms": [
+        45.95
+      ],
+      "counts": {
+        "article": 6,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 6
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 6,
+        "segments": [
+          "违约金过分高于损失"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "65",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "违约金过分高于",
+              "损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808181799def980179b09685cf1802",
+          "law_short_title": "买卖合同纠纷解释",
+          "number": "20",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "违约金过分高于",
+              "损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "585",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "违约金过分高于",
+              "损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "64",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "违约金过分高于",
+              "损失"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "114",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "违约金过分高于",
+              "损失"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffbfc34890358",
+          "law_short_title": "合同法解释二",
+          "number": "29",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "违约金过",
+              "分高于",
+              "损失"
+            ]
+          }
+        }
+      ],
+      "target_rank": 3,
+      "exact_target_rank": null
+    },
+    {
+      "query": "约定的违约金超过造成的损失",
+      "law": "民法典",
+      "number": "585",
+      "known_limit": "原文使用过分高于，最小字面检索不补同义词",
+      "latency_ms": [
+        159.26
+      ],
+      "counts": {
+        "article": 3,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 3
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 3,
+        "segments": [
+          "约定的违约金超过造成的损失"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808181799def980179b09c45801846",
+          "law_short_title": "商品房买卖合同纠纷解释",
+          "number": "12",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "约定的违约金",
+              "超过造成的损失"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c24e05b018c814e6de45ab5",
+          "law_short_title": "合同编通则解释",
+          "number": "65",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "约定的违约金超过造成",
+              "的损失"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffbfc34890358",
+          "law_short_title": "合同法解释二",
+          "number": "29",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "约定的违约金超过造成",
+              "的损失"
+            ]
+          }
+        }
+      ],
+      "target_rank": null,
+      "exact_target_rank": null
+    },
+    {
+      "query": "劳动者提前30日书面通知解除劳动合同",
+      "law": "劳动合同法",
+      "number": "37",
+      "known_limit": "不做阿拉伯数字到汉字数字改写",
+      "latency_ms": [
+        103.73
+      ],
+      "counts": {
+        "article": 1,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 1
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 1,
+        "segments": [
+          "劳动者提前30日书面通知解除劳动合同"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8080816f3cbb3c016f40927caf049c",
+          "law_short_title": "劳动合同法实施条例",
+          "number": "18",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "劳动者提前30日",
+              "书面",
+              "通知",
+              "解除劳动合同"
+            ]
+          }
+        }
+      ],
+      "target_rank": null,
+      "exact_target_rank": null
+    },
+    {
+      "query": "不安抗辩权",
+      "type": "empty_hint",
+      "latency_ms": [
+        37.15
+      ],
+      "counts": {
+        "article": 0,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 0
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 0,
+        "segments": [
+          "不安抗辩权"
+        ]
+      },
+      "hint": "未找到匹配内容。请改用法条原文的说法或较短片段再查，并用 article 核对。",
+      "hits": []
+    },
+    {
+      "query": "表现代理",
+      "type": "empty_hint",
+      "latency_ms": [
+        43.38
+      ],
+      "counts": {
+        "article": 0,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 0
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 0,
+        "segments": [
+          "表现代理"
+        ]
+      },
+      "hint": "未找到匹配内容。请改用法条原文的说法或较短片段再查，并用 article 核对。",
+      "hits": []
+    },
+    {
+      "query": "个保法",
+      "type": "name",
+      "target": "个人信息保护法",
+      "latency_ms": [
+        120.45
+      ],
+      "matched": false,
+      "candidates": [
+        {
+          "id": "ff8081817b6472a3017b656cc2040044",
+          "official_title": "中华人民共和国个人信息保护法",
+          "short_title": "个人信息保护法",
+          "status": "current",
+          "level": "law",
+          "score": 0.7543,
+          "matched_name": "中华人民共和国个人信息保护法"
+        },
+        {
+          "id": "2c909fdd678bf17901678bf5d86801b3",
+          "official_title": "中华人民共和国担保法",
+          "short_title": "担保法",
+          "status": "repealed",
+          "level": "law",
+          "score": 0.6667,
+          "matched_name": "担保法"
+        },
+        {
+          "id": "ff808081774c7a3d0177709de6391a4e",
+          "official_title": "全国人民代表大会常务委员会关于授权国务院在河北省邯郸市等十二个试点城市行政区域暂时调整适用《中华人民共和国社会保险法》有关规定的决定（失效）",
+          "short_title": null,
+          "status": "unknown",
+          "level": "other",
+          "score": 0.6592,
+          "matched_name": "全国人民代表大会常务委员会关于授权国务院在河北省邯郸市等十二个试点城市行政区域暂时调整适用《中华人民共和国社会保险法》有关规定的决定（失效）"
+        },
+        {
+          "id": "2c909fdd678bf17901678bf7c4060811",
+          "official_title": "中华人民共和国保险法",
+          "short_title": "保险法",
+          "status": "current",
+          "level": "law",
+          "score": 0.6167,
+          "matched_name": "保险法"
+        }
+      ],
+      "target_rank": 1
+    },
+    {
+      "query": "电商法",
+      "type": "name",
+      "target": "电子商务法",
+      "latency_ms": [
+        118.3
+      ],
+      "matched": false,
+      "candidates": [
+        {
+          "id": "2c909fdd678bf17901678bf8af050b81",
+          "official_title": "中华人民共和国电子商务法",
+          "short_title": "电子商务法",
+          "status": "current",
+          "level": "law",
+          "score": 0.798,
+          "matched_name": "电子商务法"
+        },
+        {
+          "id": "1349e6aadd4947fe83ff811739825d3c",
+          "official_title": "中华人民共和国海商法",
+          "short_title": "海商法",
+          "status": "current",
+          "level": "law",
+          "score": 0.6667,
+          "matched_name": "海商法"
+        },
+        {
+          "id": "95bb747db54e419184eff06546515826",
+          "official_title": "中华人民共和国商标法",
+          "short_title": "商标法",
+          "status": "pending_effective",
+          "level": "law",
+          "score": 0.6167,
+          "matched_name": "商标法"
+        },
+        {
+          "id": "ff8080816f135f46016f1d9b1ffe15aa",
+          "official_title": "中华人民共和国电力法",
+          "short_title": "电力法",
+          "status": "current",
+          "level": "law",
+          "score": 0.6167,
+          "matched_name": "电力法"
+        }
+      ],
+      "target_rank": 1
+    },
+    {
+      "query": "消保法",
+      "type": "name",
+      "target": "消费者权益保护法",
+      "latency_ms": [
+        119.2
+      ],
+      "matched": false,
+      "candidates": [
+        {
+          "id": "2c909fdd678bf17901678bf7670606ef",
+          "official_title": "中华人民共和国消费者权益保护法",
+          "short_title": "消费者权益保护法",
+          "status": "current",
+          "level": "law",
+          "score": 0.7406,
+          "matched_name": "消费者权益保护法"
+        },
+        {
+          "id": "ff808181927f09310192c2f4cd777281",
+          "official_title": "中华人民共和国消费者权益保护法实施条例",
+          "short_title": "消费者权益保护法实施条例",
+          "status": "current",
+          "level": "admin_regulation",
+          "score": 0.7087,
+          "matched_name": "消费者权益保护法实施条例"
+        },
+        {
+          "id": "2c909fdd678bf17901678bf5d86801b3",
+          "official_title": "中华人民共和国担保法",
+          "short_title": "担保法",
+          "status": "repealed",
+          "level": "law",
+          "score": 0.6667,
+          "matched_name": "担保法"
+        },
+        {
+          "id": "ff8081817ab22e0c017abd909312060a",
+          "official_title": "中华人民共和国消防法",
+          "short_title": "消防法",
+          "status": "current",
+          "level": "law",
+          "score": 0.6167,
+          "matched_name": "消防法"
+        },
+        {
+          "id": "2c909fdd678bf17901678bf7c4060811",
+          "official_title": "中华人民共和国保险法",
+          "short_title": "保险法",
+          "status": "current",
+          "level": "law",
+          "score": 0.6167,
+          "matched_name": "保险法"
+        }
+      ],
+      "target_rank": 1
+    },
+    {
+      "query": "治安处罚法",
+      "type": "name",
+      "target": "治安管理处罚法",
+      "latency_ms": [
+        118.57
+      ],
+      "matched": false,
+      "candidates": [
+        {
+          "id": "ff80818197af9ccc0197b159c38a0408",
+          "official_title": "中华人民共和国治安管理处罚法",
+          "short_title": "治安管理处罚法",
+          "status": "current",
+          "level": "law",
+          "score": 0.8671,
+          "matched_name": "治安管理处罚法"
+        }
+      ],
+      "target_rank": 1
+    },
+    {
+      "query": "民法点",
+      "type": "name",
+      "target": "民法典",
+      "latency_ms": [
+        116.09
+      ],
+      "matched": false,
+      "candidates": [
+        {
+          "id": "ff808081729d1efe01729d50b5c500bf",
+          "official_title": "中华人民共和国民法典",
+          "short_title": "民法典",
+          "status": "current",
+          "level": "law",
+          "score": 0.6667,
+          "matched_name": "民法典"
+        },
+        {
+          "id": "ff8081817b6472a3017b658aca450088",
+          "official_title": "全国人民代表大会常务委员会关于授权最高人民法院组织开展四级法院审级职能定位改革试点工作的决定（失效）",
+          "short_title": null,
+          "status": "unknown",
+          "level": "other",
+          "score": 0.6646,
+          "matched_name": "全国人民代表大会常务委员会关于授权最高人民法院组织开展四级法院审级职能定位改革试点工作的决定（失效）"
+        },
+        {
+          "id": "ff80808176f4df370177195cc555366f",
+          "official_title": "全国人民代表大会常务委员会关于授权国务院在粤港澳大湾区内地九市开展香港法律执业者和澳门执业律师取得内地执业资质和从事律师职业试点工作的决定",
+          "short_title": null,
+          "status": "unknown",
+          "level": "other",
+          "score": 0.6566,
+          "matched_name": "全国人民代表大会常务委员会关于授权国务院在粤港澳大湾区内地九市开展香港法律执业者和澳门执业律师取得内地执业资质和从事律师职业试点工作的决定"
+        },
+        {
+          "id": "ff8081818a21e8b2018a505222530c7a",
+          "official_title": "全国人民代表大会常务委员会关于延长授权国务院在粤港澳大湾区内地九市开展香港法律执业者和澳门执业律师取得内地执业资质和从事律师职业试点工作期限的决定",
+          "short_title": null,
+          "status": "unknown",
+          "level": "other",
+          "score": 0.6559,
+          "matched_name": "全国人民代表大会常务委员会关于延长授权国务院在粤港澳大湾区内地九市开展香港法律执业者和澳门执业律师取得内地执业资质和从事律师职业试点工作期限的决定"
+        },
+        {
+          "id": "2c909fdd678bf17901678bf8479b09dd",
+          "official_title": "中华人民共和国民法总则",
+          "short_title": "民法总则",
+          "status": "repealed",
+          "level": "law",
+          "score": 0.6242,
+          "matched_name": "民法总则"
+        }
+      ],
+      "target_rank": 1
+    },
+    {
+      "query": "民事诉讼法司法解释",
+      "type": "name",
+      "target": "中华人民共和国民事诉讼法",
+      "latency_ms": [
+        130.67
+      ],
+      "matched": false,
+      "candidates": [
+        {
+          "id": "ff80818181cdceb30181d801c31c4070",
+          "official_title": "最高人民法院关于适用《中华人民共和国民事诉讼法》的解释",
+          "short_title": "民事诉讼法解释",
+          "status": "current",
+          "level": "judicial_interpretation",
+          "score": 1.0,
+          "matched_name": "民事诉讼法解释"
+        },
+        {
+          "id": "ff808181799def980179b1ab569c1b33",
+          "official_title": "最高人民法院关于适用《中华人民共和国民事诉讼法》审判监督程序若干问题的解释",
+          "short_title": "民事诉讼法解释",
+          "status": "current",
+          "level": "judicial_interpretation",
+          "score": 1.0,
+          "matched_name": "民事诉讼法解释"
+        },
+        {
+          "id": "ff80818179f5d2480179fa4c0ccb0492",
+          "official_title": "最高人民法院关于适用《中华人民共和国民事诉讼法》执行程序若干问题的解释",
+          "short_title": "民事诉讼法解释",
+          "status": "current",
+          "level": "judicial_interpretation",
+          "score": 1.0,
+          "matched_name": "民事诉讼法解释"
+        },
+        {
+          "id": "eba4d93163864693a64555f167d1878f",
+          "official_title": "最高人民法院关于修改《最高人民法院关于适用〈中华人民共和国民事诉讼法〉的解释》的决定",
+          "short_title": null,
+          "status": "unknown",
+          "level": "other",
+          "score": 0.9073,
+          "matched_name": "最高人民法院关于修改《最高人民法院关于适用〈中华人民共和国民事诉讼法〉的解释》的决定"
+        },
+        {
+          "id": "court_main:fabu/xiangqing/286491",
+          "official_title": "最高人民法院关于适用《中华人民共和国刑事诉讼法》的解释",
+          "short_title": "刑事诉讼法解释",
+          "status": "current",
+          "level": "judicial_interpretation",
+          "score": 0.8571,
+          "matched_name": "最高人民法院关于适用《中华人民共和国刑事诉讼法》的解释"
+        }
+      ],
+      "target_rank": 1
+    },
+    {
+      "query": "合同编通则司法解释",
+      "type": "name",
+      "target": "合同编通则",
+      "latency_ms": [
+        117.99
+      ],
+      "matched": false,
+      "candidates": [
+        {
+          "id": "court-contract-interpretation-2023",
+          "official_title": "最高人民法院关于适用《中华人民共和国民法典》合同编通则若干问题的解释",
+          "short_title": "合同编通则解释",
+          "status": "current",
+          "level": "judicial_interpretation",
+          "score": 1.0,
+          "matched_name": "合同编通则解释"
+        }
+      ],
+      "target_rank": 1
+    },
+    {
+      "query": "劳动争议司法解释（一）",
+      "type": "name",
+      "target": "劳动争议",
+      "latency_ms": [
+        129.32
+      ],
+      "matched": false,
+      "candidates": [
+        {
+          "id": "ff80818198a7eafa0199329bcc11687f",
+          "official_title": "最高人民法院关于审理劳动争议案件适用法律问题的解释（二）",
+          "short_title": "劳动争议解释",
+          "status": "current",
+          "level": "judicial_interpretation",
+          "score": 0.8936,
+          "matched_name": "劳动争议解释"
+        },
+        {
+          "id": "ff80808177e75f88017800739d621b12",
+          "official_title": "最高人民法院关于审理劳动争议案件适用法律问题的解释（一）",
+          "short_title": "劳动争议解释",
+          "status": "current",
+          "level": "judicial_interpretation",
+          "score": 0.8936,
+          "matched_name": "劳动争议解释"
+        },
+        {
+          "id": "402881e45ffbbe41015ffca32c48113d",
+          "official_title": "最高人民法院关于审理劳动争议案件适用法律若干问题的解释（四）",
+          "short_title": "劳动争议解释",
+          "status": "repealed",
+          "level": "judicial_interpretation",
+          "score": 0.8936,
+          "matched_name": "劳动争议解释"
+        },
+        {
+          "id": "402881e45ffbbe41015ffca575fb1177",
+          "official_title": "最高人民法院关于审理劳动争议案件适用法律若干问题的解释（三）",
+          "short_title": "劳动争议解释",
+          "status": "repealed",
+          "level": "judicial_interpretation",
+          "score": 0.8936,
+          "matched_name": "劳动争议解释"
+        },
+        {
+          "id": "402881e45ffbbe41015ffca7c50e11a0",
+          "official_title": "最高人民法院关于审理劳动争议案件适用法律若干问题的解释（二）",
+          "short_title": "劳动争议解释",
+          "status": "repealed",
+          "level": "judicial_interpretation",
+          "score": 0.8936,
+          "matched_name": "劳动争议解释"
+        }
+      ],
+      "target_rank": 1
+    }
+  ]
+}

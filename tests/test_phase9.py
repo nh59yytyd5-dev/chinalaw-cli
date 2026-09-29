@@ -110,7 +110,7 @@ class FormatterConsistencyTests(unittest.TestCase):
         )
         for rendered in outputs:
             with self.subTest(rendered=rendered[:30]):
-                self.assertIn("- 状态：repealed", rendered)
+                self.assertIn("- 文本状态：repealed", rendered)
                 self.assertIn("- 施行日期：2020-01-01", rendered)
                 self.assertIn("- 废止日期：2025-01-01", rendered)
                 self.assertIn("- 当前版本：2024-07-01 施行版", rendered)
@@ -337,7 +337,7 @@ class DocumentationContractTests(unittest.TestCase):
             (repo_root / "data" / "source_coverage.json").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(USER_AGENT_TOKEN, f"chinalaw-cli/0.6.0 (+{PROJECT_URL})")
+        self.assertEqual(USER_AGENT_TOKEN, f"chinalaw-cli/0.7.0 (+{PROJECT_URL})")
         self.assertIn(PROJECT_URL, compliance)
         self.assertNotIn("github.com/chinalaw-cli/chinalaw-cli", compliance)
         self.assertNotIn("README 中维护者邮箱", compliance)

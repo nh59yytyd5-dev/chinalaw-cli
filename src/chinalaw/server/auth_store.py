@@ -64,6 +64,12 @@ def validate_scopes(scopes: list[str]) -> list[str]:
     return sorted(set(scopes))
 
 
+def credential_label(row: sqlite3.Row) -> str:
+    if row["kind"] == "personal":
+        return f"personal:{row['name']}"
+    return row["client_id"]
+
+
 @dataclass(frozen=True)
 class Principal:
     subject: str
@@ -71,6 +77,8 @@ class Principal:
     kind: str
     client_id: str = "owner"
     csrf: str | None = None
+    # Who to name in the query log: a personal token's name, else the client.
+    log_label: str | None = None
 
     @property
     def is_owner(self) -> bool:
@@ -340,7 +348,9 @@ class AuthStore:
                 "UPDATE credentials SET last_used_at = ? WHERE id = ?",
                 (int(time.time()), row["id"]),
             )
-        return Principal("owner", scopes, "token", client_id=row["client_id"])
+        return Principal(
+            "owner", scopes, "token", client_id=row["client_id"], log_label=credential_label(row)
+        )
 
     def list_credentials(self) -> list[dict]:
         with self.transaction() as conn:

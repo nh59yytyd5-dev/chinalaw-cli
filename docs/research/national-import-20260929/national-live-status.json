@@ -1,0 +1,76 @@
+{
+  "db_path": "/srv/chinalaw/library.db",
+  "schema_version": 16,
+  "schema_current": true,
+  "read_only": true,
+  "laws": 2522,
+  "articles": 93049,
+  "revisions": 2545,
+  "categories": 35,
+  "norm_packs": 0,
+  "norm_sources": 0,
+  "norm_clauses": 0,
+  "law_relations": 90,
+  "applicability_rules": 0,
+  "last_sync_at": "2026-09-29T03:46:35.064044+00:00",
+  "last_applicability_sync_at": null,
+  "oldest_source_checked_at": "2026-05-20T00:00:00+08:00",
+  "oldest_freshness_days": 132,
+  "by_level": [
+    {
+      "level": "judicial_interpretation",
+      "count": 865
+    },
+    {
+      "level": "admin_regulation",
+      "count": 833
+    },
+    {
+      "level": "law",
+      "count": 521
+    },
+    {
+      "level": "other",
+      "count": 298
+    },
+    {
+      "level": "supervisory_regulation",
+      "count": 3
+    },
+    {
+      "level": "judicial_policy",
+      "count": 2
+    }
+  ],
+  "by_status": [
+    {
+      "status": "current",
+      "count": 1548
+    },
+    {
+      "status": "amended",
+      "count": 423
+    },
+    {
+      "status": "repealed",
+      "count": 275
+    },
+    {
+      "status": "unknown",
+      "count": 267
+    },
+    {
+      "status": "pending_effective",
+      "count": 9
+    }
+  ],
+  "by_articles_coverage": [
+    {
+      "coverage": "populated",
+      "count": 2522
+    }
+  ],
+  "stub_laws": [],
+  "seed_laws": [],
+  "alias_agent": "disabled"
+}

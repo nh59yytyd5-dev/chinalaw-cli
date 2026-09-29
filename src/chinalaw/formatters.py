@@ -67,7 +67,7 @@ def _freshness_label(law: dict) -> str | None:
 def _compact_article_footer(law: dict) -> str | None:
     parts: list[str] = []
     if law.get("status"):
-        parts.append(str(law["status"]))
+        parts.append(str(law.get("effective_status_as_of") or law["status"]))
     effective_at = law.get("effective_at")
     if effective_at:
         parts.append(f"{effective_at} 施行")
@@ -80,12 +80,18 @@ def _compact_article_footer(law: dict) -> str | None:
     return f"[{'｜'.join(parts)}]" if parts else None
 
 
+def _effective_note_lines(law: dict) -> list[str]:
+    note = law.get("effective_status_note")
+    return [f"- 效力说明：{note}"] if note else []
+
+
 def _full_article_footer(law: dict) -> list[str]:
     """Render the shared provenance footer for article-shaped Markdown."""
 
     lines = ["---"]
     if law.get("status"):
-        lines.append(f"- 状态：{law.get('status')}")
+        lines.append(f"- 文本状态：{law.get('effective_status_as_of') or law.get('status')}")
+    lines.extend(_effective_note_lines(law))
     if law.get("effective_at"):
         lines.append(f"- 施行日期：{law.get('effective_at')}")
     if law.get("repealed_at"):
@@ -104,10 +110,48 @@ def _full_article_footer(law: dict) -> list[str]:
     return lines
 
 
+_SEARCH_STATUS_LABELS = {
+    "amended": "已被修改",
+    "repealed": "已废止",
+    "pending_effective": "尚未施行",
+    "unknown": "效力待核",
+}
+
+
+def _search_status_mark(hit: dict) -> str:
+    label = _SEARCH_STATUS_LABELS.get(hit.get("effective_status_as_of") or "")
+    return (f"【{label}】" if label else "") + _other_versions_note(hit)
+
+
+def _other_versions_note(hit: dict) -> str:
+    count = hit.get("other_versions")
+    return f"（另有 {count} 个版本命中，已折叠）" if count else ""
+
+
+def _search_scope_lines(result: dict) -> list[str]:
+    as_of = (result.get("retrieval") or {}).get("as_of")
+    lines = [f"_效力判断日期：{as_of}_"] if as_of else []
+    if result.get("hint"):
+        lines.append(result["hint"])
+    for name, candidates in (result.get("law_filter") or {}).get(
+        "unresolved_candidates", {}
+    ).items():
+        lines.append(f"法规名未解析：{name}；候选未自动采用。")
+        lines.extend(f"- {c['official_title']} [{c['id']}]" for c in candidates)
+    return lines
+
+
+def _approximate_match_lines(hit: dict) -> list[str]:
+    if hit.get("match_mode") == "fuzzy":
+        return ["- 近似匹配：" + " / ".join(hit["fuzzy"]["matched"])]
+    return []
+
+
 def search_to_markdown(result: dict) -> str:
     lines: list[str] = []
     query = result.get("query", "")
     lines.append(f"# 检索：{query}")
+    lines.extend(_search_scope_lines(result))
     if result.get("in_part"):
         lines.append(f"_章节限定：{result.get('in_part')}_")
     counts = result.get("counts") or {}
@@ -135,7 +179,10 @@ def search_to_markdown(result: dict) -> str:
             title = h.get("title")
             short = h.get("short_title")
             label = f"{title}" + (f"（{short}）" if short else "")
-            lines.append(f"- **{label}** — {h.get('status')}　[来源]({h.get('source_url')})")
+            status = h.get("effective_status_as_of") or h.get("status")
+            lines.append(
+                f"- **{label}** — {status}{_other_versions_note(h)}　[来源]({h.get('source_url')})"
+            )
             lines.append("")
 
     # 公开法与私域规范同时命中时，在首个私域小节前渲染同一冲突提示。
@@ -170,10 +217,13 @@ def search_to_markdown(result: dict) -> str:
             title = h.get("law_short_title") or f"《{h.get('law_title')}》"
             num = h.get("number_display")
             text = h.get("text", "").strip()
-            lines.append(f"### {title} {num}")
+            lines.append(f"### {title} {num}{_search_status_mark(h)}")
             lines.append("")
             lines.append(f"> {text}")
             lines.append("")
+            lines.extend(_approximate_match_lines(h))
+            if h.get("match_mode") == "citation":
+                lines.append("- 按引用直接取条")
             lines.append(
                 f"- 来源：{h.get('source_url')}"
                 f"　（距上次核查：{h.get('freshness_days')} 天）"
@@ -432,7 +482,8 @@ def law_to_markdown(law: dict) -> str:
     lines.append(f"# 《{title}》" + (f"（{short}）" if short else ""))
     lines.append("")
     lines.append(f"- 效力级别：{law.get('level')}")
-    lines.append(f"- 状态：{law.get('status')}")
+    lines.append(f"- 文本状态：{law.get('effective_status_as_of') or law.get('status')}")
+    lines.extend(_effective_note_lines(law))
     if law.get("issuing_body"):
         lines.append(f"- 制定机关：{law.get('issuing_body')}")
     if law.get("document_number"):
@@ -550,6 +601,13 @@ def article_to_markdown(
     return "\n".join(lines) + "\n"
 
 
+def candidate_laws_to_markdown(payload: dict | None) -> str:
+    return "".join(
+        f"- 候选（未自动采用）：{item['official_title']} [{item['id']}] — {item['status']}\n"
+        for item in (payload or {}).get("candidate_laws", [])
+    )
+
+
 def articles_to_markdown(
     payload: dict,
     *,
@@ -558,7 +616,7 @@ def articles_to_markdown(
     with_title: bool = False,
 ) -> str:
     if payload is None or payload.get("law") is None:
-        return "_未找到指定法规或条文列表。_\n"
+        return "_未找到指定法规或条文列表。_\n" + candidate_laws_to_markdown(payload)
     law = payload["law"]
     lines: list[str] = []
     if footer != "none":
@@ -2083,6 +2141,9 @@ def resolve_to_markdown(payload: dict) -> str:
             "- 命中：未找到",
             "- 提示：试 `chinalaw fetch <俗称> --list-matches` 列候选",
         ]
+        for candidate in payload.get("candidates", []):
+            lines.append(f"- 候选（未自动采用）：{candidate['official_title']} "
+                         f"[{candidate['id']}] — {candidate['status']}")
         return "\n".join(lines) + "\n"
 
     level = payload.get("level") or "?"

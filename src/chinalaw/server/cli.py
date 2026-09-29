@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("init", "显式初始化或升级资料库"),
         ("serve", "启动浏览器面板与只读 HTTP/MCP"),
         ("password", "设置或重置所有者密码"),
+        ("queries", "导出检索日志（JSON Lines）"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument(
@@ -51,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
                 "--server", action="store_true", help="服务器模式，要求 HTTPS 和密码"
             )
             command.add_argument("--open", action="store_true", help="本机启动时打开浏览器")
+            command.add_argument(
+                "--no-query-log", action="store_true", help="不记录检索日志（默认记录）"
+            )
+        if name == "queries":
+            command.add_argument("--since", help="只导出该时间之后的记录（ISO 日期或时间，UTC）")
+            command.add_argument("--limit", type=int, help="最多导出的条数")
     return parser
 
 
@@ -116,6 +123,7 @@ def _serve(args) -> int:
         host=args.host,
         port=args.port,
         local_mode=not args.server,
+        query_log=not args.no_query_log,
     )
     # Fail before creating credentials if the library needs initialization.
     if not db.is_file() or service.status(db)["schema_version"] != SCHEMA_VERSION:
@@ -149,15 +157,19 @@ def _serve(args) -> int:
     return 0
 
 
-def _password(args) -> int:
-    from chinalaw.server.auth_store import AuthStore
-
+def _state_dir(args) -> Path:
     db = args.db.expanduser().resolve()
-    state = (
+    return (
         Path(args.state_dir).expanduser().resolve()
         if args.state_dir
         else db.with_name(db.name + ".server-state")
     )
+
+
+def _password(args) -> int:
+    from chinalaw.server.auth_store import AuthStore
+
+    state = _state_dir(args)
     # Password hashing is origin-independent; token audiences are set when serving.
     auth = AuthStore(state / "auth.db", "http://127.0.0.1:8765/mcp")
     password = getpass.getpass("设置所有者密码（至少 12 字符）：")
@@ -165,6 +177,17 @@ def _password(args) -> int:
         raise LibraryError("password_mismatch", "两次密码不一致。")
     auth.set_password(password)
     print("所有者密码已设置，旧登录会话已失效。")
+    return 0
+
+
+def _queries(args) -> int:
+    from chinalaw.server.query_log import QueryLog
+
+    path = _state_dir(args) / "queries.db"
+    if not path.is_file():
+        raise LibraryError("query_log_missing", f"尚无检索日志：{path}")
+    for row in QueryLog(path).export(since=args.since, limit=args.limit):
+        print(json.dumps(row, ensure_ascii=False))
     return 0
 
 
@@ -193,6 +216,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "password":
             return _password(args)
+        if args.command == "queries":
+            return _queries(args)
         return _serve(args)
     except (LibraryError, ValueError, OSError, sqlite3.Error) as exc:
         print(f"chinalaw-server: {exc}", file=sys.stderr)

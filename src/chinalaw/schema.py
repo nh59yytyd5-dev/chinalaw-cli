@@ -9,7 +9,7 @@ v0.1 策略：
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 16
 
 
 SCHEMA_V1_SQL = """
@@ -540,3 +540,38 @@ CREATE INDEX IF NOT EXISTS idx_library_jobs_state
 """
 
 SCHEMA_V14_SQL = SCHEMA_V13_SQL + SCHEMA_V14_DELTA_SQL
+
+
+# v15: legal works and status provenance on public laws.
+# ``work_id`` groups the separately stored versions of one law (flk records
+# every version under its own id); NULL means "not declared", and readers fall
+# back to grouping by identical title, issuing body and level.
+# ``status_checked_at`` is when ``status`` was last confirmed against the
+# upstream source, independent of when the text was fetched.
+SCHEMA_V15_DELTA_COLUMNS = (
+    ("work_id", "TEXT"),
+    ("status_checked_at", "TEXT"),
+)
+SCHEMA_V15_DELTA_SQL = """
+CREATE INDEX IF NOT EXISTS idx_laws_work_id ON laws(work_id);
+"""
+
+# v16: the article index moves from a trigram table that copied every article
+# to a contentless table of Python-made bigram tokens (see search_tokens.py).
+# ``tier`` holds ``national`` or ``local`` so national hits can be fetched
+# first. Rows map to articles through ``articles_fts_rows`` as before.
+# ``contentless_delete`` needs SQLite 3.43; older libraries get a table that
+# keeps its own copy of the tokens, which deletes the same way.
+SCHEMA_V16_ARTICLES_FTS_SQL = """
+CREATE VIRTUAL TABLE articles_fts USING fts5(
+    tier,
+    title,
+    text,
+    tokenize = 'unicode61'{options}
+);
+"""
+
+
+def articles_fts_ddl(sqlite_version: tuple[int, ...]) -> str:
+    options = ", content = '', contentless_delete = 1" if sqlite_version >= (3, 43) else ""
+    return SCHEMA_V16_ARTICLES_FTS_SQL.format(options=options)

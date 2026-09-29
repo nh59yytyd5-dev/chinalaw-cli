@@ -25,6 +25,7 @@ from chinalaw.server.auth_store import (
     PUBLIC_SCOPE,
     READ_SCOPES,
     AuthStore,
+    credential_label,
     token_digest,
     validate_scopes,
 )
@@ -46,6 +47,7 @@ class StoredRefresh(RefreshToken):
 
 class StoredAccess(AccessToken):
     grant_id: str
+    log_label: str | None = None
 
 
 class OwnerOAuth(OAuthAuthorizationServerProvider[StoredCode, StoredRefresh, StoredAccess]):
@@ -304,6 +306,7 @@ class OwnerOAuth(OAuthAuthorizationServerProvider[StoredCode, StoredRefresh, Sto
             resource=row["resource"],
             subject="owner",
             grant_id=row["grant_id"],
+            log_label=credential_label(row),
         )
 
     async def revoke_token(self, token: StoredAccess | StoredRefresh) -> None:

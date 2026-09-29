@@ -23,7 +23,10 @@ from chinalaw.schema import (
     SCHEMA_V12_DELTA_SQL,
     SCHEMA_V14_DELTA_SQL,
     SCHEMA_V14_SQL,
+    SCHEMA_V15_DELTA_COLUMNS,
+    SCHEMA_V15_DELTA_SQL,
     SCHEMA_VERSION,
+    articles_fts_ddl,
 )
 
 DEFAULT_DB_PATH = Path.home() / ".chinalaw" / "chinalaw.db"
@@ -558,6 +561,26 @@ def _migrate_v13_to_v14(conn: sqlite3.Connection) -> None:
         set_meta(conn, "library_id", uuid.uuid4().hex)
 
 
+def _migrate_v14_to_v15(conn: sqlite3.Connection) -> None:
+    """``laws`` gains ``work_id`` and ``status_checked_at``. See schema.py."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(laws)")}
+    for name, declaration in SCHEMA_V15_DELTA_COLUMNS:
+        if name not in columns:
+            conn.execute(f"ALTER TABLE laws ADD COLUMN {name} {declaration}")
+    _execute_script(conn, SCHEMA_V15_DELTA_SQL)
+
+
+def _migrate_v15_to_v16(conn: sqlite3.Connection) -> None:
+    """Replace the trigram article index with the bigram one and fill it."""
+    from chinalaw.search_indexes import rebuild_article_search_index
+    from chinalaw.search_tokens import TOKENIZER_VERSION
+
+    conn.execute("DROP TABLE IF EXISTS articles_fts")
+    conn.execute(articles_fts_ddl(sqlite3.sqlite_version_info))
+    rebuild_article_search_index(conn)
+    set_meta(conn, "search_tokenizer_version", TOKENIZER_VERSION)
+
+
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """空 DB → 一次性落最新累积 DDL。
 
@@ -594,7 +617,19 @@ _MIGRATORS: dict[int, Callable[[sqlite3.Connection], None]] = {
     11: _migrate_v11_to_v12,
     12: _migrate_v12_to_v13,
     13: _migrate_v13_to_v14,
+    14: _migrate_v14_to_v15,
+    15: _migrate_v15_to_v16,
 }
+
+def build_current_schema(conn: sqlite3.Connection) -> None:
+    """Create the latest schema on an empty connection, ignoring read-only guards.
+
+    For reference schemas (for example the backup validator's in-memory copy);
+    real libraries go through :func:`migrate`.
+    """
+    for version in range(SCHEMA_VERSION):
+        _MIGRATORS[version](conn)
+
 
 assert set(_MIGRATORS) == set(range(0, SCHEMA_VERSION)), (
     f"_MIGRATORS keys {sorted(_MIGRATORS)} 不等于 [0, {SCHEMA_VERSION})；"

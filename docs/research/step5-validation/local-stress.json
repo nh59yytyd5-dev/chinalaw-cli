@@ -1,0 +1,1075 @@
+{
+  "corpus": {
+    "laws": 2488,
+    "articles": 88750
+  },
+  "pool": 500,
+  "repeat": 5,
+  "median_ms": 94.9,
+  "p95_ms": 324.9,
+  "results": [
+    {
+      "query": "国家，规定，管理，部门",
+      "latency_ms": [
+        776.35,
+        324.9,
+        321.5,
+        322.58,
+        335.68
+      ],
+      "counts": {
+        "article": 20,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 20
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 20,
+        "segments": [
+          "国家",
+          "规定",
+          "管理",
+          "部门"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8080816f3cbb3c016f4151fd5a21e1",
+          "law_short_title": null,
+          "number": "10",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808181907351a50190d83de7486141",
+          "law_short_title": "保守国家秘密法实施条例",
+          "number": "33",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818d6a4464018de9f8ab7511e3",
+          "law_short_title": "保守国家秘密法",
+          "number": "25",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "f3f7217464834db5b5d4f563f40c6dec",
+          "law_short_title": "国家公园法",
+          "number": "6",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818d6a4464018de9f8ab7511e3",
+          "law_short_title": "保守国家秘密法",
+          "number": "46",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "f3f7217464834db5b5d4f563f40c6dec",
+          "law_short_title": "国家公园法",
+          "number": "50",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f5acf6a244210",
+          "law_short_title": "密码法",
+          "number": "42",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808175265dd401753fb348ce1266",
+          "law_short_title": "出口管制法",
+          "number": "31",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf7002b054b",
+          "law_short_title": "人民警察警衔条例",
+          "number": "23",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818d6a4464018de9f8ab7511e3",
+          "law_short_title": "保守国家秘密法",
+          "number": "36",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081817b6472a3017b656cc2040044",
+          "law_short_title": "个人信息保护法",
+          "number": "60",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f46242d6127ed",
+          "law_short_title": "药品管理法",
+          "number": "44",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f410b18b01324",
+          "law_short_title": "无线电管理条例",
+          "number": "12",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f414ae4182081",
+          "law_short_title": "航道管理条例",
+          "number": "6",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "021e7d7684474107b8f3febbb1c4f8b5",
+          "law_short_title": "网络安全法",
+          "number": "9",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf8112508ed",
+          "law_short_title": "水法",
+          "number": "12",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808181907351a50190d83de7486141",
+          "law_short_title": "保守国家秘密法实施条例",
+          "number": "25",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80818188d322d501897c5815c326cd",
+          "law_short_title": null,
+          "number": "15",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818d6a4464018de9f8ab7511e3",
+          "law_short_title": "保守国家秘密法",
+          "number": "17",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6fd390523",
+          "law_short_title": "人民防空法",
+          "number": "7",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "国家",
+              "规定",
+              "管理",
+              "部门"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "query": "公司，规定，责任，合同，人民法院",
+      "latency_ms": [
+        125.14,
+        120.09,
+        124.32,
+        119.26,
+        117.57
+      ],
+      "counts": {
+        "article": 15,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 15
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 15,
+        "segments": [
+          "公司",
+          "规定",
+          "责任",
+          "合同",
+          "人民法院"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "7",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "9",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808181799def980179ac07a9ca117c",
+          "law_short_title": "公司法解释三",
+          "number": "24",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "8",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808181799df4000179ac08cb701145",
+          "law_short_title": "公司法解释四",
+          "number": "21",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081817b9642c8017ba09697d00a71",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3e9784016f41fe72fb0269",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081817d044a18017d12054022039a",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "ff808181799df6140179b08345562ab8",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffc116aef0496",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffbbe41015ffc14c01404de",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffff9500160002699700126",
+          "law_short_title": "道路交通事故损害赔偿解释",
+          "number": "16",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e46000e27901600137776d0068",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffff9500160006e828c0630",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        },
+        {
+          "law_id": "402881e45ffb0c10015ffb359bc70138",
+          "law_short_title": null,
+          "number": "正文",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "规定",
+              "责任",
+              "合同",
+              "人民法院"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "query": "用人单位未与劳动者订立书面劳动合同应当向劳动者每月支付二倍的工资",
+      "latency_ms": [
+        102.35,
+        94.9,
+        93.53,
+        94.94,
+        94.64
+      ],
+      "counts": {
+        "article": 1,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 1
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 1,
+        "segments": [
+          "用人单位未与劳动者订立书面劳动合同应当向劳动者每月支付二倍的工资"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "2c909fdd678bf17901678bf74d7106b3",
+          "law_short_title": "劳动合同法",
+          "number": "82",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "用人单位",
+              "未与劳动者订立书面劳动合同",
+              "应当向劳动者每月支付二倍的工资"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "query": "当事人可以约定一方违约时应当根据违约情况向对方支付一定数额的违约金也可以约定因违约产生的损失赔偿额的计算方法",
+      "latency_ms": [
+        169.95,
+        133.7,
+        132.96,
+        132.01,
+        133.7
+      ],
+      "counts": {
+        "article": 2,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 2
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 2,
+        "segments": [
+          "当事人可以约定一方违约时应当根据违约情况向对方支付一定数额的违约金也可以约定因违约产生的损失赔偿额的计算方法"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "585",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "当事人可以约定一方违约时应当根据违约情况向对方支付一定数额的违约金",
+              "也可以约定因违约产生的损失赔偿额的计算方法"
+            ]
+          }
+        },
+        {
+          "law_id": "2c909fdd678bf17901678bf6053a0217",
+          "law_short_title": "合同法",
+          "number": "114",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "当事人可以约定一方违约时应当根据违约情况向对方支付一定数额的违约金",
+              "也可以约定因违约产生的损失赔偿额的计算方法"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "query": "公司为他人提供担保 董事会 股东会决议",
+      "options": {
+        "level": "law",
+        "status": "current"
+      },
+      "latency_ms": [
+        43.84,
+        39.2,
+        38.06,
+        38.66,
+        38.87
+      ],
+      "counts": {
+        "article": 2,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 2
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 2,
+        "segments": [
+          "公司为他人提供担保",
+          "董事会",
+          "股东会决议"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "15",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司为",
+              "他人提供担保",
+              "董事会",
+              "股东会决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "163",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "为他人",
+              "提供",
+              "担保",
+              "董事会",
+              "股东会决议"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "query": "违约金过分高于损失",
+      "options": {
+        "in_laws": "民法典",
+        "in_part": "违约责任"
+      },
+      "latency_ms": [
+        10.8,
+        9.68,
+        9.95,
+        9.5,
+        10.06
+      ],
+      "counts": {
+        "article": 1,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 1
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 1,
+        "segments": [
+          "违约金过分高于损失"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff808081729d1efe01729d50b5c500bf",
+          "law_short_title": "民法典",
+          "number": "585",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "违约金过分高于",
+              "损失"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "query": "公司，担保，决议",
+      "options": {
+        "as_of": "2020-01-01",
+        "versions": "all"
+      },
+      "latency_ms": [
+        33.15,
+        31.25,
+        30.21,
+        30.25,
+        30.9
+      ],
+      "counts": {
+        "article": 20,
+        "law": 0,
+        "norm_clause": 0,
+        "norm_source": 0,
+        "total": 20
+      },
+      "fuzzy": {
+        "applied": true,
+        "min_exact_hits": 5,
+        "count": 20,
+        "segments": [
+          "公司",
+          "担保",
+          "决议"
+        ]
+      },
+      "hint": null,
+      "hits": [
+        {
+          "law_id": "ff8080816f135f46016f1cc98ad81134",
+          "law_short_title": "公司法",
+          "number": "16",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f135f46016f1cc98ad81134",
+          "law_short_title": "公司法",
+          "number": "22",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "2c90e5bb65c68cfd0167f270957b4d8c",
+          "law_short_title": null,
+          "number": "5",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f135f46016f1cc98ad81134",
+          "law_short_title": "公司法",
+          "number": "121",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f135f46016f1cc98ad81134",
+          "law_short_title": "公司法",
+          "number": "104",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f413466541cee",
+          "law_short_title": "公司登记管理条例",
+          "number": "31",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f135f46016f1cc98ad81134",
+          "law_short_title": "公司法",
+          "number": "173",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f135f46016f1cc98ad81134",
+          "law_short_title": "公司法",
+          "number": "177",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8080816f3cbb3c016f413466541cee",
+          "law_short_title": "公司登记管理条例",
+          "number": "38",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "9",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "7",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "15",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "11",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "8",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80808177e757ac01780077d2291b77",
+          "law_short_title": "担保制度解释",
+          "number": "10",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff80818179f5d52f0179fa4f8c9c072d",
+          "law_short_title": null,
+          "number": "5",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "163",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "135",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "220",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        },
+        {
+          "law_id": "ff8081818c9108eb018cb6922f750c07",
+          "law_short_title": "公司法",
+          "number": "224",
+          "match_mode": "fuzzy",
+          "fuzzy": {
+            "matched": [
+              "公司",
+              "担保",
+              "决议"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
