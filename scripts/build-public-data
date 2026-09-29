@@ -179,7 +179,7 @@ def build(source: Path, output: Path, snapshot: str, provenance: Path | None = N
         "sqlite_sha256": digest(db),
     }
     for folder in (json_dir, sqlite_dir):
-        for name in ("README.md", "NOTICE.md"):
+        for name in ("README.md", "NOTICE.md", "QUALITY.md"):
             shutil.copyfile(ROOT / "data/public-release" / name, folder / name)
         shutil.copyfile(ROOT / "LICENSE", folder / "LICENSE")
         if provenance:

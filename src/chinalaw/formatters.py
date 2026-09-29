@@ -67,7 +67,7 @@ def _freshness_label(law: dict) -> str | None:
 def _compact_article_footer(law: dict) -> str | None:
     parts: list[str] = []
     if law.get("status"):
-        parts.append(str(law["status"]))
+        parts.append(str(law.get("effective_status_as_of") or law["status"]))
     effective_at = law.get("effective_at")
     if effective_at:
         parts.append(f"{effective_at} 施行")
@@ -80,12 +80,18 @@ def _compact_article_footer(law: dict) -> str | None:
     return f"[{'｜'.join(parts)}]" if parts else None
 
 
+def _effective_note_lines(law: dict) -> list[str]:
+    note = law.get("effective_status_note")
+    return [f"- 效力说明：{note}"] if note else []
+
+
 def _full_article_footer(law: dict) -> list[str]:
     """Render the shared provenance footer for article-shaped Markdown."""
 
     lines = ["---"]
     if law.get("status"):
-        lines.append(f"- 状态：{law.get('status')}")
+        lines.append(f"- 文本状态：{law.get('effective_status_as_of') or law.get('status')}")
+    lines.extend(_effective_note_lines(law))
     if law.get("effective_at"):
         lines.append(f"- 施行日期：{law.get('effective_at')}")
     if law.get("repealed_at"):
@@ -476,7 +482,8 @@ def law_to_markdown(law: dict) -> str:
     lines.append(f"# 《{title}》" + (f"（{short}）" if short else ""))
     lines.append("")
     lines.append(f"- 效力级别：{law.get('level')}")
-    lines.append(f"- 状态：{law.get('status')}")
+    lines.append(f"- 文本状态：{law.get('effective_status_as_of') or law.get('status')}")
+    lines.extend(_effective_note_lines(law))
     if law.get("issuing_body"):
         lines.append(f"- 制定机关：{law.get('issuing_body')}")
     if law.get("document_number"):

@@ -882,7 +882,8 @@ export function DocumentPage({ kind, id }: { kind: Kind; id: string }) {
       <div className="document-heading">
         <div className="button-row">
           <KindBadge kind={kind} />
-          {doc.status && <Badge>{label(doc.status)}</Badge>}
+          {doc.status && <Badge>{label(doc.effective_status_as_of || doc.status)}</Badge>}
+          {doc.effective_status_note && <span>{doc.effective_status_note}</span>}
           <Badge tone={data.review ? "green" : "amber"}>
             {revision
               ? "历史快照"

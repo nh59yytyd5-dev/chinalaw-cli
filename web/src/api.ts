@@ -79,6 +79,8 @@ export type Clause = {
   position?: number;
 };
 export type Document = {
+  effective_status_as_of?: string;
+  effective_status_note?: string | null;
   id: string;
   title?: string;
   name?: string;
@@ -241,7 +243,7 @@ export const labels: Record<string, string> = {
   self_regulatory_rule: "自律规则",
   other: "其他",
   current: "现行",
-  amended: "已修改",
+  amended: "旧版文本",
   repealed: "已废止",
   pending_effective: "尚未施行",
   seed: "待补全",

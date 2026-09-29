@@ -647,6 +647,7 @@ def _law_candidates(conn: sqlite3.Connection, query: str) -> list[dict]:
                 "id": row["id"], "official_title": row["title"],
                 "short_title": row["short_title"], "status": row["status"],
                 "level": row["level"], "score": round(score, 4), "matched_name": name,
+                "released_at": row["released_at"], "effective_at": row["effective_at"],
             })
     candidates.sort(key=lambda item: -item["score"])
     seen = set()
@@ -655,6 +656,12 @@ def _law_candidates(conn: sqlite3.Connection, query: str) -> list[dict]:
         if item["official_title"] not in seen:
             seen.add(item["official_title"])
             result.append(item)
+    cache = {}
+    for item in result[:5]:
+        context = _law_search_context(conn, item["id"], legal_today(), cache)
+        item.update(source_status=item["status"], status=context["status"],
+                    effective_status_as_of=context["status"],
+                    effective_status_note=context["note"])
     return result[:5]
 
 
@@ -768,9 +775,10 @@ def _fetch_revisions(conn: sqlite3.Connection, law_id: str) -> list[dict]:
         SELECT *
         FROM revisions
         WHERE law_id = ?
-        ORDER BY COALESCE(effective_at, released_at, '') DESC, rowid DESC
+        ORDER BY COALESCE(effective_at, released_at, '') DESC,
+                 (content_hash = (SELECT source_hash FROM laws WHERE id = ?)) DESC, rowid DESC
         """,
-        (law_id,),
+        (law_id, law_id),
     ).fetchall()
     return [_row_to_revision(row) for row in rows]
 
@@ -1031,12 +1039,23 @@ def _version_start(row) -> date | None:
 
 def _work_version_starts(conn: sqlite3.Connection, members: list[sqlite3.Row]) -> set[date]:
     """Start dates of every version in the work: each record and its stored revisions."""
-    starts = {start for member in members if (start := _version_start(member)) is not None}
+    starts = {start for member in members
+              if (start := _parse_iso_date(member["effective_at"])) is not None}
     for member in members:
         for revision in _fetch_revisions(conn, member["id"]):
-            start = _revision_sort_date(revision)
+            start = _parse_iso_date(revision.get("effective_at"))
             if start is not None:
                 starts.add(start)
+    # A verified amendment can end a text's currency even before its new full
+    # text is available. It is not a repeal of the law itself.
+    for member in members:
+        for row in conn.execute(
+            "SELECT effective_at FROM law_relations "
+            "WHERE from_law_id = ? AND relation_type = 'revised_by'",
+            (member["id"],),
+        ):
+            if (boundary := _parse_iso_date(row["effective_at"])) is not None:
+                starts.add(boundary)
     return starts
 
 
@@ -1057,13 +1076,17 @@ def _status_as_of(
     version is a stored revision; ``starts`` lists every version of the work.
     """
     if start is None:
-        start = _version_start(member)
+        start = _parse_iso_date(member["effective_at"])
     if starts is None:
-        starts = {s for other in members if (s := _version_start(other)) is not None}
+        starts = {s for other in members
+                  if (s := _parse_iso_date(other["effective_at"])) is not None}
     if start is not None and start > as_of:
         return "pending_effective", None
     if start is not None and any(start < other <= as_of for other in starts):
-        return "amended", None
+        latest = max(other for other in starts if other <= as_of)
+        available = any((_version_start(other) or date.min) >= latest for other in members)
+        note = None if available else "该文本已被修改；本库现行全文待补，不能作为当前原文引用。"
+        return "amended", note
     repealed_at = _parse_iso_date(member["repealed_at"])
     if repealed_at is not None:
         return ("repealed", None) if repealed_at <= as_of else ("current", None)
@@ -1073,6 +1096,16 @@ def _status_as_of(
         return "unknown", "上游标注已废止，但缺少废止日期，无法判断该日期是否仍然有效。"
     if member["status"] == "unknown":
         return "unknown", "上游未标注效力状态，不能仅根据日期认定现行有效。"
+    if member["status"] == "amended" and not any(
+        start is not None and other > start for other in starts
+    ):
+        if as_of >= legal_today():
+            return "amended", "上游标注已修改，本库缺少后续版本，不能作为当前文本。"
+        return "unknown", "上游标注已修改，但缺少后续版本起点，无法确定该时点的文本效力。"
+    if not member["effective_at"]:
+        if as_of < legal_today():
+            return "unknown", "缺少施行日期，发布日期不能证明该时点已经施行。"
+        return member["status"], "缺少施行日期；仅沿用上游当前状态，不推定历史施行区间。"
     if start is None:
         return member["status"], "缺少施行日期，沿用上游标注的状态。"
     return "current", None
@@ -1110,13 +1143,16 @@ def _annotate_effective_status(
     as_of: date,
     revision: dict | None = None,
 ) -> None:
+    starts = _work_version_starts(conn, members)
     status, note = _status_as_of(
         member,
         members,
         as_of,
         start=_revision_sort_date(revision) if revision is not None else None,
-        starts=_work_version_starts(conn, members),
+        starts=starts,
     )
+    law["source_status"] = law.get("status")
+    law["status"] = status
     law["work_id"] = member["work_id"]
     law["effective_status_as_of"] = status
     law["effective_status_date"] = as_of.isoformat()
@@ -1128,7 +1164,8 @@ def _annotate_effective_status(
             "id": other["id"],
             "effective_at": other["effective_at"],
             "released_at": other["released_at"],
-            "status": other["status"],
+            "source_status": other["status"],
+            "status": _status_as_of(other, members, as_of, starts=starts)[0],
         }
         for other in sorted(members, key=lambda item: _version_start(item) or date.min)
     ]
@@ -1143,7 +1180,10 @@ def _current_work_version(
     decide instead. An explicit id always keeps the requested record.
     """
     members = _work_member_rows(conn, row)
-    if via == "id_match" or len(members) < 2:
+    versioned_name = via in {"title_match", "short_title_match"} and re.search(
+        r"[（(](?:19|20)\d{2}年?(?:修正文本|修正|修订|修改)?[）)]$", row["title"]
+    )
+    if via == "id_match" or versioned_name or len(members) < 2:
         return row, members
     today = legal_today()
     in_force = [
@@ -1824,7 +1864,13 @@ def _law_search_context(
 
 def _segments_missing_from_text(hit: dict, terms: list[str]) -> int:
     text = (hit.get("text") or "").lower()
-    return sum(1 for term in terms if term.lower() not in text) if "text" in hit else 0
+    names = {
+        (hit.get("law_title") or "").lower().removeprefix("中华人民共和国"),
+        (hit.get("law_short_title") or "").lower(),
+    }
+    return sum(
+        1 for term in terms if term.lower() not in text and term.lower() not in names
+    ) if "text" in hit else 0
 
 
 def _level_rank(level: str | None, *, region: str | None) -> int:
@@ -1860,6 +1906,9 @@ def _rank_and_fold(
         context = _law_search_context(conn, hit[law_key], as_of, cache)
         if statuses is not None and context["status"] not in statuses:
             continue
+        status_key = "law_status" if law_key == "law_id" else "status"
+        hit.setdefault("source_status", hit.get(status_key))
+        hit[status_key] = context["status"]
         hit["work_id"] = context["work_id"]
         hit["effective_status_as_of"] = context["status"]
         hit["status_checked_at"] = context["status_checked_at"]
@@ -1889,6 +1938,8 @@ def _rank_and_fold(
             # Segments found only in the law title rank below the article text.
             _segments_missing_from_text(item[1], terms),
             _level_rank(item[2]["level"], region=region),
+            # A merged document is context; prefer a directly numbered clause.
+            item[1].get("number") == "正文",
             item[1].get("score") or 0.0,
             item[0],
         )
@@ -2251,6 +2302,11 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
         if row is None:
             base["candidates"] = _law_candidates(conn, raw)
             base["hint"] = "候选未自动采用；请核对名称，候选也可能都不正确。"
+        else:
+            row, members = _current_work_version(conn, row, via)
+            status_fields = {}
+            _annotate_effective_status(conn, status_fields, row, members, legal_today())
+            status_fields["source_status"] = row["status"]
 
     if row is None:
         return base
@@ -2265,7 +2321,7 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
         "short_title": display_short_title(row["title"], row["short_title"]),
         "aliases": aliases_payload,
         "level": row["level"],
-        "status": row["status"],
+        **status_fields,
         "issuing_body": row["issuing_body"],
         "document_number": row["document_number"],
         "released_at": row["released_at"],
@@ -3465,11 +3521,7 @@ def list_laws(
     if level:
         clauses.append("level = ?")
         params.append(level)
-    if status:
-        clauses.append("status = ?")
-        params.append(status)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    params.append(str(limit))
 
     with connect(db_path) as conn:
         migrate(conn)
@@ -3481,13 +3533,22 @@ def list_laws(
             FROM laws
             {where}
             ORDER BY released_at DESC, title ASC
-            LIMIT ?
             """,
             params,
         ).fetchall()
-        return [
-            _row_to_law(r, article_count=int(r["_article_count"])) for r in rows
-        ]
+        result = []
+        cache = {}
+        for row in rows:
+            item = _row_to_law(row, article_count=int(row["_article_count"]))
+            context = _law_search_context(conn, row["id"], legal_today(), cache)
+            item.update(source_status=item["status"], status=context["status"],
+                        effective_status_as_of=context["status"],
+                        effective_status_note=context["note"])
+            if status is None or item["status"] == status:
+                result.append(item)
+            if len(result) >= limit:
+                break
+        return result
 
 
 def relation(db_path: Path | str, identifier: str) -> dict:

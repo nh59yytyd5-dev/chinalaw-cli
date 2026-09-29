@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Read-only release gate for public text artifacts and current-version contradictions."""
+import argparse
+import json
+import re
+from collections import Counter, defaultdict
+from pathlib import Path
+
+from chinalaw import service
+from chinalaw.db import connect_readonly
+
+
+def audit(path: Path) -> dict:
+    failures = []
+    statuses = Counter()
+    current = defaultdict(set)
+    missing_dates = Counter()
+    cache = {}
+    with connect_readonly(path) as conn:
+        rows = conn.execute('SELECT * FROM laws').fetchall()
+        for row in rows:
+            context = service._law_search_context(conn, row['id'], service.legal_today(), cache)
+            statuses[context['status']] += 1
+            missing_dates['effective'] += not bool(row['effective_at'])
+            missing_dates['repealed'] += row['status'] == 'repealed' and not row['repealed_at']
+            if context['status'] == 'current':
+                current[context['work_key']].add(context['start'].isoformat())
+                if row['status'] in {'repealed', 'unknown'} and not row['repealed_at']:
+                    failures.append({'code': 'unsupported_current', 'id': row['id']})
+        for work, starts in current.items():
+            if len(starts) > 1:
+                failures.append({'code': 'multiple_current_versions', 'work': work,
+                                 'dates': sorted(starts)})
+        for row in conn.execute('SELECT law_id, number, text FROM articles'):
+            if re.search(
+                r'\b(?:PAGE|NUMPAGES|MERGEFORMAT|HYPERLINK)\b|&(?:amp|lt|gt);', row['text']
+            ):
+                failures.append({'code': 'word_artifact', 'id': row['law_id'],
+                                 'article': row['number']})
+        count = conn.execute('SELECT count(*) FROM articles').fetchone()[0]
+    return {'ok': not failures, 'laws': len(rows), 'articles': count,
+            'text_statuses': dict(statuses), 'missing_dates': dict(missing_dates),
+            'failures': failures,
+            'scope': 'Internal-consistency gate; not an exhaustive legal metadata verification.'}
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--db', type=Path, required=True)
+    parser.add_argument('--output', type=Path, required=True)
+    args = parser.parse_args()
+    result = audit(args.db)
+    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+    print(json.dumps({k: v for k, v in result.items() if k != 'failures'}, ensure_ascii=False))
+    raise SystemExit(0 if result['ok'] else 1)
