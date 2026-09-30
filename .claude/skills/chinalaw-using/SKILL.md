@@ -63,17 +63,23 @@ scripts/install-skills --copy   # Windows / WSL 友好
 | `search <q> --kind --limit` | `chinalaw_search(query, kind, limit)` | 命中仍不是条文 |
 | `article <law> <num> [--as-of]` | `chinalaw_article(law, number, as_of)` | 最终引用落点 |
 | `laws` / `list` / `norm list` | `chinalaw_list(kind, query, page, page_size)` | `kind` 取 `law` / `norm` |
-| `outline --full-text` / `articles --batch` / `norm show` | `chinalaw_document(kind, id, offset, limit)` | 按条分页，`has_more` 为真时用 `offset` 续读 |
+| `outline --full-text` / `articles --batch` / `norm show` | `chinalaw_document(kind, id, offset, limit)` | 公开法 id 可传法规名、别名或 ID；按条分页，`has_more` 为真时用 `offset` 续读 |
 
 远端是**只读**的，没有的能力仍走本地 CLI：`fetch` / `discover` 抓取补全、
-`sync`、`applicable`、`relation` / `trace`、`audit` / `cite-check` / `snapshot`、
+`sync`、`relation` / `trace`、`audit` / `cite-check` / `snapshot`、
 norm / pack 写入。远端缺资料时工具返回诊断（`article_missing` 等），不会自动抓取：
 先本地 `fetch`，再由维护者在面板"导入与核对"上传，或整库迁移；不要把远端缺
 资料解释成"法规不存在"。
 
 MCP 工具不可见、返回 401 或超时，才降级到本地 CLI，并在输出里说明用的是本地库。
 两边内容可能不同步，引用时注明来源库。私域规范只有令牌带 private 权限才可见；
-`chinalaw_list(kind="norm")` 返回 403 表示令牌没有该权限，不是库里没有规范。
+HTTP MCP 的业务错误保留 `isError=true`，JSON 正文与 `structuredContent` 提供
+`error/message/status/details`；`private_access_denied`、`status=403` 表示没有私域权限，
+不是库里没有规范（传输层 HTTP 可能仍是 200）。内部异常不回传详细信息。
+`chinalaw_applicable(date, topic, law, domain)` 远端可用；看 `coverage.rules_loaded/topics`
+判断实例覆盖，`exhaustive=false`，零命中不证明没有过渡规定。v0.7.1 公开 SQLite 包已含规则；
+已有本地库可用 `chinalaw --db /absolute/library.db sync --applicability` 加载。
+裸条号 search 可能命中正文里的引用；指定法规并用 article 取原文。
 
 ## 命令前缀约定
 

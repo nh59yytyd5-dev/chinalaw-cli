@@ -2360,3 +2360,24 @@ GET `/backups/restore/{id}` 重新读取预览；POST `/backups/restore/{id}/com
 已知业务错误使用 `kind=library_error/error/message`，附可选 `details`。
 常用 HTTP 状态：400 参数或文件无效，401 未认证，403 权限/同源校验失败，404 无对应资料，
 409 并发冲突/维护占用，410 草稿过期，413 超限，422 请求模型校验，429 队列/登录限流，503 存储或 worker 不可用。
+
+### v0.7.1 查询诊断与时间效力覆盖（设计记录 #20）
+
+HTTP MCP 预期业务错误返回 `CallToolResult(isError=true)`；`content[0].text` 为 JSON，
+与 `structuredContent` 相同：`kind=library_error, error, message, status, details`。
+`status` 为业务状态（如 403），并不要求 HTTP 传输状态为 403。内部异常仍隐藏。
+成功载荷保持原格式。`document(kind="law", id=...)` 接受明确 ID、法规名称或别名；
+明确 ID 保留版本身份；名称采用 resolve 的版本选择，失败携候选。私域仍只用 ID，权限先检查。
+
+search 对裸条号增加 `retrieval.bare_article_number=true` 和 `hint`，保留内容命中，
+提醒这些可能只是引用，指定条文必须用 article(law, number)。不改变精确/模糊排序。
+
+applicable 合法日期响应增加 `coverage={rules_loaded,topics,exhaustive:false}`，
+空库另有 `applicability_data_missing`；无匹配仍有 `no_applicability_rule`。
+日期筛选范围是法律事实的检索线索，primary/fallback 不是适用结论。
+规则数据可附 `law_id_map`（已审核的旧 fixture ID → 同一版本公开 ID），导入时仅当
+公开 ID 已在库中才替换；不按法规名推断版本。加载不改变法规效力状态。
+
+公开构建使用 `--applicability-dir data/applicability` 包含规则 JSON 与 SQLite 规则，
+校验所有引用 ID 存在；`manifest.counts` 增加 `applicability_rules/law_relations`。
+来源核对记录见 `docs/applicability-source-review.json`，指引不声称穷尽特别规定。

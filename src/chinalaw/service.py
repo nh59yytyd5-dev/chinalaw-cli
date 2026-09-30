@@ -2144,6 +2144,12 @@ def search(
     )
     if not result["counts"]["total"]:
         result["hint"] = "未找到匹配内容。请改用法条原文的说法或较短片段再查，并用 article 核对。"
+    if re.fullmatch(rf"(?:第\s*)?{_NUMERAL}(?:\s*条)?(?:\s*(?:之|-)\s*{_NUMERAL})?", query):
+        result["retrieval"]["bare_article_number"] = True
+        result["hint"] = (
+            "裸条号按正文内容检索，命中可能只是其他条文中的引用，不代表该条本身。"
+            "请指定法规名并使用 article(law, number) 读取完整条文。"
+        )
     # 公开法与私域规范同时命中时给出顶层冲突提示（不做逐条语义判断）。
     if (article_hits or law_hits) and (norm_clause_hits or norm_source_hits):
         result["conflict_notice"] = NORM_CONFLICT_NOTICE
@@ -3701,8 +3707,21 @@ def applicable(
             [*params, domain or "all"],
         ).fetchall()
 
+        coverage_rows = conn.execute(
+            "SELECT topic, COUNT(*) AS count FROM applicability_rules GROUP BY topic ORDER BY topic"
+        ).fetchall()
+        coverage = {
+            "rules_loaded": sum(row["count"] for row in coverage_rows),
+            "topics": [row["topic"] for row in coverage_rows],
+            "exhaustive": False,
+        }
         matches = [_rule_row_to_dict(conn, row) for row in rows]
         warnings = [*base_warnings]
+        if not coverage["rules_loaded"]:
+            warnings.append(_warning(
+                "applicability_data_missing",
+                "此实例尚未加载时间效力规则；零命中不表示没有过渡规定。",
+            ))
         if not matches:
             warnings.append(
                 _warning(
@@ -3727,6 +3746,7 @@ def applicable(
         "topic": topic,
         "law": resolved_law or law,
         "domain": domain,
+        "coverage": coverage,
         "match_count": len(matches),
         "matches": matches,
         "warnings": _unique_warnings(warnings),
