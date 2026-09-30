@@ -1,10 +1,10 @@
 {
   "kind": "applicability_dataset",
   "id": "tort-liability-to-civil-code-time-effect-seed",
-  "name": "侵权责任法到民法典侵权责任编的时间效力示范规则",
-  "source_name": "manual-seed:time-effect-minimal",
-  "source_url": "local-file:data/applicability/tort-liability-to-civil-code.json",
-  "source_checked_at": "2026-05-02T00:00:00+08:00",
+  "name": "侵权责任法到民法典侵权责任编的时间效力检索指引",
+  "source_name": "最高人民法院关于适用《中华人民共和国民法典》时间效力的若干规定（已入库官方文本核对）",
+  "source_url": "https://flk.npc.gov.cn/detail?id=ff80808177e757ac017800561d541abb",
+  "source_checked_at": "2026-09-30T00:00:00+08:00",
   "relations": [
     {
       "id": "rel-civil-code-replaces-tort-liability-law",
@@ -14,7 +14,9 @@
       "to_law_id": "flk-tort-liability-law-2009",
       "to_law_title": "中华人民共和国侵权责任法",
       "effective_at": "2021-01-01",
-      "notes": "示范关系：民法典施行后，侵权责任法作为单行法退出现行直接适用体系，相关条文整合进民法典侵权责任编（第七编）；高空抛物 / 网络侵权 / 个人信息保护等条文有实质修订，具体案件须结合民法典时间效力规则审查。"
+      "notes": "民法典施行后，侵权责任法作为单行法退出现行直接适用体系，相关条文整合进民法典侵权责任编（第七编）；高空抛物 / 网络侵权 / 个人信息保护等条文有实质修订，具体案件须结合民法典时间效力规则审查。",
+      "source_name": "中华人民共和国民法典",
+      "source_url": "https://flk.npc.gov.cn/detail?id=ff808081729d1efe01729d50b5c500bf"
     }
   ],
   "rules": [
@@ -27,9 +29,25 @@
       "fallback_law_id": "flk-civil-code-2020",
       "fallback_law_title": "中华人民共和国民法典",
       "effective_to": "2020-12-31",
-      "rule_text": "当侵权行为发生时间主要在 2021-01-01 之前时，应提示 agent 优先检索当时有效的侵权责任法及相关司法解释，并核对民法典时间效力规则。",
-      "transition_text": "该规则是检索线索，不直接输出适用结论；持续侵权、累积损害、连带责任主体追加等跨期问题须单独审查。",
-      "confidence": "seed_review_required"
+      "rule_text": "民法典施行前的法律事实，原则上检索当时法律及司法解释；此日期范围内可先核对中华人民共和国侵权责任法。依据《民法典时间效力规定》第一条；施行前持续至施行后的法律事实原则上适用民法典，但法律、司法解释另有规定的除外。不得使用“事实主要发生时间”替代逐项审查。",
+      "transition_text": "继续核对时间效力规定第二至五条和具体争点的特别条款；合同效力注意第八条，持续履行注意第二十条，保证期间注意第二十七条。旧法废止不排除其对旧事实的适用；primary/fallback 仅为检索入口，不表示适用顺序。",
+      "confidence": "source_reviewed_guidance",
+      "metadata": {
+        "guardrail": "not_legal_conclusion",
+        "review_basis": "已入库官方文本；不表示截至核查日已穷尽全部特别规定",
+        "source_articles": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "8",
+          "20",
+          "27",
+          "28"
+        ]
+      },
+      "effective_from": "2010-07-01"
     },
     {
       "id": "app-tort-liability-after-2021",
@@ -40,9 +58,28 @@
       "fallback_law_id": "flk-tort-liability-law-2009",
       "fallback_law_title": "中华人民共和国侵权责任法",
       "effective_from": "2021-01-01",
-      "rule_text": "当侵权行为发生时间主要在 2021-01-01 之后时，应提示 agent 优先检索民法典侵权责任编（第七编）及相关司法解释；高空抛物 / 网络侵权 / 个人信息保护等条文有实质修订，注意核对差异。",
-      "transition_text": "该规则只用于提醒检索路径；继续侵权、新旧法实质差异、刑民交叉等问题必须单独审查。",
-      "confidence": "seed_review_required"
+      "rule_text": "民法典施行后的法律事实，先检索民法典。依据《民法典时间效力规定》第一条；施行前持续至施行后的法律事实原则上适用民法典，但法律、司法解释另有规定的除外。不得使用“事实主要发生时间”替代逐项审查。",
+      "transition_text": "继续核对时间效力规定第二至五条和具体争点的特别条款；合同效力注意第八条，持续履行注意第二十条，保证期间注意第二十七条。旧法废止不排除其对旧事实的适用；primary/fallback 仅为检索入口，不表示适用顺序。",
+      "confidence": "source_reviewed_guidance",
+      "metadata": {
+        "guardrail": "not_legal_conclusion",
+        "review_basis": "已入库官方文本；不表示截至核查日已穷尽全部特别规定",
+        "source_articles": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "8",
+          "20",
+          "27",
+          "28"
+        ]
+      }
     }
-  ]
+  ],
+  "law_id_map": {
+    "flk-civil-code-2020": "ff808081729d1efe01729d50b5c500bf",
+    "flk-tort-liability-law-2009": "2c909fdd678bf17901678bf706b1055f"
+  }
 }

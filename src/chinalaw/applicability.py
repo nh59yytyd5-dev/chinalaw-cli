@@ -92,6 +92,21 @@ def load_applicability_from_dict(
         _validate_rule({**source_defaults, **_record(item, "rule", index)})
         for index, item in enumerate(rules, start=1)
     ]
+    # Explicit, reviewed identity pairs only: never resolve a historic version by name.
+    identity_map = payload.get("law_id_map", {})
+    if not isinstance(identity_map, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in identity_map.items()
+    ):
+        raise ValueError("law_id_map must map legacy IDs to public IDs")
+    for record in [*normalized_relations, *normalized_rules]:
+        for field in ("from_law_id", "to_law_id", "primary_law_id", "fallback_law_id"):
+            canonical = identity_map.get(record.get(field))
+            if (
+                canonical
+                and conn.execute("SELECT 1 FROM laws WHERE id = ?", (canonical,)).fetchone()
+            ):
+                record[field] = canonical
     relation_count = 0
     rule_count = 0
     topics: set[str] = set()
@@ -195,9 +210,7 @@ def _validate_rule(rule: dict) -> dict:
         and isinstance(effective_to, str)
         and effective_from > effective_to
     ):
-        raise ValueError(
-            "applicability rule effective_from must not be later than effective_to"
-        )
+        raise ValueError("applicability rule effective_from must not be later than effective_to")
     _validate_common_source(rule, context)
     return rule
 
