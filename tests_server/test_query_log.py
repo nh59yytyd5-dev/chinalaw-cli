@@ -87,7 +87,7 @@ def test_failed_queries_are_logged_and_still_raise(owner_api):
     response = _call(owner_api, headers, "chinalaw_resolve", {"name": "x" * 201}, 2)
     assert response.json()["result"]["isError"]
     (row,) = QueryLog(owner_api.app.state.config.query_log_path).export()
-    assert row["tool"] == "resolve" and row["error"] == "ValueError"
+    assert row["tool"] == "resolve" and row["error"] == "invalid_arguments"
 
 
 def test_queries_command_exports_json_lines(owner_api, capsys):

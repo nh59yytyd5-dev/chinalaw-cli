@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
+
 from mcp.server import MCPServer
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ToolAnnotations
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import AnyHttpUrl
 
 from chinalaw import __version__, service
@@ -28,6 +30,47 @@ def _private_allowed() -> bool:
     if token is None or token.subject != "owner" or PUBLIC_SCOPE not in token.scopes:
         raise LibraryError("authentication_required", "需要有效的只读凭据。", status=401)
     return PRIVATE_SCOPE in token.scopes
+
+
+def _document_payload(db_path, kind: str, id: str) -> dict:
+    try:
+        result = catalog.get_document(db_path, kind, id, include_management=False)
+    except LibraryError as exc:
+        if kind != "law" or exc.code != "document_not_found":
+            raise
+        with read_only_operation():
+            resolved = service.resolve(db_path, id)
+        if not resolved["matched"]:
+            raise LibraryError(
+                "document_not_found",
+                "未找到法规；请核对名称或候选名单。",
+                status=404,
+                details=resolved,
+            ) from exc
+        result = catalog.get_document(db_path, kind, resolved["id"], include_management=False)
+    return result
+
+
+def _logged(query_log, tool: str, params: dict, call):
+    try:
+        if query_log is None:
+            return call()
+        token = get_access_token()
+        return query_log.run(
+            call,
+            channel="mcp",
+            client=_log_label(token),
+            tool=tool,
+            params=params,
+        )
+    except LibraryError as exc:
+        # Adapt after logging so expected failures remain failures in the audit log.
+        payload = {**exc.payload(), "status": exc.status}
+        return CallToolResult(
+            is_error=True,
+            content=[TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))],
+            structured_content=payload,
+        )
 
 
 def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None = None):
@@ -55,21 +98,12 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
     )
 
     def logged(tool: str, params: dict, call):
-        if query_log is None:
-            return call()
-        token = get_access_token()
-        return query_log.run(
-            call,
-            channel="mcp",
-            client=_log_label(token),
-            tool=tool,
-            params=params,
-        )
+        return _logged(query_log, tool, params, call)
 
     def resolve(name: str) -> dict:
         _private_allowed()
         if not 1 <= len(name) <= 200:
-            raise ValueError("name must contain 1–200 characters")
+            raise LibraryError("invalid_arguments", "name must contain 1–200 characters")
         with read_only_operation():
             return service.resolve(config.db_path, name)
 
@@ -92,7 +126,8 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
         """Exact-first search; sparse article hits add literal fragments marked fuzzy.
 
         Fuzzy fragments must all occur in one article. Empty results suggest
-        retrying with statutory wording.
+        retrying with statutory wording. Bare article numbers are content searches;
+        use chinalaw_article(law, number) for a particular article.
 
         Private hits appear only with private-read authorization. Public hits
         are judged on ``as_of`` (YYYY-MM-DD, default today in Beijing): laws in
@@ -126,7 +161,7 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
     def applicable(date: str, topic: str | None, law: str | None, domain: str | None) -> dict:
         _private_allowed()
         if any(len(value or "") > 200 for value in (date, topic, law, domain)):
-            raise ValueError("arguments must be at most 200 characters")
+            raise LibraryError("invalid_arguments", "arguments must be at most 200 characters")
         with read_only_operation():
             return service.applicable(
                 config.db_path, as_of=date, topic=topic, law=law, domain=domain
@@ -150,7 +185,7 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
     def article(law: str, number: str, as_of: str | None) -> dict:
         include_private = _private_allowed()
         if not 1 <= len(law) <= 200 or not 1 <= len(number) <= 60:
-            raise ValueError("law or article number is too long")
+            raise LibraryError("invalid_arguments", "law or article number is too long")
         with read_only_operation():
             if as_of:
                 result = service.get_article_as_of(
@@ -161,7 +196,9 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
                     config.db_path, law, number, include_norm=include_private
                 )
             return result or {
-                "kind": "article_missing", "error": "article_not_found", "law": law,
+                "kind": "article_missing",
+                "error": "article_not_found",
+                "law": law,
                 **service.diagnose_article_miss(config.db_path, law, number, as_of=as_of),
             }
 
@@ -198,8 +235,12 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
         if kind == "norm" and not private:
             raise LibraryError("private_access_denied", "未获私域规范访问权限。", status=403)
         if offset < 0 or not 1 <= limit <= 100:
-            raise ValueError("offset must be non-negative and limit must be 1–100")
-        result = catalog.get_document(config.db_path, kind, id, include_management=False)
+            raise LibraryError(
+                "invalid_arguments", "offset must be non-negative and limit must be 1–100"
+            )
+        if not 1 <= len(id) <= 200:
+            raise LibraryError("invalid_arguments", "id must contain 1–200 characters")
+        result = _document_payload(config.db_path, kind, id)
         member = "articles" if kind == "law" else "clauses"
         clauses = result["document"].pop(member)
         result["document"][member] = clauses[offset : offset + limit]
@@ -210,7 +251,7 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
 
     @server.tool(annotations=READ_ONLY)
     def chinalaw_document(kind: str, id: str, offset: int = 0, limit: int = 50) -> dict:
-        """Read complete clauses from a document; use offset to continue through long documents."""
+        """Paginated full text. Law id accepts ID/name/alias; norm requires ID."""
         return logged(
             "document",
             {"kind": kind, "id": id, "offset": offset, "limit": limit},

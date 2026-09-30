@@ -1,10 +1,10 @@
 {
   "kind": "applicability_dataset",
   "id": "company-law-2023-revision-time-effect-seed",
-  "name": "公司法 2023 修订时间效力示范规则",
-  "source_name": "manual-seed:time-effect-minimal",
-  "source_url": "local-file:data/applicability/company-law-2023-revision.json",
-  "source_checked_at": "2026-05-02T00:00:00+08:00",
+  "name": "公司法 2023 修订时间效力检索指引",
+  "source_name": "最高人民法院关于适用《中华人民共和国公司法》时间效力的若干规定（已入库官方文本核对）",
+  "source_url": "https://flk.npc.gov.cn/detail?id=ff8081819150444501916e8c37764524",
+  "source_checked_at": "2026-09-30T00:00:00+08:00",
   "relations": [
     {
       "id": "rel-company-law-2023-revises-2018",
@@ -14,7 +14,9 @@
       "to_law_id": "flk-company-law-2018",
       "to_law_title": "中华人民共和国公司法（2018 修正）",
       "effective_at": "2024-07-01",
-      "notes": "示范关系：2023-12-29 第十四届全国人大常委会第七次会议修订通过新公司法，自 2024-07-01 起施行；旧公司法（2018 修正）自施行日起退出现行直接适用体系。资本制度、董事忠实勤勉义务、股东失权、横向人格否认等多处实质修订，具体案件须结合时间效力规则审查。"
+      "notes": "2023-12-29 第十四届全国人大常委会第七次会议修订通过新公司法，自 2024-07-01 起施行；旧公司法（2018 修正）自施行日起退出现行直接适用体系。资本制度、董事忠实勤勉义务、股东失权、横向人格否认等多处实质修订，具体案件须结合时间效力规则审查。",
+      "source_name": "中华人民共和国公司法",
+      "source_url": "https://flk.npc.gov.cn/detail?id=ff8081818c9108eb018cb6922f750c07"
     }
   ],
   "rules": [
@@ -27,9 +29,20 @@
       "fallback_law_id": "flk-company-law-2024",
       "fallback_law_title": "中华人民共和国公司法（2023 修订）",
       "effective_to": "2024-06-30",
-      "rule_text": "当公司设立、章程修订、股东行为或治理争议事实主要发生在 2024-07-01 之前时，应提示 agent 优先检索 2018 修正版公司法及相关司法解释，并核对新公司法过渡条款。",
-      "transition_text": "该规则是检索线索，不直接输出适用结论；存量出资期限、董监高履职追溯、横向人格否认等典型跨期问题须单独审查。",
-      "confidence": "seed_review_required"
+      "rule_text": "2018-10-26至2024-06-30发生的法律事实，先核对2018年公司法及当时司法解释；更早事实须另取更早版本。《公司法时间效力规定》第一条以法律事实发生时间为起点，并设例外；不得仅按起诉日或裁判日选法。",
+      "transition_text": "继续履行、清算责任及已终审案件须分别核对时间效力规定第三条、第六条、第七条及其他特别规定。涉及第八十八条第一款，另读《最高人民法院关于《中华人民共和国公司法》第八十八条第一款不溯及适用的批复》（https://flk.npc.gov.cn/detail?id=ff808181927f1276019448a29dca7d34），不得仅凭较早时间效力规定第四条选法。日期只是筛选线索，不是适用结论。",
+      "confidence": "source_reviewed_guidance",
+      "metadata": {
+        "guardrail": "not_legal_conclusion",
+        "review_basis": "已入库官方文本；不表示截至核查日已穷尽全部特别规定",
+        "source_articles": [
+          "1",
+          "6",
+          "7",
+          "8"
+        ]
+      },
+      "effective_from": "2018-10-26"
     },
     {
       "id": "app-company-law-after-2024-07",
@@ -40,9 +53,23 @@
       "fallback_law_id": "flk-company-law-2018",
       "fallback_law_title": "中华人民共和国公司法（2018 修正）",
       "effective_from": "2024-07-01",
-      "rule_text": "当公司设立、章程修订、股东行为或治理争议事实主要发生在 2024-07-01 之后时，应提示 agent 优先检索 2023 修订版公司法及相关司法解释；资本制度认缴期限五年上限、股东失权、横向人格否认、董事监督义务等条文为新增或实质修订，注意核对差异。",
-      "transition_text": "该规则只用于提醒检索路径；存量公司缴资过渡、章程过渡修订、新旧规则适用顺位等问题必须单独审查。",
-      "confidence": "seed_review_required"
+      "rule_text": "2024-07-01起发生的法律事实，先核对2023年修订公司法。《公司法时间效力规定》第一条以法律事实发生时间为起点，并设例外；不得仅按起诉日或裁判日选法。",
+      "transition_text": "继续履行、清算责任及已终审案件须分别核对时间效力规定第三条、第六条、第七条及其他特别规定。涉及第八十八条第一款，另读《最高人民法院关于《中华人民共和国公司法》第八十八条第一款不溯及适用的批复》（https://flk.npc.gov.cn/detail?id=ff808181927f1276019448a29dca7d34），不得仅凭较早时间效力规定第四条选法。日期只是筛选线索，不是适用结论。",
+      "confidence": "source_reviewed_guidance",
+      "metadata": {
+        "guardrail": "not_legal_conclusion",
+        "review_basis": "已入库官方文本；不表示截至核查日已穷尽全部特别规定",
+        "source_articles": [
+          "1",
+          "6",
+          "7",
+          "8"
+        ]
+      }
     }
-  ]
+  ],
+  "law_id_map": {
+    "flk-company-law-2024": "ff8081818c9108eb018cb6922f750c07",
+    "flk-company-law-2018": "ff8080816f135f46016f1cc98ad81134"
+  }
 }

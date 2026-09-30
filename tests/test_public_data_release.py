@@ -53,6 +53,26 @@ class PublicReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "never overwritten"):
                 BUILDER["build"](source, output, "2026-09-29")
 
+    def test_build_includes_reviewed_rules_and_rejects_missing_ids(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, rules = root / "input", root / "rules"
+            source.mkdir()
+            rules.mkdir()
+            (source / "flk-synthetic.json").write_text(json.dumps(law()), encoding="utf-8")
+            payload = {"rules": [{"id": "rule", "topic": "测试", "primary_law_id": "legacy",
+                                   "rule_text": "仅为线索", "confidence": "source_reviewed_guidance"}],
+                       "law_id_map": {"legacy": "synthetic"}}
+            (rules / "rules.json").write_text(json.dumps(payload), encoding="utf-8")
+            output = root / "output"
+            result = BUILDER["build"](source, output, "2026-09-30", applicability_dir=rules)
+            self.assertEqual(result["counts"]["applicability_rules"], 1)
+            self.assertTrue((output / "chinalaw-public-2026-09-30-json/applicability/rules.json").is_file())
+            payload["law_id_map"] = {}
+            (rules / "rules.json").write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Missing public applicability reference"):
+                BUILDER["build"](source, root / "missing", "2026-09-30", applicability_dir=rules)
+
     def test_check_rejects_runtime_rows(self):
         with tempfile.TemporaryDirectory() as temporary, connect(Path(temporary) / "db") as conn:
             migrate(conn)

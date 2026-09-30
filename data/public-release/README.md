@@ -12,14 +12,14 @@
 
 1982宪法等旧全文标为 amended（旧版），不表示整部规范已经废止。律师法2017全文已受2026修改决定影响，本包暂缺重公布全文，工具会提示现行全文待补。不得把旧全文当作现行原文引用。
 
-详见随包 QUALITY.md。JSON/SQL 的 status 是经明确来源纠正后的入库标注；使用 chinalaw 0.7.0 读取时，再按版本关系和查询日期判断当前文本。日期缺证据时不填猜。刑法当前文本为本项目依据两个官方文件核验合并，来源名称和修订说明明确区分它与官网全文。
+详见随包 QUALITY.md。JSON/SQL 的 status 是经明确来源纠正后的入库标注；使用 chinalaw 0.7.1 读取时，再按版本关系和查询日期判断当前文本。日期缺证据时不填猜。刑法当前文本为本项目依据两个官方文件核验合并，来源名称和修订说明明确区分它与官网全文。
 
 ## 安装工具
 
-从 https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/tag/v0.7.0 下载 wheel 后：
+从 https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/tag/v0.7.1 下载 wheel 后：
 
 ```sh
-python -m pip install ./chinalaw-0.7.0-py3-none-any.whl
+python -m pip install ./chinalaw-0.7.1-py3-none-any.whl
 ```
 
 ## JSON 包
@@ -27,7 +27,7 @@ python -m pip install ./chinalaw-0.7.0-py3-none-any.whl
 解压后把 laws/ 下的记录导入一个新库，避免误覆盖自己的工作库：
 
 ```sh
-chinalaw --db ./public-library.db sync --from-dir ./chinalaw-public-2026-09-26-json/laws
+chinalaw --db ./public-library.db sync --from-dir ./chinalaw-public-2026-09-30-json/laws
 chinalaw --db ./public-library.db article 民法典 533
 ```
 
@@ -36,14 +36,22 @@ chinalaw --db ./public-library.db article 民法典 533
 解压后即可查询：
 
 ```sh
-chinalaw --db ./chinalaw-public-2026-09-26-sqlite/library.db status
-chinalaw --db ./chinalaw-public-2026-09-26-sqlite/library.db article 民法典 533
-chinalaw-mcp --db ./chinalaw-public-2026-09-26-sqlite/library.db
+chinalaw --db ./chinalaw-public-2026-09-30-sqlite/library.db status
+chinalaw --db ./chinalaw-public-2026-09-30-sqlite/library.db article 民法典 533
+chinalaw-mcp --db ./chinalaw-public-2026-09-30-sqlite/library.db
 ```
 
-数据库使用兼容旧版 SQLite 的全文索引布局，不含 `contentless_delete` 选项；需要支持 FTS5/trigram 的 SQLite（3.34+），chinalaw 0.7.0+。若目标 SQLite 不兼容，使用 JSON 包在目标机器导入、重建索引。
+数据库使用兼容旧版 SQLite 的全文索引布局，不含 `contentless_delete` 选项；需要支持 FTS5/trigram 的 SQLite（3.34+），chinalaw 0.7.1+。若目标 SQLite 不兼容，使用 JSON 包在目标机器导入、重建索引。
 
 ## 核验与更新
 
 先核对发布页 SHA256SUMS，再解压。新快照应先导入新库并核验，再决定是否替换现有库；认证状态和私域资料始终由使用者自己维护。
 模型记忆可提供候选法规/条号，最终引用请核对 article 返回的正文、版本、来源。search 用于补缺，不要求先做学术术语搜索。
+
+## 时间效力指引
+
+本版 SQLite 包含 12 条经入库官方文本核对的检索指引；JSON 包的 applicability/ 提供相同数据。
+JSON 导入法规后，可用 `chinalaw --db ./public-library.db sync --applicability --applicability-dir ./chinalaw-public-2026-09-30-json/applicability` 导入这些规则。
+指引覆盖合同效力、担保、物权、侵权责任、公司治理、刑法溯及力和刑事责任，覆盖不完整。
+`applicable` 返回实际规则数、主题与未命中提示；primary/fallback 不是选法结论。
+核对依据与原始来源检查时间见 applicability-source-review.json；未声称重新抓取或穷尽截至今日的特别规定。

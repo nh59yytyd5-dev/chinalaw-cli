@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 — 2026-09-30
+
+- HTTP MCP 保留业务错误码、说明与 isError；内部异常继续隐藏。
+- document 支持公开法规名称/别名，裸条号 search 明确提示使用 article。
+- 12 条时间效力指引核对官方入库文本、补齐日期下界和版本 ID，公开包与托管服务加载同一组规则；返回实际覆盖信息。
+- 更新接入文档，修正 applicable 可用范围与加载命令。
+
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
