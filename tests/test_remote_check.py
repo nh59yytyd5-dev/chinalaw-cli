@@ -1,23 +1,28 @@
 import json
-
-import pytest
+import tempfile
+import unittest
+from pathlib import Path
 
 from chinalaw.remote_check import CheckError, failure, settings
 
 
-def test_credentials_are_parsed_without_shell_execution(tmp_path):
-    path = tmp_path / 'remote.env'
-    path.write_text('CHINALAW_REMOTE_URL=https://example.com\nCHINALAW_QUERY_TOKEN="$(not-a-command)"\n')
-    url, token = settings(path, {})
-    assert url == 'https://example.com/mcp'
-    assert token == '$(not-a-command)'
-    assert settings(path, {'CHINALAW_QUERY_TOKEN': 'override'})[1] == 'override'
+class RemoteCheckTests(unittest.TestCase):
+    def test_credentials_are_parsed_without_shell_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "remote.env"
+            path.write_text(
+                'CHINALAW_REMOTE_URL=https://example.com\nCHINALAW_QUERY_TOKEN="$(not-a-command)"\n'
+            )
+            url, token = settings(path, {})
+            self.assertEqual(url, "https://example.com/mcp")
+            self.assertEqual(token, "$(not-a-command)")
+            self.assertEqual(settings(path, {"CHINALAW_QUERY_TOKEN": "override"})[1], "override")
 
-
-def test_missing_credentials_and_unknown_errors_are_explicit(tmp_path):
-    with pytest.raises(CheckError) as caught:
-        settings(tmp_path / 'missing', {})
-    assert failure(caught.value)['error'] == 'credentials_missing'
-    result = failure(RuntimeError('secret-token'))
-    assert result['ok'] is False
-    assert 'secret-token' not in json.dumps(result)
+    def test_missing_credentials_and_unknown_errors_are_explicit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(CheckError) as caught:
+                settings(Path(directory) / "missing", {})
+        self.assertEqual(failure(caught.exception)["error"], "credentials_missing")
+        result = failure(RuntimeError("secret-token"))
+        self.assertFalse(result["ok"])
+        self.assertNotIn("secret-token", json.dumps(result))
