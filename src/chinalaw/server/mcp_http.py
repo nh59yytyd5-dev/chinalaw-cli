@@ -122,6 +122,7 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
         level: str | None = None,
         region: str | None = None,
         versions: str = "folded",
+        in_laws: list[str] | str | None = None,
     ) -> dict:
         """Exact-first search; sparse article hits add literal fragments marked fuzzy.
 
@@ -136,6 +137,8 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
         amended, repealed, pending_effective, unknown), ``level`` (e.g.
         law,judicial_interpretation) and ``region`` (e.g. 上海市) filter. A
         citation such as 民法典第五百零四条 returns that article first.
+        in_laws limits public search to law names/IDs (string or list, up to 20).
+        Unresolved scopes are reported and never fall back to global search.
         """
         options = {
             "as_of": as_of,
@@ -143,6 +146,7 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
             "level": level,
             "region": region,
             "versions": versions,
+            "in_laws": in_laws,
         }
         given = {key: value for key, value in options.items() if value and value != "folded"}
         return logged(

@@ -28,7 +28,7 @@ source: current | flk.npc.gov.cn | https://flk.npc.gov.cn/detail?id=ff808081729d
 ## 公开数据与在线文档
 
 - [项目介绍](https://law.newcombmath.com/about/) · [MCP 接入文档](https://law.newcombmath.com/about/mcp.html)
-- [v0.7.1 下载](https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/tag/v0.7.1)：软件 wheel / sdist，以及独立的公开法规 JSON / SQLite 快照。
+- [v0.7.2 软件下载](https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/tag/v0.7.2)：软件 wheel / sdist，以及独立的公开法规 JSON / SQLite 快照。
 - 本期公开快照：2486 条法规记录、87956 条条文记录，包含历史版本；数据截止 2026-09-30，不是全量中国规范或实时更新保证。
 - 默认推荐离线或自托管。托管 MCP 仅向少量用户发放独立公开库只读令牌，有速率/并发限制；不发布共享令牌。
 - 感谢原文备份仓库 [lawtext/legal-data-docx](https://github.com/lawtext/legal-data-docx)。官方出处、核查时间和来源哈希保留在数据包中；详见 [数据来源与权利说明](data/public-release/NOTICE.md)。
@@ -110,6 +110,8 @@ chinalaw fetch 民法典 --article 第五百八十五条 --format json
 仓库自带 7 份 skill（检索方法、引用核对、合同审查、法律研究等），默认只作为文档随仓库分发；需要全局加载时执行 `scripts/install-skills --copy`（Windows：`.\scripts\install-skills.ps1`），`--uninstall` 可移除。调用顺序、输出纪律、语料安装和 grounding 快照审计见 [docs/AGENT_WORKFLOWS.md](docs/AGENT_WORKFLOWS.md)。
 
 ### MCP
+
+远端客户端配置、凭据文件、连接检查及 JSON/SSE 解析说明见 [MCP 客户端接入](docs/MCP_CLIENT.md)。保存令牌不会自动注册工具；本地 stdio 不读 remote.env。
 
 偏好 MCP 的客户端可以用 stdio 服务器 `chinalaw-mcp`（可加 `--db` 指定资料库）。它是同一组 CLI 能力的薄封装：`chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、`chinalaw_articles`、`chinalaw_applicable`、`chinalaw_ensure`。私域规范默认不经 MCP 暴露，确需时加 `--allow-private-norms` 启动。管理面板服务另外提供带 OAuth 的只读 MCP HTTP 端点。
 

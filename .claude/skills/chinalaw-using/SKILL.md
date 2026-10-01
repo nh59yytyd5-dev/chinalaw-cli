@@ -52,6 +52,13 @@ scripts/install-skills --copy   # Windows / WSL 友好
 
 ## 远端 MCP 模式（已部署 `chinalaw-server` 时优先）
 
+接入与诊断见仓库 `docs/MCP_CLIENT.md`。工具不可见时先检查 harness 注册；保存
+remote.env 不会自动注册。0.7.2+ 的 `chinalaw-remote-check` 读取此文件并完成握手、
+列工具和搜索；本地 `chinalaw-mcp` 仍只读本地 SQLite。不要手写只接受 SSE 的解析器，
+Streamable HTTP 也可能返回 application/json；解析失败必须报告，不能视为零命中。
+`/healthz` 只表示 Web 进程存活。`applicable` 的 topic 是文字筛选；公司对外担保可
+分别查“担保”“公司治理”，结合 coverage.topics 和原文核查，不自动推导选法结论。
+
 当 agent 的工具列表里有 `chinalaw_resolve` / `chinalaw_search` / `chinalaw_article` /
 `chinalaw_list` / `chinalaw_document`（来自 `chinalaw-server` 的 MCP HTTP 端点），
 **查询类任务优先用这些工具，不再本地起 CLI**：库在服务器上统一维护，多台机器、
@@ -60,7 +67,7 @@ scripts/install-skills --copy   # Windows / WSL 友好
 | CLI 命令 | MCP 工具 | 备注 |
 |------|------|------|
 | `resolve <name>` | `chinalaw_resolve(name)` | 俗称解析协议照旧 |
-| `search <q> --kind --limit` | `chinalaw_search(query, kind, limit)` | 命中仍不是条文 |
+| `search <q> --kind --limit --in` | `chinalaw_search(query, kind, limit, in_laws)` | 命中仍不是条文 |
 | `article <law> <num> [--as-of]` | `chinalaw_article(law, number, as_of)` | 最终引用落点 |
 | `laws` / `list` / `norm list` | `chinalaw_list(kind, query, page, page_size)` | `kind` 取 `law` / `norm` |
 | `outline --full-text` / `articles --batch` / `norm show` | `chinalaw_document(kind, id, offset, limit)` | 公开法 id 可传法规名、别名或 ID；按条分页，`has_more` 为真时用 `offset` 续读 |
