@@ -19,9 +19,8 @@ class RemoteCheckTests(unittest.TestCase):
             self.assertEqual(settings(path, {"CHINALAW_QUERY_TOKEN": "override"})[1], "override")
 
     def test_missing_credentials_and_unknown_errors_are_explicit(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaises(CheckError) as caught:
-                settings(Path(directory) / "missing", {})
+        with tempfile.TemporaryDirectory() as directory, self.assertRaises(CheckError) as caught:
+            settings(Path(directory) / "missing", {})
         self.assertEqual(failure(caught.exception)["error"], "credentials_missing")
         result = failure(RuntimeError("secret-token"))
         self.assertFalse(result["ok"])
