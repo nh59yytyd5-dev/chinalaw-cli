@@ -281,3 +281,5 @@ CLI parser、`metadata.py` 的 schema、`CONTRACT.md` 和 skills 四处漂移时
 - 不引入运行时依赖，除非先讨论并记录。
 - 不为未来功能提前做大重构。
 - 当前代码可以逐步拆模块，但不能破坏现有 JSON 输出。
+
+客户端注册、凭据消费者、JSON/SSE 解析、健康检查与能力边界见 [MCP_CLIENT.md](MCP_CLIENT.md)。

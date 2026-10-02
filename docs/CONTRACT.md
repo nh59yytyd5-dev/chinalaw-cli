@@ -2337,7 +2337,7 @@ MCP HTTP 地址 `/mcp` 使用官方 SDK，资源与授权服务元数据分别�
 `/api/v1/auth/consent/{id}` 完成 S256 PKCE、一次性授权码、刷新轮换和授权撤销。
 回调允许 HTTPS 或回环 HTTP；资源受众与所有者绑定必须匹配，注册应用不自动获得资料权限。
 
-远程只暴露 `chinalaw_resolve/search/article/list/document`。每个工具都检查私域权限并标为只读；
+远程只暴露 `chinalaw_resolve/search/article/list/document/applicable`。每个工具都检查私域权限并标为只读；
 `document` 使用 `offset>=0`、`limit=1..100` 分页（默认 50），返回总数与 `has_more`，条文本身不截短。
 旧 stdio MCP 不变。托管应用兼容性以实际验证记录为准，不能从协议支持推导为所有商业平台已可用。
 
@@ -2381,3 +2381,13 @@ applicable 合法日期响应增加 `coverage={rules_loaded,topics,exhaustive:fa
 公开构建使用 `--applicability-dir data/applicability` 包含规则 JSON 与 SQLite 规则，
 校验所有引用 ID 存在；`manifest.counts` 增加 `applicability_rules/law_relations`。
 来源核对记录见 `docs/applicability-source-review.json`，指引不声称穷尽特别规定。
+
+客户端注册、凭据消费者、JSON/SSE 解析、健康检查与能力边界见 [MCP_CLIENT.md](MCP_CLIENT.md)。
+
+### v0.7.2 HTTP 法规内检索与连接检查（#22）
+
+HTTP MCP search 增加 in_laws（字符串或列表），REST /search 增加逗号分隔字符串 in_laws；
+复用 CLI --in 的解析与 law_filter 诊断，空/过长范围返回 invalid_search，权限判断先于范围解析。
+最多 20 个法规，每项最多 200 字；仅解析成功的法规参与查询，全部失败时不退回全库。
+chinalaw-remote-check 是可选 SDK 诊断命令，不是服务器或代理；读取 remote.env/环境变量，
+成功退出 0 并打印 ok=true，配置/网络/协议/工具错误退出 1 并给出不含凭据的诊断。

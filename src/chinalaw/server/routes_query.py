@@ -70,6 +70,7 @@ def search(
     level: str | None = None,
     region: str | None = None,
     versions: str = "folded",
+    in_laws: str | None = None,
 ) -> dict:
     value = principal(request)
     options = {
@@ -78,6 +79,7 @@ def search(
         "level": level,
         "region": region,
         "versions": versions,
+        "in_laws": in_laws,
     }
 
     def call() -> dict:

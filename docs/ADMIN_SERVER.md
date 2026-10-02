@@ -99,7 +99,7 @@ curl -H "Authorization: Bearer $CHINALAW_QUERY_TOKEN" \
   'https://law.example.com/api/v1/search?q=合同&limit=10'
 ```
 
-MCP 暴露 `chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、`chinalaw_list`、`chinalaw_document` 五个查询工具。全文工具按条文分页，每条返回完整文本；用 `offset/limit` 继续读取。没有 `ensure`、抓取、导入、恢复、删除或路径导出工具。查询缺失资料时返回诊断，不自动抓取或迁移。
+MCP 暴露 `chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、`chinalaw_list`、`chinalaw_document`、`chinalaw_applicable` 六个查询工具。全文工具按条文分页，每条返回完整文本；用 `offset/limit` 继续读取。没有 `ensure`、抓取、导入、恢复、删除或路径导出工具。查询缺失资料时返回诊断，不自动抓取或迁移。
 
 ### OAuth
 
@@ -113,7 +113,7 @@ MCP 暴露 `chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、`chinal
 
 ## 检索日志
 
-服务记录每次只读查询，用来了解资料库的实际用法：MCP 的五个工具和 REST `/api/v1/search`。每条记录包含时间、渠道、客户端、工具、查询参数、命中概况（数量或是否找到）、错误代码和耗时；不记录条文或私域规范的正文。
+服务记录每次只读查询，用来了解资料库的实际用法：MCP 的六个工具和 REST `/api/v1/search`。每条记录包含时间、渠道、客户端、工具、查询参数、命中概况（数量或是否找到）、错误代码和耗时；不记录条文或私域规范的正文。
 
 日志存放在服务状态目录的 `queries.db`，与 `auth.db` 并列，不进入资料备份。导出为 JSON Lines：
 
@@ -189,3 +189,5 @@ sudo -u chinalaw /srv/chinalaw/venv/bin/chinalaw-server password \
 ```
 
 按提示输入两次新密码，至少12字符；无需旧密码、无需重启服务。此操作让旧管理会话失效，但不撤销独立MCP令牌。通过SSH运行时加 `-t` 分配交互终端，不把密码直接写入命令参数。
+
+客户端注册、凭据消费者、JSON/SSE 解析、健康检查与能力边界见 [MCP_CLIENT.md](MCP_CLIENT.md)。

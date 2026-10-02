@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chinalaw"
-version = "0.7.1"
+version = "0.7.2"
 description = "中国法律法规检索 CLI，为 AI agent 设计，减少幻觉、按条款引用。"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -50,6 +50,7 @@ dev = [
 [project.scripts]
 chinalaw = "chinalaw.cli:main"
 chinalaw-mcp = "chinalaw.mcp:main"
+chinalaw-remote-check = "chinalaw.remote_check:main"
 chinalaw-server = "chinalaw.server.cli:main"
 
 [project.urls]
