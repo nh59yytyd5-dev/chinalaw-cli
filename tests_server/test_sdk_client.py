@@ -104,3 +104,20 @@ def test_standard_sdk_reads_full_text_and_enforces_private_scope(tcp_library, mo
         assert public_version == "2026-07-28"
     else:
         assert public_version == "2025-11-25"
+
+
+def test_remote_check_uses_sdk_and_reports_auth_failure(tcp_library):
+    from chinalaw.remote_check import check, failure
+
+    config, auth = tcp_library
+    credential = auth.issue_query_token("remote-check", [PUBLIC_SCOPE])
+    result = asyncio.run(check(config.resource_url, credential["token"], "SDK完整正文", "sdk-law"))
+    assert result["ok"] and result["counts"]["article"] == 1
+    auth.revoke_credential(credential["id"])
+    try:
+        asyncio.run(check(config.resource_url, credential["token"], "SDK完整正文"))
+    except Exception as exc:
+        result = failure(exc)
+    assert result["ok"] is False
+    assert result["status"] == 401
+    assert credential["token"] not in json.dumps(result)

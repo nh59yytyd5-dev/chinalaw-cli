@@ -266,6 +266,7 @@ def search_library(
     level: str | None = None,
     region: str | None = None,
     versions: str = "folded",
+    in_laws: list[str] | str | None = None,
 ) -> dict:
     if kind not in {"all", "law", "article", "norm"} or not 1 <= limit <= 100:
         raise LibraryError("invalid_search", "检索类型或数量不正确。")
@@ -275,6 +276,15 @@ def search_library(
         raise LibraryError("query_too_long", "检索词最多 200 字。")
     if any(len(value or "") > 200 for value in (as_of, status, level, region, versions)):
         raise LibraryError("invalid_search", "检索条件过长。")
+    if in_laws is not None:
+        raw = [in_laws] if isinstance(in_laws, str) else in_laws
+        if not isinstance(raw, list) or len(raw) > 20 or any(
+            not isinstance(value, str) or len(value) > 200 for value in raw
+        ):
+            raise LibraryError("invalid_search", "in_laws 最多 20 个法规名，每项最多 200 字。")
+        scopes = service._split_filter_values(raw)
+        if not scopes or len(scopes) > 20:
+            raise LibraryError("invalid_search", "in_laws 必须包含 1–20 个法规名或 ID。")
     try:
         with read_only_operation():
             return service.search(
@@ -288,6 +298,7 @@ def search_library(
                 level=level,
                 region=region,
                 versions=versions,
+                in_laws=in_laws,
             )
     except ValueError as exc:
         if "schema" in str(exc):

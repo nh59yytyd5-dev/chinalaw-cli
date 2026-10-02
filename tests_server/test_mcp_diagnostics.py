@@ -111,3 +111,28 @@ def test_empty_applicability_reports_coverage(call_mcp):
     result = call_mcp("applicable", date="2021-06-01", topic="合同")["structuredContent"]
     assert result["coverage"]["rules_loaded"] == 0
     assert any(w["code"] == "applicability_data_missing" for w in result["warnings"])
+
+
+def test_http_law_scope_does_not_fall_back_to_global(call_mcp):
+    found = call_mcp("search", query="公开全文", in_laws="公开查询测试资料")["structuredContent"]
+    assert found["counts"]["article"] == 1
+    assert found["law_filter"]["resolved"][0]["id"] == "public-test"
+    missing = call_mcp("search", query="公开全文", in_laws="不存在的法规")["structuredContent"]
+    assert missing["counts"]["total"] == 0
+    assert missing["law_filter"]["unresolved"] == ["不存在的法规"]
+    many = call_mcp("search", query="公开全文", in_laws=["public-test"])["structuredContent"]
+    assert many["counts"]["article"] == 1
+
+
+def test_http_law_scope_is_bounded_and_preserves_permission(call_mcp):
+    bad = call_mcp("search", query="测试", in_laws=["x"] * 21)
+    assert bad["isError"] and bad["structuredContent"]["error"] == "invalid_search"
+    denied = call_mcp("search", query="测试", kind="norm", in_laws="公开查询测试资料")
+    assert denied["isError"] and denied["structuredContent"]["status"] == 403
+
+
+def test_rest_law_scope(owner_api):
+    result = owner_api.get("/api/v1/search", params={"q": "公开全文", "in_laws": "不存在的法规"})
+    assert result.status_code == 200
+    assert result.json()["counts"]["total"] == 0
+    assert result.json()["law_filter"]["unresolved"]
