@@ -81,7 +81,9 @@ ARTICLE_REFERENCE_BODY_RE = re.compile(
     r"^(?:第[〇零一二三四五六七八九十百千两0-9]+[款项目]|[、和及与至或]\s*第|规定|所称|的)"
 )
 NUMBERED_ITEM_RE = re.compile(
-    r"^(?P<number>\d{1,3})[.．]\s*(?P<body>[\u4e00-\u9fff].*)$"
+    # 正文允许以全角引号/书名号/括号开头：最高检 2026 版认罪认罚指导意见的
+    # 条目标题形如 ``7．“认罪”的把握。``，限定汉字开头会把该条目静默并入上一条。
+    r"^(?P<number>\d{1,3})[.．]\s*(?P<body>[\u4e00-\u9fff“‘《（(【].*)$"
 )
 TITLED_NUMBERED_ITEM_RE = re.compile(
     r"^(?P<number>\d{1,3})(?P<dot>[.．])[　\s]*【(?P<title>[^】]{1,80})】(?P<body>.*)$"
@@ -96,8 +98,11 @@ STRUCTURAL_HEADING_RE = re.compile(
     r"^(第[〇零一二三四五六七八九十百千万两0-9]+(?:编|章|节|分编).+|附则)$"
 )
 ENUM_STRUCTURAL_HEADING_RE = re.compile(
+    # 标题正文允许全角引号与顿号：认罪认罚指导意见的节标题形如
+    # ``三、认罪认罚后“从宽”的把握``、``四、犯罪嫌疑人、被告人辩护权保障``，
+    # 缺引号/顿号类会让 part 上下文卡在前一节。
     r"^(?P<ordinal>[〇零一二三四五六七八九十百千万两0-9]{1,3})、"
-    r"(?P<body>[\u4e00-\u9fff（）()《》·]{2,24})$"
+    r"(?P<body>[\u4e00-\u9fff（）()《》·“”‘’、]{2,24})$"
 )
 TOC_MARKER_RE = re.compile(r"目\s*录")
 TOC_DOT_LEADER_RE = re.compile(r"(?:\.{3,}|…{2,})")

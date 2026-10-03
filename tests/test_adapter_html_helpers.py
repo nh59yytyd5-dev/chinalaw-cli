@@ -136,6 +136,28 @@ class PublicDocumentFallbackTests(unittest.TestCase):
         self.assertEqual([item["number"] for item in articles], ["1", "2"])
         self.assertIn("续行", articles[0]["text"])
 
+    def test_numbered_item_body_may_start_with_fullwidth_quote(self) -> None:
+        """认罪认罚指导意见（高检发〔2026〕5号）回归：``7．“认罪”的把握。``
+        这类引号开头的条目不得被静默并入上一条。"""
+
+        articles = cleaning.parse_public_document_articles(
+            "通知说明。\n1．单位犯罪案件的适用。单位犯罪案件内容。\n"
+            "2．“认罪”的把握。认罪认定内容。\n3．“认罚”的把握。认罚认定内容。"
+        )
+        self.assertEqual([item["number"] for item in articles], ["1", "2", "3"])
+        self.assertNotIn("2．", articles[0]["text"])
+        self.assertIn("认罪认定内容", articles[1]["text"])
+
+    def test_enum_section_heading_may_contain_fullwidth_quotes(self) -> None:
+        """同文档回归：节标题``三、认罪认罚后“从宽”的把握``须推进 part 上下文，
+        不得让后续条目全部挂在上一节。"""
+
+        articles = cleaning.parse_public_document_articles(
+            "一、基本原则\n1．第一条内容。\n二、适用范围和适用条件\n2．第二条内容。\n"
+            "三、认罪认罚后“从宽”的把握\n3．第三条内容。"
+        )
+        self.assertEqual(articles[2]["part"], "三、认罪认罚后“从宽”的把握")
+
     def test_court_gongbao_unnumbered_minutes_use_numbered_items(self) -> None:
         adapter = court_gongbao.CourtGongbaoAdapter()
         payload = adapter.build_law_payload(
