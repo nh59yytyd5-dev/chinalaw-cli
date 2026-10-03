@@ -468,6 +468,96 @@ class OutlineNumberedItemsParseTests(unittest.TestCase):
         self.assertEqual(items[0]["text"], "节导语段落。\n条目正文。")
         self.assertEqual(items[0]["part"], "一、节标题")
 
+    def test_numbered_items_restart_returns_empty(self) -> None:
+        """电诈一 2016 / 利用未成年人意见回归守卫：``1．`` 编号重启说明这些
+        标记是 outline 条目内子枚举而非顶层条目，numbered 整体返 [] 交
+        回退链下行，而不是产出重复 number 交给 normalize_articles 抛错。"""
+        self.assertEqual(
+            cleaning.parse_numbered_items_from_text(
+                "1．子项一。\n2．子项二。\n（一）条目。\n1．重启子项。"
+            ),
+            [],
+        )
+
+    def test_numbered_items_strictly_increasing_unaffected(self) -> None:
+        """合法 numbered 文档严格递增，守卫不触发（认罪认罚 1..71 形态）。"""
+        items = cleaning.parse_numbered_items_from_text("1．甲。\n2．乙。\n3．丙。")
+        self.assertEqual([item["number"] for item in items], ["1", "2", "3"])
+
+    def test_public_chain_recovers_outline_when_numbered_restarts(self) -> None:
+        """公共回退链端到端：节 +（一）条目 + 重启 ``1．`` 子项的文档
+        （电诈一 2016 形态）不再抛 duplicate article number。"""
+        articles = cleaning.parse_public_document_articles(
+            "一、总体要求\n"
+            "（一）第一条目正文。\n"
+            "1．子项一。\n"
+            "2．子项二。\n"
+            "（二）第二条目正文。\n"
+            "1．重启子项一。\n"
+            "二、依法严惩示例犯罪\n"
+            "（一）第三条目正文。\n"
+        )
+        self.assertEqual(
+            [(item["number"], item["title"], item["part"]) for item in articles],
+            [
+                ("1", "（一）", "一、总体要求"),
+                ("2", "（二）", "一、总体要求"),
+                ("3", "（一）", "二、依法严惩示例犯罪"),
+            ],
+        )
+        self.assertIn("1．重启子项一。", articles[1]["text"])
+
+    def test_comma_long_headings_stay_in_form_a(self) -> None:
+        """利用未成年人意见 2020 回归：含逗号、无句末标点的长 CJK 行是
+        节标题（标题形），不是扁平条文；整篇按形态 A 解析。"""
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "一、突出打击重点，依法严惩利用未成年人实施黑恶势力犯罪的行为\n"
+            "（一）条目一正文。\n"
+            "（二）条目二正文。\n"
+            "二、严格依法办案，形成打击合力\n"
+            "（一）条目三正文。\n"
+        )
+        self.assertEqual([item["number"] for item in items], ["1", "2", "3"])
+        self.assertEqual(
+            items[0]["part"],
+            "一、突出打击重点，依法严惩利用未成年人实施黑恶势力犯罪的行为",
+        )
+        self.assertEqual(items[2]["part"], "二、严格依法办案，形成打击合力")
+
+    def test_more_items_than_markers_stays_in_form_a(self) -> None:
+        """分流第二信号：有长句形（含句号）CJK 标记行时，（一）条目数多于
+        CJK 行数说明长句行是节标题、节内条目为主 → 仍按形态 A 解析，
+        长句节标题落 part。"""
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "一、长句节标题，含有句号。\n"
+            "（一）条目一。\n"
+            "（二）条目二。\n"
+            "二、又一长句节标题，含有句号。\n"
+            "（一）条目三。\n"
+        )
+        self.assertEqual(
+            [(item["number"], item["part"]) for item in items],
+            [
+                ("1", "一、长句节标题，含有句号。"),
+                ("2", "一、长句节标题，含有句号。"),
+                ("3", "二、又一长句节标题，含有句号。"),
+            ],
+        )
+
+    def test_fewer_items_than_markers_goes_flat(self) -> None:
+        """分流第二信号反向：（一）数 ≤ CJK 数时 CJK 行本身是条文 → 形态 B，
+        （一）作为条文内零星子枚举并入条文。"""
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "一、本意见所称软暴力，是指行为人为谋取不法利益或形成非法影响。\n"
+            "（一）零星子枚举。\n"
+            "二、实施软暴力行为，符合下列情形的，依法处理。\n"
+        )
+        self.assertEqual(
+            [(item["number"], item["title"], item["part"]) for item in items],
+            [("1", "一、", None), ("2", "二、", None)],
+        )
+        self.assertIn("（一）零星子枚举。", items[0]["text"])
+
     def test_policy_item_articles_falls_back_to_outline_items(self) -> None:
         # 与公开回退链同序：numbered 形态优先；本样本 1．子项粘合在条目行内
         # （spp / court 详情页 HTML 转文本的常见线性化结果），numbered 不命中，
