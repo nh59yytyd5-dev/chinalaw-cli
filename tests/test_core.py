@@ -3730,8 +3730,8 @@ class SppGovCnFetchTests(unittest.TestCase):
   <h2>最高人民法院 最高人民检察院<br>关于适用认罪认罚从宽制度的指导意见</h2>
   <p>法发〔2019〕13号</p>
   <p>为正确适用认罪认罚从宽制度，提出如下意见。</p>
-  <p>一、准确把握适用条件。</p>
-  <p>二、依法保障诉讼权利。</p>
+  <p>准确把握适用条件。</p>
+  <p>依法保障诉讼权利。</p>
 </div>
 </body></html>
 """
@@ -4142,6 +4142,76 @@ class SppGovCnFetchTests(unittest.TestCase):
             ),
             "最高人民法院",
         )
+
+
+class SppTruncatePressQaTests(unittest.TestCase):
+    """``spp_gov_cn._truncate_press_qa``：发布会页规范全文之后附的
+    "答记者问"实录不是规范文本，须在首个含标记的行处整体截掉。
+
+    实测样本：醉驾意见发布会页（xwfbh/wsfbt/202312/t20231218_637161）、
+    量刑程序意见发布会页（xwfbh/wsfbt/202011/t20201105_484007）。
+    """
+
+    def test_truncate_at_first_press_qa_marker_line(self) -> None:
+        text = (
+            "第一条 正文一。\n"
+            "第二条 正文二。\n"
+            "最高人民检察院有关部门负责人就《关于办理示例案件的意见》答记者问\n"
+            "记者：请问本意见的出台背景？\n"
+            "第十六条 答：背景如下……\n"
+        )
+        self.assertEqual(
+            spp_gov_cn._truncate_press_qa(text),
+            "第一条 正文一。\n第二条 正文二。",
+        )
+
+    def test_text_without_marker_returned_unchanged(self) -> None:
+        text = "第一条 正文一。\n第二条 正文二。"
+        self.assertEqual(spp_gov_cn._truncate_press_qa(text), text)
+
+    def test_trailing_blank_lines_stripped_after_truncation(self) -> None:
+        text = "第一条 正文。\n\n\n答记者问\n问答内容。\n"
+        self.assertEqual(spp_gov_cn._truncate_press_qa(text), "第一条 正文。")
+
+    def test_build_law_payload_keeps_qa_out_of_last_article(self) -> None:
+        """回归：醉驾意见第三十条曾混入 2965 字符问答、电诈意见（二）曾被
+        问答中行首"第十六条"劫持切分。接线后末条只含规范文本。"""
+        adapter = spp_gov_cn.SppGovCnAdapter()
+        fixture = """
+<html><head><title>最高人民法院 最高人民检察院 公安部 司法部关于办理醉酒危险驾驶刑事案件的意见_中华人民共和国最高人民检察院</title></head>
+<body>
+<div id="fontzoom">
+  <h2>关于办理醉酒危险驾驶刑事案件的意见</h2>
+  <p>高检发〔2023〕12号</p>
+  <p>为依法惩治醉酒危险驾驶违法犯罪，制定本意见。</p>
+  <p>第一条 示例正文一。</p>
+  <p>第三十条 本意见自2023年12月28日起施行。</p>
+  <p>最高人民检察院有关部门负责人就"两高两部"《关于办理醉酒危险驾驶刑事案件的意见》答记者问</p>
+  <p>记者：请问《意见》的出台背景是什么？</p>
+  <p>第十六条 答：背景如下……</p>
+</div>
+<div id="pageBreak"></div>
+</body></html>
+"""
+        fake = spp_gov_cn.FetchResult(
+            url="https://www.spp.gov.cn/spp/xwfbh/wsfbt/202312/t20231218_637161.shtml",
+            status_code=200,
+            headers={},
+            text=fixture,
+        )
+        with patch.object(spp_gov_cn, "_fetch_text", return_value=fake):
+            payload = adapter.build_law_payload(
+                "spp/xwfbh/wsfbt/202312/t20231218_637161",
+                search_row={"channel": "sfjs"},
+            )
+        self.assertEqual(
+            [article["number"] for article in payload["articles"]],
+            ["1", "30"],
+        )
+        last = payload["articles"][-1]
+        self.assertNotIn("记者", last["text"])
+        self.assertNotIn("答：", last["text"])
+        self.assertLess(len(last["text"]), 100)
 
 
 class SppGovCnVerifySourceTests(unittest.TestCase):

@@ -379,6 +379,95 @@ class OutlineNumberedItemsParseTests(unittest.TestCase):
         self.assertEqual([item["number"] for item in items], ["1", "2"])
         self.assertIn("（一）项规定的引用行属于上一条。", items[0]["text"])
 
+    # 形态 B 样本：电诈意见式扁平长条文（含句读、不匹配标题 RE）+ 条文内
+    # （N）子枚举。任一 ``一、`` 标记行不匹配短标题 RE 即整篇按扁平条文解析。
+    FLAT_SAMPLE = (
+        "最高人民法院 最高人民检察院 公安部\n"
+        "关于办理电信网络诈骗等刑事案件适用法律若干问题的意见\n"
+        "为依法惩治电信网络诈骗等犯罪活动，现提出如下意见：\n"
+        "一、近年来，电信网络诈骗犯罪持续高发多发，犯罪分子手段不断翻新，"
+        "已经成为当前发案最高、损失最大、群众反响最强烈的突出犯罪。\n"
+        "二、办理电信网络诈骗犯罪案件，应当坚持全链条全方位打击，"
+        "坚持依法从严从快惩处，坚持最大力度最大限度追赃挽损。\n"
+        "三、利用电信网络技术手段实施诈骗，诈骗公私财物价值三千元以上"
+        "即属数额较大，具有下列情形之一的，酌情从重处罚：\n"
+        "（一）造成被害人或者其近亲属严重后果的；\n"
+        "（二）冒充司法机关等国家机关工作人员实施诈骗的；\n"
+        "四、本意见自公布之日起施行。\n"
+    )
+
+    def test_flat_cjk_articles_parse_as_items(self) -> None:
+        items = cleaning.parse_outline_numbered_items_from_text(self.FLAT_SAMPLE)
+        self.assertEqual(len(items), 5)  # 序言 + 4 条
+        self.assertEqual(items[0]["number"], "序言")
+        first = items[1]
+        self.assertEqual(first["number"], "1")
+        self.assertEqual(first["number_display"], "第1项")
+        # title 存原始标记（"一、"），part 为 None（扁平结构无节上下文）。
+        self.assertEqual(first["title"], "一、")
+        self.assertIsNone(first["part"])
+        third = items[3]
+        self.assertEqual(third["title"], "三、")
+        # （N）子枚举不提升为条目，并入所属条文正文。
+        self.assertIn("（一）造成被害人", third["text"])
+        self.assertIn("（二）冒充司法机关", third["text"])
+        self.assertEqual(items[4]["title"], "四、")
+
+    def test_flat_cjk_broken_sequence_fails_loud(self) -> None:
+        text = "一、长条文内容，含逗号。\n三、跳号长条文，含逗号。\n"
+        with self.assertRaises(ValueError):
+            cleaning.parse_outline_numbered_items_from_text(text)
+
+    def test_single_long_marker_line_pulls_whole_doc_into_flat_shape(self) -> None:
+        """分流互斥：全短标题 → 形态 A；夹一个长句条文标记 → 整篇形态 B。"""
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "一、短标题\n"
+            "本节裸段落内容。\n"
+            "二、这是一个明显超出短标题形态的长句条文，含有逗号和句号，"
+            "继续展开条文内容直至不可能被视为节标题。\n"
+        )
+        self.assertEqual(
+            [(item["number"], item["title"], item["part"]) for item in items],
+            [("1", "一、", None), ("2", "二、", None)],
+        )
+
+    def test_section_with_only_paragraphs_gets_synthesized_item(self) -> None:
+        """非法集资意见 2019 回归：没有任何（N）条目的节，其无编号段落
+        为该节合成条目（title=None、part=该节标题），不得经节导语通道
+        迁移到后续节的条目里。"""
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "引言。\n"
+            "一、关于非法性的认定依据问题\n"
+            "（一）第一条目正文。\n"
+            "二、关于单位犯罪的认定问题\n"
+            "该节只有无编号段落。\n"
+            "该节又一段落。\n"
+            "三、关于涉案财物的追缴问题\n"
+            "（一）第三节条目正文。\n"
+            "四、关于宽严相济刑事政策的把握问题\n"
+            "末节裸段落。\n"
+        )
+        self.assertEqual([item["number"] for item in items], ["序言", "1", "2", "3", "4"])
+        synthesized = items[2]
+        self.assertIsNone(synthesized["title"])
+        self.assertEqual(synthesized["part"], "二、关于单位犯罪的认定问题")
+        self.assertIn("该节又一段落。", synthesized["text"])
+        # 裸段落没有迁移到后续节的条目里。
+        self.assertNotIn("该节只有无编号段落", items[3]["text"])
+        self.assertEqual(items[3]["title"], "（一）")
+        # 全文以裸段落节收尾时同样合成，不回挂到上一节末条目。
+        self.assertIsNone(items[4]["title"])
+        self.assertEqual(items[4]["part"], "四、关于宽严相济刑事政策的把握问题")
+
+    def test_section_leadin_still_merges_into_first_item(self) -> None:
+        """有导语又有（一）条目的节：导语并入首条目的既有行为保持不变。"""
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "一、节标题\n节导语段落。\n（一）条目正文。\n（二）第二条目正文。\n"
+        )
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["text"], "节导语段落。\n条目正文。")
+        self.assertEqual(items[0]["part"], "一、节标题")
+
     def test_policy_item_articles_falls_back_to_outline_items(self) -> None:
         # 与公开回退链同序：numbered 形态优先；本样本 1．子项粘合在条目行内
         # （spp / court 详情页 HTML 转文本的常见线性化结果），numbered 不命中，
