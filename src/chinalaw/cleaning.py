@@ -104,6 +104,27 @@ OUTLINE_ITEM_REFERENCE_BODY_RE = re.compile(r"^[款项目段]")
 OUTLINE_SECTION_MARKER_RE = re.compile(
     r"^(?P<ordinal>[〇零一二三四五六七八九十百千万两0-9]{1,3})、(?P<body>.*)$"
 )
+# 形态分流的"标题性"判据：无句末标点且长度有限即标题形——含逗号的长标题
+# （如 "一、突出打击重点，依法严惩利用未成年人实施黑恶势力犯罪的行为"，
+# 30 字符）也算标题形；上限 40 是实测最长节标题 30 字符加余量，**不复用**
+# ENUM_STRUCTURAL_HEADING_RE 的 2-24 字符硬上限（那只对 part 标签提取生效）。
+# 含 。；： 或超长的标记行视为长句条文形。
+OUTLINE_HEADING_MAX_CHARS = 40
+OUTLINE_SENTENCE_PUNCT_RE = re.compile(r"[。；：]")
+
+
+def _is_heading_shaped_marker(line: str) -> bool:
+    return (
+        len(line) <= OUTLINE_HEADING_MAX_CHARS
+        and not OUTLINE_SENTENCE_PUNCT_RE.search(line)
+    )
+
+
+def _outline_marker_ordinal(match: re.Match[str]) -> int | None:
+    normalized = normalize_article_number(f"第{match.group('ordinal')}条")
+    if not normalized.isdigit():
+        return None
+    return int(normalized)
 TOC_ENTRY_SENTENCE_PUNCT_RE = re.compile(r"[。！？；：]")
 TOC_ENTRY_MAX_CHARS = 30
 STRUCTURAL_HEADING_RE = re.compile(
@@ -576,6 +597,7 @@ def parse_numbered_items_from_text(text: str, *, min_items: int = 2) -> list[dic
     current: dict | None = None
     context = _new_parse_context()
     position = 1
+    max_number = 0
 
     for raw_line in text.splitlines():
         line = _clean_text(raw_line.strip().lstrip("#").strip())
@@ -590,10 +612,21 @@ def parse_numbered_items_from_text(text: str, *, min_items: int = 2) -> list[dic
 
         item_match = NUMBERED_ITEM_RE.match(line)
         if item_match:
-            number = str(int(item_match.group("number")))
+            number_value = int(item_match.group("number"))
+            number = str(number_value)
             body = item_match.group("body").strip()
             if current is None and number != "1":
                 continue
+            if number_value <= max_number:
+                # 编号重启 / 回退：这些 ``N．`` 标记不是顶层条目，而是 outline
+                # 条目内的子枚举（电诈一 2016、利用未成年人意见实测：33 / 14
+                # 个在每个（一）条目内从 1． 重启的子项曾被抓成顶层条目，
+                # 重启处产出重复 number 交给 normalize_articles 抛 duplicate）。
+                # numbered 形态无权裁决，整体返回 [] 让回退链继续下行到
+                # outline 解析器；合法 numbered 文档（认罪认罚 1..71 等）严格
+                # 递增，不触发本守卫。
+                return []
+            max_number = number_value
             if current is not None:
                 articles.append(current)
             current = {
@@ -902,23 +935,27 @@ def parse_outline_numbered_items_from_text(
     挂 ``（一）（二）`` 条目，条目内再分 ``1．2．`` 子项（实测样本：电诈意见
     2016 / 电诈意见（二）法发〔2021〕22号、非法集资意见 2019、软暴力意见 2019
     等，spp.gov.cn / court.gov.cn 详情页均为此形态）。本函数是该**形态**的
-    通用解析器。文档先按 ``一、`` 标记行的整体形态分流：
+    通用解析器。文档先按 ``一、`` 标记行的整体形态分流（两信号启发式）：
 
-    - 形态 A（全部 ``一、`` 标记行都匹配 ``ENUM_STRUCTURAL_HEADING_RE`` 短
-      标题）：``一、`` 枚举节标题识别为 ``part`` 上下文，``（一）（二）``
-      行为条目（下述主路径）；纯 ``一、二、`` 节、没有（一）条目层的文档
-      （如以审判为中心改革意见的短标题变体）回退节级切分——见
-      :func:`_parse_outline_section_items`；
-    - 形态 B（任一 ``一、`` 标记行是长句条文形、不匹配标题 RE）：整篇按
-      扁平 CJK 序数条文解析（电诈意见 2016 / 法发〔2021〕22号、软暴力意见
-      2019、以审判为中心意见 2016 等实测形态），见
-      :func:`_parse_flat_cjk_articles`。
+    - 全部 ``一、`` 标记行都是标题形（短、无句末标点，含逗号的长标题也算，
+      见 :data:`OUTLINE_HEADING_MAX_CHARS`）→ 形态 A；
+    - 有长句形标记行时比较（一）条目数与 CJK 标记行数：**（一）数 > CJK
+      数 → 仍按形态 A**（长句行是含逗号 / 标点的节标题，节内条目为主；
+      利用未成年人意见 2020 实测：3 个长句节标题 + 13 个（一）条目）；
+      **（一）数 ≤ CJK 数 → 形态 B**（CJK 行本身是条文，（一）是条文内
+      零星子枚举），整篇按扁平 CJK 序数条文解析（电诈意见 2016 /
+      法发〔2021〕22号、软暴力意见 2019、以审判为中心意见 2016 等实测
+      形态），见 :func:`_parse_flat_cjk_articles`。
+      已知残余风险：真形态 B 但（一）数 > CJK 数的文档会被误判为 A
+      （条文退化为节、子枚举升级为条目）——粒度变粗但内容不丢，可接受。
 
     主路径（形态 A）约定：
 
-    - 节：``一、`` 枚举标题识别为 ``part`` 上下文，沿用
-      ``ENUM_STRUCTURAL_HEADING_RE`` 的严格 +1 序号约定（序号不合预期的标题
-      形行不当标题消费，按普通行保留在条目正文里，内容不丢）；
+    - 节：凡 ``一、`` 标记行一律当节标题（短标题与含逗号长标题同权），
+      序数用标记自带的 CJK 序数严格 +1 校验（不依赖 ENUM_RE 匹配）；序号
+      不合预期的标记形行不当标题消费，按普通行保留在条目正文里（内容不丢）；
+      纯 ``一、二、`` 节、没有（一）条目层的文档回退节级切分——见
+      :func:`_parse_outline_section_items`；
     - 条目：``（N）`` 行。``number`` 用全文顺序流水号 ``"1".."N"``、
       ``number_display`` 用 ``第N项``（仿 parse_numbered_items_from_text，
       满足 number 全库唯一与 normalize_articles 的 number/display 一致性
@@ -953,9 +990,13 @@ def parse_outline_numbered_items_from_text(
         line for line in lines if OUTLINE_SECTION_MARKER_RE.match(line)
     ]
     if section_markers and not all(
-        ENUM_STRUCTURAL_HEADING_RE.match(line) for line in section_markers
+        _is_heading_shaped_marker(line) for line in section_markers
     ):
-        return _parse_flat_cjk_articles(lines, min_items=min_items)
+        item_count = sum(1 for line in lines if _match_outline_item(line))
+        if item_count <= len(section_markers):
+            return _parse_flat_cjk_articles(lines, min_items=min_items)
+        # （一）条目数多于 CJK 标记行数：长句形标记行是节标题而非条文，
+        # 落入下方形态 A 主路径。
 
     if not any(_match_outline_item(line) for line in lines):
         return _parse_outline_section_items(lines, min_items=min_items)
@@ -966,8 +1007,10 @@ def parse_outline_numbered_items_from_text(
     current: dict | None = None
     pending_leadin: list[str] = []
     pending_section_part: str | None = None
+    section_part: str | None = None
     saw_heading = False
     expected_ordinal = 1
+    expected_section_ordinal = 1
 
     def _synthesize_section_item() -> dict:
         """为"只有无编号段落、没有任何（N）条目"的节合成一个条目。"""
@@ -982,9 +1025,28 @@ def parse_outline_numbered_items_from_text(
         }
 
     for line in lines:
-        if _is_structural_heading(line, context):
-            # 上一节的开放条目在新节标题处关闭：标题之后的行只会进入
-            # 节导语或新条目，不会再续到旧条目上。
+        marker_match = OUTLINE_SECTION_MARKER_RE.match(line)
+        marker_ordinal = (
+            _outline_marker_ordinal(marker_match) if marker_match else None
+        )
+        if marker_ordinal is not None and marker_ordinal == expected_section_ordinal:
+            # 节标题：形态 A 下凡 CJK 标记行一律接受（短标题与含逗号长标题
+            # 同权），序数严格 +1；上一节的开放条目与裸段落在此处结算。
+            if current is not None:
+                items.append(current)
+                current = None
+            if pending_leadin:
+                items.append(_synthesize_section_item())
+                pending_leadin = []
+            section_part = line
+            pending_section_part = line
+            expected_section_ordinal = marker_ordinal + 1
+            expected_ordinal = 1
+            saw_heading = True
+            continue
+        if marker_match is None and _is_structural_heading(line, context):
+            # 第X编/章/节、附则类标题（序号不合预期的 ``一、`` 标记行按
+            # 普通行处理，不进此分支）。
             if current is not None:
                 items.append(current)
                 current = None
@@ -992,7 +1054,9 @@ def parse_outline_numbered_items_from_text(
                 items.append(_synthesize_section_item())
                 pending_leadin = []
             _update_context(context, line)
-            pending_section_part = _part_label(context)
+            section_part = _part_label(context)
+            pending_section_part = section_part
+            expected_section_ordinal = 1
             expected_ordinal = 1
             saw_heading = True
             continue
@@ -1014,7 +1078,7 @@ def parse_outline_numbered_items_from_text(
                 "number_display": f"第{number}项",
                 "title": marker,
                 "text": "\n".join(parts),
-                "part": _part_label(context),
+                "part": section_part,
                 "position": len(items) + 1,
             }
             pending_leadin = []
@@ -1169,18 +1233,31 @@ def _parse_outline_section_items(
     preamble: list[str] = []
     items: list[dict] = []
     current: dict | None = None
+    expected_section_ordinal = 1
 
     for line in lines:
-        if _is_structural_heading(line, context):
+        marker_match = OUTLINE_SECTION_MARKER_RE.match(line)
+        marker_ordinal = (
+            _outline_marker_ordinal(marker_match) if marker_match else None
+        )
+        part: str | None = None
+        if marker_ordinal is not None and marker_ordinal == expected_section_ordinal:
+            # 与主路径同权：凡 CJK 标记行（含长标题）都接受为节标题。
+            expected_section_ordinal = marker_ordinal + 1
+            part = line
+        elif marker_match is None and _is_structural_heading(line, context):
+            _update_context(context, line)
+            expected_section_ordinal = 1
+            part = _part_label(context)
+        if part is not None:
             if current is not None:
                 items.append(current)
-            _update_context(context, line)
             current = {
                 "number": "",
                 "number_display": "",
                 "title": line,
                 "text": "",
-                "part": _part_label(context),
+                "part": part,
                 "position": 0,
             }
             continue
