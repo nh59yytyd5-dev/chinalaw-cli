@@ -561,7 +561,13 @@ def _policy_item_articles(level: str, text: str) -> list[dict]:
     titled_items = cleaning.parse_titled_numbered_items_from_text(text)
     if titled_items:
         return titled_items
-    return cleaning.parse_numbered_items_from_text(text)
+    numbered_items = cleaning.parse_numbered_items_from_text(text)
+    if numbered_items:
+        return numbered_items
+    # 意见 / 指导意见类文档（如电诈意见、软暴力意见）以 ``一、`` 节 +
+    # ``（一）`` 条目的层级展开，与 parse_public_document_articles 回退链
+    # 同序接在 numbered 形态之后。
+    return cleaning.parse_outline_numbered_items_from_text(text)
 
 
 @dataclass

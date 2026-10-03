@@ -8,7 +8,7 @@ from __future__ import annotations
 import unittest
 
 from chinalaw import cleaning
-from chinalaw.adapters import _html, court_gongbao, gov_xzfgk, spp_gov_cn
+from chinalaw.adapters import _html, court_gongbao, court_main, gov_xzfgk, spp_gov_cn
 
 
 class HtmlToTextTests(unittest.TestCase):
@@ -193,6 +193,210 @@ class PublicDocumentFallbackTests(unittest.TestCase):
         )
         self.assertEqual(len(payload["articles"]), 1)
         self.assertEqual(payload["articles"][0]["number"], "正文")
+
+    def test_outline_policy_items_reachable_via_public_chain(self) -> None:
+        """电诈意见 / 软暴力意见形态回归：``一、`` 节 + ``（一）`` 条目层级的
+        意见类文档应经 parse_public_document_articles 回退链切出条目，
+        不再退化为 single_body 全文一条。"""
+
+        articles = cleaning.parse_public_document_articles(
+            "意见引言，为依法惩治示例犯罪提出如下意见。\n"
+            "一、总体要求\n"
+            "（一）准确把握示例犯罪的构成要件。\n"
+            "（二）严格区分罪与非罪的界限。\n"
+            "二、适用范围\n"
+            "（一）本意见适用于示例案件办理。\n"
+        )
+        self.assertEqual(
+            [item["number"] for item in articles],
+            ["序言", "1", "2", "3"],
+        )
+        self.assertEqual(articles[1]["title"], "（一）")
+        self.assertEqual(articles[1]["part"], "一、总体要求")
+        self.assertEqual(articles[3]["part"], "二、适用范围")
+
+    def test_outline_items_pass_full_canonicalize(self) -> None:
+        """outline 解析产物须过 normalize_articles 全量校验：
+        number 全库唯一、number_display 与 number 一致、序言 symbolic 合法。"""
+
+        articles = cleaning.parse_public_document_articles(
+            "意见引言。\n"
+            "一、总体要求\n"
+            "（一）第一条目正文。\n"
+            "（二）第二条目正文。\n"
+            "二、适用范围\n"
+            "（一）第三条目正文。\n"
+        )
+        payload = cleaning.canonicalize(
+            {
+                "id": "test:outline-opinion",
+                "title": "最高人民法院、最高人民检察院关于办理示例案件若干问题的意见",
+                "level": "judicial_policy",
+                "status": "unknown",
+                "source_url": "https://www.spp.gov.cn/spp/gfwj/example.shtml",
+                "source_name": "spp.gov.cn",
+                "source_checked_at": "2026-10-04T00:00:00+00:00",
+                "articles": articles,
+            },
+            source_kind="external_json",
+        )
+        self.assertEqual(len(payload["articles"]), 4)
+        self.assertEqual(payload["articles"][1]["number_display"], "第1项")
+        self.assertEqual(payload["articles"][1]["title"], "（一）")
+
+
+class OutlineNumberedItemsParseTests(unittest.TestCase):
+    """``一、`` 节 + ``（一）`` 条目（+ ``1．`` 子项）层级意见文档的解析器测试。
+
+    实测样本形态：《关于办理电信网络诈骗等刑事案件适用法律若干问题的意见》
+    （2016）及其（二）（法发〔2021〕22号）、《关于办理非法集资刑事案件若干
+    问题的意见》（2019）、《关于办理实施"软暴力"的刑事案件若干问题的意见》
+    （2019）等"两高"联合意见；纯节级退化样本：《关于推进以审判为中心的
+    刑事诉讼制度改革的意见》（2016）。
+    """
+
+    # 三层形态：节 + （一）条目 + 1．子项，跨节（N）序号重启。
+    OUTLINE_SAMPLE = (
+        "最高人民法院 最高人民检察院\n"
+        "关于办理示例案件若干问题的意见\n"
+        "为依法惩治示例犯罪，现提出如下意见：\n"
+        "一、总体要求\n"
+        "（一）准确把握示例犯罪的构成要件，依法惩治相关犯罪。\n"
+        "（二）严格区分罪与非罪的界限，防止扩大打击面。\n"
+        "本条续段内容。\n"
+        "1．子项一是正文普通段落。\n"
+        "2．子项二也是正文普通段落。\n"
+        "二、证据审查\n"
+        "（一）全面收集、固定示例证据。\n"
+        "（二）依法排除非法证据，保障诉讼权利。\n"
+    )
+
+    def test_parses_three_layer_outline(self) -> None:
+        items = cleaning.parse_outline_numbered_items_from_text(self.OUTLINE_SAMPLE)
+        self.assertEqual(len(items), 5)  # 序言 + 4 条
+        self.assertEqual(items[0]["number"], "序言")
+        self.assertIn("为依法惩治示例犯罪", items[0]["text"])
+
+        first = items[1]
+        # number 用全文流水号、number_display 用"第N项"，
+        # 原文（一）标记存 title 以还原"一、（一）"原始地址。
+        self.assertEqual(first["number"], "1")
+        self.assertEqual(first["number_display"], "第1项")
+        self.assertEqual(first["title"], "（一）")
+        self.assertEqual(first["part"], "一、总体要求")
+
+        second = items[2]
+        self.assertEqual(second["title"], "（二）")
+        # 续段与 1．子项都并入条目正文，子项不提升为条目。
+        self.assertIn("本条续段内容。", second["text"])
+        self.assertIn("1．子项一是正文普通段落。", second["text"])
+        self.assertIn("2．子项二也是正文普通段落。", second["text"])
+
+        third = items[3]
+        # 新节内（N）从（一）重启，流水号继续递增。
+        self.assertEqual(third["number"], "3")
+        self.assertEqual(third["title"], "（一）")
+        self.assertEqual(third["part"], "二、证据审查")
+        self.assertTrue(all(item["text"] for item in items))
+
+    def test_section_only_document_falls_back_to_section_items(self) -> None:
+        """以审判为中心意见形态：只有 ``一、二、`` 节、没有（一）条目层，
+        回退到节级切分——每节一个条目，title 与 part 同记节名。"""
+
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "关于推进以审判为中心的刑事诉讼制度改革的意见\n"
+            "为贯彻党中央决策部署，现提出如下意见。\n"
+            "一、推进以审判为中心的诉讼制度改革\n"
+            "改革正文第一段。\n"
+            "改革正文第二段。\n"
+            "二、完善庭前会议和法庭审理程序\n"
+            "审判环节正文。\n"
+            "三、完善证据裁判和非法证据排除规则\n"
+            "证据环节正文。\n"
+        )
+        self.assertEqual([item["number"] for item in items], ["序言", "1", "2", "3"])
+        self.assertEqual(items[1]["title"], "一、推进以审判为中心的诉讼制度改革")
+        self.assertEqual(items[1]["part"], "一、推进以审判为中心的诉讼制度改革")
+        self.assertEqual(items[1]["number_display"], "第1项")
+        self.assertIn("改革正文第二段。", items[1]["text"])
+        self.assertEqual(items[3]["title"], "三、完善证据裁判和非法证据排除规则")
+
+    def test_broken_item_sequence_fails_loud(self) -> None:
+        text = "一、节标题\n（一）正文一。\n（三）正文三。\n"
+        with self.assertRaises(ValueError):
+            cleaning.parse_outline_numbered_items_from_text(text)
+
+    def test_loose_item_before_first_item_fails_loud(self) -> None:
+        """首个条目前的散装（N）行不得静默吞掉：首条目必须是（一）。"""
+        text = "引言段落。\n（二）散装行。\n（三）又一散装行。\n"
+        with self.assertRaises(ValueError):
+            cleaning.parse_outline_numbered_items_from_text(text)
+
+    def test_item_ordinal_must_restart_at_new_section(self) -> None:
+        """新节内（N）必须从（一）重启；同时守门枚举节标题含"节"字时
+        严格 +1 序号约定不被 编/章/节 关键字分支打断（_update_context 回归）。"""
+        text = "一、第一节标题\n（一）正文。\n二、第二节标题\n（二）未重启。\n"
+        with self.assertRaises(ValueError):
+            cleaning.parse_outline_numbered_items_from_text(text)
+
+    def test_enum_section_heading_containing_jie_keeps_sequence(self) -> None:
+        """与上一测试同源的正面用例：含"节"字的枚举标题正常推进 part。"""
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "一、第一节标题\n（一）正文一。\n二、第二节标题\n（一）正文二。\n"
+        )
+        self.assertEqual(
+            [item["part"] for item in items],
+            ["一、第一节标题", "二、第二节标题"],
+        )
+
+    def test_empty_item_body_fails_loud(self) -> None:
+        text = "（一）\n（二）正文二。\n"
+        with self.assertRaises(ValueError):
+            cleaning.parse_outline_numbered_items_from_text(text)
+
+    def test_statute_style_text_returns_empty(self) -> None:
+        text = "第一条 为了测试制定本法。\n第二条 本法适用于测试事项。\n"
+        self.assertEqual(cleaning.parse_outline_numbered_items_from_text(text), [])
+
+    def test_fewer_than_min_items_returns_empty(self) -> None:
+        self.assertEqual(
+            cleaning.parse_outline_numbered_items_from_text("（一）唯一条目。"),
+            [],
+        )
+        self.assertEqual(
+            cleaning.parse_outline_numbered_items_from_text("一、仅有节标题\n节正文。\n"),
+            [],
+        )
+
+    def test_inline_item_reference_is_not_an_item(self) -> None:
+        """"（一）项规定的……" 这类行首交叉引用按续段处理，不当条目切分。"""
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "一、节标题\n"
+            "（一）第一条目正文。\n"
+            "（一）项规定的引用行属于上一条。\n"
+            "（二）第二条目正文。\n"
+        )
+        self.assertEqual([item["number"] for item in items], ["1", "2"])
+        self.assertIn("（一）项规定的引用行属于上一条。", items[0]["text"])
+
+    def test_policy_item_articles_falls_back_to_outline_items(self) -> None:
+        # 与公开回退链同序：numbered 形态优先；本样本 1．子项粘合在条目行内
+        # （spp / court 详情页 HTML 转文本的常见线性化结果），numbered 不命中，
+        # 落到 outline 解析。
+        items = court_main._policy_item_articles(
+            "judicial_policy",
+            "意见引言。\n"
+            "一、总体要求\n"
+            "（一）第一条目正文，1．子项粘合在同一段。\n"
+            "（二）第二条目正文。\n"
+            "二、证据审查\n"
+            "（一）第三条目正文。\n",
+        )
+        self.assertEqual(len(items), 4)
+        self.assertEqual(items[1]["title"], "（一）")
+        self.assertEqual(items[3]["part"], "二、证据审查")
+        # 非纪要/政策层级不启用该解析路径。
+        self.assertEqual(court_main._policy_item_articles("law", self.OUTLINE_SAMPLE), [])
 
 
 if __name__ == "__main__":  # pragma: no cover

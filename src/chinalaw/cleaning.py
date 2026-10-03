@@ -92,6 +92,12 @@ MINUTES_SUBSECTION_HEADING_RE = re.compile(
     r"^（(?P<ordinal>[〇零一二三四五六七八九十]{1,3})）"
     r"(?P<body>[\u4e00-\u9fff（）()《》·“”‘’、]{2,30})$"
 )
+OUTLINE_ITEM_RE = re.compile(
+    r"^（(?P<ordinal>[〇零一二三四五六七八九十百千万两0-9]{1,3})）(?P<body>.*)$"
+)
+# 条目正文的行首引用（"（三）项规定的……"）是交叉引用，不是新条目起点；
+# 仿 ARTICLE_REFERENCE_BODY_RE 的约定排除。
+OUTLINE_ITEM_REFERENCE_BODY_RE = re.compile(r"^[款项目段]")
 TOC_ENTRY_SENTENCE_PUNCT_RE = re.compile(r"[。！？；：]")
 TOC_ENTRY_MAX_CHARS = 30
 STRUCTURAL_HEADING_RE = re.compile(
@@ -861,12 +867,225 @@ def _minutes_part_label(context: dict[str, str | int | None]) -> str | None:
     return " ".join(values) if values else None
 
 
+def _match_outline_item(line: str) -> tuple[int, str, str] | None:
+    """匹配 ``（一）`` 条目标记，返回 (序号, 原始标记, 正文) 或 None。
+
+    正文以 款 / 项 / 目 / 段 开头的行视为条内交叉引用（"（三）项规定的……"），
+    不当条目起点消费，由调用方按普通文本处理。
+    """
+
+    match = OUTLINE_ITEM_RE.match(line)
+    if not match:
+        return None
+    if OUTLINE_ITEM_REFERENCE_BODY_RE.match(match.group("body")):
+        return None
+    normalized = normalize_article_number(f"第{match.group('ordinal')}条")
+    if not normalized.isdigit():
+        return None
+    return int(normalized), f"（{match.group('ordinal')}）", match.group("body")
+
+
+def parse_outline_numbered_items_from_text(
+    text: str,
+    *,
+    min_items: int = 2,
+) -> list[dict]:
+    """Parse 指导意见 / 意见 organized as ``一、`` 节 + ``（一）`` 条目 (+ ``1．`` 子项).
+
+    "两高"联合规范性文件（指导意见 / 意见）的经典层级：``一、`` 枚举节标题下
+    挂 ``（一）（二）`` 条目，条目内再分 ``1．2．`` 子项（实测样本：电诈意见
+    2016 / 电诈意见（二）法发〔2021〕22号、非法集资意见 2019、软暴力意见 2019
+    等，spp.gov.cn / court.gov.cn 详情页均为此形态）。本函数是该**形态**的
+    通用解析器：
+
+    - 节：``一、`` 枚举标题识别为 ``part`` 上下文，沿用
+      ``ENUM_STRUCTURAL_HEADING_RE`` 的严格 +1 序号约定（序号不合预期的标题
+      形行不当标题消费，按普通行保留在条目正文里，内容不丢）；
+    - 条目：``（N）`` 行。``number`` 用全文顺序流水号 ``"1".."N"``、
+      ``number_display`` 用 ``第N项``（仿 parse_numbered_items_from_text，
+      满足 number 全库唯一与 normalize_articles 的 number/display 一致性
+      校验）；原文的 ``（一）（二）`` 编号存进 ``title`` 字段，引用时可还原
+      "二、（三）" 的原始地址；
+    - 子项：``1．2．`` **不**提升为条目，保留为条目正文内的普通段落，防止与
+      顶层 ``1. 2.`` 编号条目形态（parse_numbered_items_from_text）混淆；
+    - 前言（文号、引言等）汇成 symbolic ``序言`` 条目置于首位（与纪要解析器
+      的 preamble 惯例一致），无前言则不生成；节导语（节标题之后、首个条目
+      之前的无编号段落）并入下一条目开头；其余续段按 _append_article_text
+      惯例并入当前条目；
+    - 退化路径：文档只有 ``一、二、`` 节而没有（一）条目层（如以审判为中心
+      改革意见）时回退到节级切分——见 :func:`_parse_outline_section_items`。
+
+    Fail loud：首个条目必须是（一）（之前的散装（N）行不吞，直接报错）；
+    条目序号在节内严格连续 +1（新节内允许从（一）重启），断档 / 重复 / 重启
+    均抛 ValueError；条目正文为空同样抛错。形态不存在（无任何（N）条目行）
+    或条目数少于 ``min_items`` 时返回 ``[]``，由调用方决定回退路径。
+    """
+
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = _clean_text(raw_line.strip().lstrip("#").strip())
+        if not line:
+            continue
+        if _is_toc_line(line):
+            continue
+        lines.append(line)
+
+    if not any(_match_outline_item(line) for line in lines):
+        return _parse_outline_section_items(lines, min_items=min_items)
+
+    context = _new_parse_context()
+    preamble: list[str] = []
+    items: list[dict] = []
+    current: dict | None = None
+    pending_leadin: list[str] = []
+    saw_heading = False
+    expected_ordinal = 1
+
+    for line in lines:
+        if _is_structural_heading(line, context):
+            _update_context(context, line)
+            expected_ordinal = 1
+            saw_heading = True
+            continue
+        item = _match_outline_item(line)
+        if item is not None:
+            ordinal, marker, body = item
+            if ordinal != expected_ordinal:
+                raise ValueError(
+                    "outline numbered items sequence broken: "
+                    f"expected item ordinal {expected_ordinal}, got {ordinal} "
+                    f"(line: {line[:40]!r})"
+                )
+            if current is not None:
+                items.append(current)
+            number = str(len(items) + 1)
+            parts = [part for part in (*pending_leadin, body.strip()) if part]
+            current = {
+                "number": number,
+                "number_display": f"第{number}项",
+                "title": marker,
+                "text": "\n".join(parts),
+                "part": _part_label(context),
+                "position": len(items) + 1,
+            }
+            pending_leadin = []
+            saw_heading = False
+            expected_ordinal = ordinal + 1
+            continue
+        if current is not None:
+            if saw_heading:
+                pending_leadin.append(line)
+            else:
+                _append_article_text(current, line)
+        elif saw_heading:
+            pending_leadin.append(line)
+        else:
+            preamble.append(line)
+
+    if current is not None:
+        for leadin in pending_leadin:
+            _append_article_text(current, leadin)
+        items.append(current)
+
+    if len(items) < min_items:
+        return []
+    for item in items:
+        if not item.get("text"):
+            raise ValueError(
+                f"outline numbered item {item['number']!r} produced empty text"
+            )
+
+    preamble_text = "\n".join(preamble).strip()
+    if not preamble_text:
+        return items
+    return [
+        {
+            "number": "序言",
+            "number_display": "序言",
+            "text": preamble_text,
+            "part": None,
+            "position": 1,
+        },
+        *items,
+    ]
+
+
+def _parse_outline_section_items(
+    lines: list[str],
+    *,
+    min_items: int,
+) -> list[dict]:
+    """纯 ``一、二、…`` 节、无（一）条目层的退化切分：每节一个条目。
+
+    选择说明（对应 parse_outline_numbered_items_from_text 的退化路径约定）：
+    这类文档（如《关于推进以审判为中心的刑事诉讼制度改革的意见》）只有节
+    一层编号，没有可切的（一）条目；若直接返回 ``[]``，全文会退化为一个
+    "正文"大条目，失去按节检索 / 引用的能力。因此把每节提升为一个条目：
+    ``number`` 用全文流水号，``title`` 与 ``part`` 同记节名——节标题本身就
+    是该文档里最小的可引用地址（"一、xxx"），``title`` 承担引用还原，
+    ``part`` 与条目路径保持同一语义。
+
+    空节（标题之后无正文直接进下一节 / 收尾）不产生条目：number 是合成流水
+    号，过滤后统一重排以保持"第N项"连续（与 parse_articles_from_text 丢弃
+    空条文的惯例一致）。节数少于 ``min_items`` 返回 ``[]``。
+    """
+
+    context = _new_parse_context()
+    preamble: list[str] = []
+    items: list[dict] = []
+    current: dict | None = None
+
+    for line in lines:
+        if _is_structural_heading(line, context):
+            if current is not None:
+                items.append(current)
+            _update_context(context, line)
+            current = {
+                "number": "",
+                "number_display": "",
+                "title": line,
+                "text": "",
+                "part": _part_label(context),
+                "position": 0,
+            }
+            continue
+        if current is not None:
+            _append_article_text(current, line)
+        else:
+            preamble.append(line)
+    if current is not None:
+        items.append(current)
+
+    items = [item for item in items if item["text"]]
+    for position, item in enumerate(items, start=1):
+        item["number"] = str(position)
+        item["number_display"] = f"第{position}项"
+        item["position"] = position
+    if len(items) < min_items:
+        return []
+
+    preamble_text = "\n".join(preamble).strip()
+    if not preamble_text:
+        return items
+    return [
+        {
+            "number": "序言",
+            "number_display": "序言",
+            "text": preamble_text,
+            "part": None,
+            "position": 1,
+        },
+        *items,
+    ]
+
+
 def parse_public_document_articles(text: str) -> list[dict]:
     """Return searchable items for a non-empty public document.
 
     Statutory article structure remains authoritative. Policy and meeting
-    documents may instead use a 1./2. item sequence; truly unnumbered material
-    is represented explicitly as one symbolic body item.
+    documents may instead use a 1./2. item sequence or the 一、/（一） outline
+    hierarchy; truly unnumbered material is represented explicitly as one
+    symbolic body item.
     """
 
     articles = parse_articles_from_text(text)
@@ -875,6 +1094,9 @@ def parse_public_document_articles(text: str) -> list[dict]:
     numbered_items = parse_numbered_items_from_text(text)
     if numbered_items:
         return numbered_items
+    outline_items = parse_outline_numbered_items_from_text(text)
+    if outline_items:
+        return outline_items
     return single_body_article(text)
 
 
@@ -1196,6 +1418,13 @@ def _update_context(context: dict[str, str | int | None], heading: str) -> None:
         context["chapter"] = None
         context["section"] = None
         context["enum_ordinal"] = 0
+    # 枚举节标题（"一、…"）必须先于 编/章/节 关键字分支判定：标题正文本身
+    # 可能含这些字（如 "一、第一节标题"、"三、审判环节"），先进关键字分支会
+    # 把 enum_ordinal 重置为 0，破坏后续标题的严格 +1 序号校验。
+    # 第X编/章/节式标题不含 "、"，不会误进枚举分支。
+    elif ENUM_STRUCTURAL_HEADING_RE.match(heading):
+        context["section"] = heading
+        context["enum_ordinal"] = _enum_heading_ordinal(heading) or context["enum_ordinal"]
     elif "分编" in heading:
         context["subbook"] = heading
         context["chapter"] = None
@@ -1214,9 +1443,6 @@ def _update_context(context: dict[str, str | int | None], heading: str) -> None:
     elif "节" in heading:
         context["section"] = heading
         context["enum_ordinal"] = 0
-    elif ENUM_STRUCTURAL_HEADING_RE.match(heading):
-        context["section"] = heading
-        context["enum_ordinal"] = _enum_heading_ordinal(heading) or context["enum_ordinal"]
 
 
 def _append_article_text(current: dict, text: str) -> None:
