@@ -98,6 +98,12 @@ OUTLINE_ITEM_RE = re.compile(
 # 条目正文的行首引用（"（三）项规定的……"）是交叉引用，不是新条目起点；
 # 仿 ARTICLE_REFERENCE_BODY_RE 的约定排除。
 OUTLINE_ITEM_REFERENCE_BODY_RE = re.compile(r"^[款项目段]")
+# ``一、`` 标记（不限正文形态）：形态分流的探测正则。ENUM_STRUCTURAL_HEADING_RE
+# 只接受 2-24 字符的短标题，而电诈意见等文档的 ``一、`` 行是含句读的长条文，
+# 需要用这个超集先收集全部标记行再分类。
+OUTLINE_SECTION_MARKER_RE = re.compile(
+    r"^(?P<ordinal>[〇零一二三四五六七八九十百千万两0-9]{1,3})、(?P<body>.*)$"
+)
 TOC_ENTRY_SENTENCE_PUNCT_RE = re.compile(r"[。！？；：]")
 TOC_ENTRY_MAX_CHARS = 30
 STRUCTURAL_HEADING_RE = re.compile(
@@ -896,7 +902,19 @@ def parse_outline_numbered_items_from_text(
     挂 ``（一）（二）`` 条目，条目内再分 ``1．2．`` 子项（实测样本：电诈意见
     2016 / 电诈意见（二）法发〔2021〕22号、非法集资意见 2019、软暴力意见 2019
     等，spp.gov.cn / court.gov.cn 详情页均为此形态）。本函数是该**形态**的
-    通用解析器：
+    通用解析器。文档先按 ``一、`` 标记行的整体形态分流：
+
+    - 形态 A（全部 ``一、`` 标记行都匹配 ``ENUM_STRUCTURAL_HEADING_RE`` 短
+      标题）：``一、`` 枚举节标题识别为 ``part`` 上下文，``（一）（二）``
+      行为条目（下述主路径）；纯 ``一、二、`` 节、没有（一）条目层的文档
+      （如以审判为中心改革意见的短标题变体）回退节级切分——见
+      :func:`_parse_outline_section_items`；
+    - 形态 B（任一 ``一、`` 标记行是长句条文形、不匹配标题 RE）：整篇按
+      扁平 CJK 序数条文解析（电诈意见 2016 / 法发〔2021〕22号、软暴力意见
+      2019、以审判为中心意见 2016 等实测形态），见
+      :func:`_parse_flat_cjk_articles`。
+
+    主路径（形态 A）约定：
 
     - 节：``一、`` 枚举标题识别为 ``part`` 上下文，沿用
       ``ENUM_STRUCTURAL_HEADING_RE`` 的严格 +1 序号约定（序号不合预期的标题
@@ -911,14 +929,15 @@ def parse_outline_numbered_items_from_text(
     - 前言（文号、引言等）汇成 symbolic ``序言`` 条目置于首位（与纪要解析器
       的 preamble 惯例一致），无前言则不生成；节导语（节标题之后、首个条目
       之前的无编号段落）并入下一条目开头；其余续段按 _append_article_text
-      惯例并入当前条目；
-    - 退化路径：文档只有 ``一、二、`` 节而没有（一）条目层（如以审判为中心
-      改革意见）时回退到节级切分——见 :func:`_parse_outline_section_items`。
+      惯例并入当前条目；某节只有无编号段落、没有任何（N）条目时，这些段落
+      为该节合成一个条目（``title`` 为 None、``part`` 为该节标题）——不得
+      经节导语通道迁移到后续节的条目里（非法集资意见 2019 实测：节二/三/四
+      无条目，其段落曾错挂到节五的（一）上）。
 
     Fail loud：首个条目必须是（一）（之前的散装（N）行不吞，直接报错）；
     条目序号在节内严格连续 +1（新节内允许从（一）重启），断档 / 重复 / 重启
-    均抛 ValueError；条目正文为空同样抛错。形态不存在（无任何（N）条目行）
-    或条目数少于 ``min_items`` 时返回 ``[]``，由调用方决定回退路径。
+    均抛 ValueError；条目正文为空同样抛错。形态不存在或条目数少于
+    ``min_items`` 时返回 ``[]``，由调用方决定回退路径。
     """
 
     lines: list[str] = []
@@ -930,6 +949,14 @@ def parse_outline_numbered_items_from_text(
             continue
         lines.append(line)
 
+    section_markers = [
+        line for line in lines if OUTLINE_SECTION_MARKER_RE.match(line)
+    ]
+    if section_markers and not all(
+        ENUM_STRUCTURAL_HEADING_RE.match(line) for line in section_markers
+    ):
+        return _parse_flat_cjk_articles(lines, min_items=min_items)
+
     if not any(_match_outline_item(line) for line in lines):
         return _parse_outline_section_items(lines, min_items=min_items)
 
@@ -938,12 +965,34 @@ def parse_outline_numbered_items_from_text(
     items: list[dict] = []
     current: dict | None = None
     pending_leadin: list[str] = []
+    pending_section_part: str | None = None
     saw_heading = False
     expected_ordinal = 1
 
+    def _synthesize_section_item() -> dict:
+        """为"只有无编号段落、没有任何（N）条目"的节合成一个条目。"""
+
+        return {
+            "number": str(len(items) + 1),
+            "number_display": f"第{len(items) + 1}项",
+            "title": None,
+            "text": "\n".join(pending_leadin),
+            "part": pending_section_part,
+            "position": len(items) + 1,
+        }
+
     for line in lines:
         if _is_structural_heading(line, context):
+            # 上一节的开放条目在新节标题处关闭：标题之后的行只会进入
+            # 节导语或新条目，不会再续到旧条目上。
+            if current is not None:
+                items.append(current)
+                current = None
+            if pending_leadin:
+                items.append(_synthesize_section_item())
+                pending_leadin = []
             _update_context(context, line)
+            pending_section_part = _part_label(context)
             expected_ordinal = 1
             saw_heading = True
             continue
@@ -983,9 +1032,10 @@ def parse_outline_numbered_items_from_text(
             preamble.append(line)
 
     if current is not None:
-        for leadin in pending_leadin:
-            _append_article_text(current, leadin)
         items.append(current)
+    if pending_leadin:
+        # 全文以裸段落节收尾：同样合成节条目，不回挂到上一节的末条目。
+        items.append(_synthesize_section_item())
 
     if len(items) < min_items:
         return []
@@ -993,6 +1043,91 @@ def parse_outline_numbered_items_from_text(
         if not item.get("text"):
             raise ValueError(
                 f"outline numbered item {item['number']!r} produced empty text"
+            )
+
+    preamble_text = "\n".join(preamble).strip()
+    if not preamble_text:
+        return items
+    return [
+        {
+            "number": "序言",
+            "number_display": "序言",
+            "text": preamble_text,
+            "part": None,
+            "position": 1,
+        },
+        *items,
+    ]
+
+
+def _parse_flat_cjk_articles(
+    lines: list[str],
+    *,
+    min_items: int,
+) -> list[dict]:
+    """形态 B：扁平 CJK 序数条文（``一、`` 至 ``十七、`` 长句条文）。
+
+    电诈意见（2016 / 法发〔2021〕22号）、软暴力意见（2019）、以审判为中心
+    改革意见（2016）等文档的 ``一、`` 行本身就是条文（43–218 字符、含句读），
+    不匹配 ``ENUM_STRUCTURAL_HEADING_RE`` 的短标题形态。分流规则（见
+    :func:`parse_outline_numbered_items_from_text`）：任一 ``一、`` 标记行不
+    匹配标题 RE 时整篇按本函数解析：
+
+    - 每个 ``一、`` 标记行（无论长短）= 一个条文条目；CJK 序数从"一"开始
+      严格 +1 递增，断档 / 乱序抛 ValueError；
+    - ``（一）（二）`` 行是条文内子枚举，**不**提升为条目，按
+      _append_article_text 惯例并入当前条文；其余无标记行同为续段；
+    - ``number`` 用全文流水号（与 CJK 序数一致——实务引用"《意见（二）》
+      第十六条"即由此还原），``number_display`` 用 ``第N项``，``title`` 存
+      原始标记（如 ``七、``，与主路径 ``（一）`` 存 title 的惯例一致），
+      ``part`` 为 None（扁平结构无节上下文）；
+    - 前言 → symbolic ``序言`` 条目；``min_items`` 与 fail-loud 约定同
+      parse_outline_numbered_items_from_text 主路径。
+    """
+
+    preamble: list[str] = []
+    items: list[dict] = []
+    current: dict | None = None
+    expected_ordinal = 1
+
+    for line in lines:
+        marker = OUTLINE_SECTION_MARKER_RE.match(line)
+        if marker:
+            normalized = normalize_article_number(f"第{marker.group('ordinal')}条")
+            ordinal = int(normalized) if normalized.isdigit() else None
+            if ordinal is None or ordinal != expected_ordinal:
+                raise ValueError(
+                    "flat CJK article sequence broken: "
+                    f"expected ordinal {expected_ordinal}, "
+                    f"got {marker.group('ordinal')!r} "
+                    f"(line: {line[:40]!r})"
+                )
+            if current is not None:
+                items.append(current)
+            number = str(ordinal)
+            current = {
+                "number": number,
+                "number_display": f"第{number}项",
+                "title": f"{marker.group('ordinal')}、",
+                "text": marker.group("body").strip(),
+                "part": None,
+                "position": len(items) + 1,
+            }
+            expected_ordinal = ordinal + 1
+            continue
+        if current is not None:
+            _append_article_text(current, line)
+        else:
+            preamble.append(line)
+    if current is not None:
+        items.append(current)
+
+    if len(items) < min_items:
+        return []
+    for item in items:
+        if not item.get("text"):
+            raise ValueError(
+                f"flat CJK article {item['number']!r} produced empty text"
             )
 
     preamble_text = "\n".join(preamble).strip()

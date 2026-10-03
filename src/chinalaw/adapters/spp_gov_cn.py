@@ -376,6 +376,28 @@ def _html_to_text(content_html: str) -> str:
     return _adapter_html.html_to_text(content_html)
 
 
+PRESS_QA_MARKER = "答记者问"
+
+
+def _truncate_press_qa(text: str) -> str:
+    """把发布会页正文末尾的"答记者问"实录整体截掉。
+
+    SPP 发布会页（xwfbh 频道）常在规范全文之后附"……答记者问"问答实录
+    （实测：醉驾意见、量刑程序意见、电诈意见（二）、取保候审规定、
+    信息网络犯罪程序意见的发布会页均有）。问答不是规范文本：不截断时
+    会并入最后一条文正文（醉驾第三十条 2965 字符、量刑程序第二十八条
+    4994 字符），且问答中"第十六条……"的行首引用会劫持 ``第N条``
+    切分（电诈意见（二）曾因此被解析成一条问答复述）。统一在首个含
+    "答记者问"的行处截断；无该标记的页面原样返回。
+    """
+
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if PRESS_QA_MARKER in line:
+            return "\n".join(lines[:index]).rstrip()
+    return text
+
+
 def _infer_level(channel: str | None, title: str) -> str:
     """level 启发式。
 
@@ -754,7 +776,7 @@ class SppGovCnAdapter:
         normalized = _normalize_detail_id(detail_id) or detail_id
         detail = detail or self.fetch_detail(normalized)
         title = detail.get("title") or normalized
-        text = _html_to_text(detail.get("content_html") or "")
+        text = _truncate_press_qa(_html_to_text(detail.get("content_html") or ""))
         if not text.strip():
             raise ValueError(
                 f"spp_gov_cn detail {normalized} produced empty article text"
