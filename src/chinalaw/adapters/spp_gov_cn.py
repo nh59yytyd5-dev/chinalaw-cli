@@ -398,6 +398,30 @@ def _truncate_press_qa(text: str) -> str:
     return text
 
 
+PAGE_CHROME_PREFIXES = (
+    "[责任编辑：",
+    "【责任编辑：",
+    "相关新闻",
+)
+
+
+def _truncate_page_chrome(text: str) -> str:
+    """把详情页正文末尾的页面 chrome（责任编辑署名 / 相关新闻栏）整体裁掉。
+
+    SPP 详情页（zdgz 频道实测：电诈一 2016、非法集资意见、软暴力意见）
+    在 ``<div id="fontzoom">`` 内正文之后带 ``[责任编辑： XXX]`` 与
+    ``相关新闻`` 尾部块，不裁会并入末条正文。统一在首个以这些标记开头
+    的行处截断；无标记的页面原样返回。与 :func:`_truncate_press_qa` 串联
+    使用：发布会页问答实录在前、chrome 在后，两处各裁各的标记。
+    """
+
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip().startswith(PAGE_CHROME_PREFIXES):
+            return "\n".join(lines[:index]).rstrip()
+    return text
+
+
 def _infer_level(channel: str | None, title: str) -> str:
     """level 启发式。
 
@@ -776,7 +800,9 @@ class SppGovCnAdapter:
         normalized = _normalize_detail_id(detail_id) or detail_id
         detail = detail or self.fetch_detail(normalized)
         title = detail.get("title") or normalized
-        text = _truncate_press_qa(_html_to_text(detail.get("content_html") or ""))
+        text = _truncate_press_qa(
+            _truncate_page_chrome(_html_to_text(detail.get("content_html") or ""))
+        )
         if not text.strip():
             raise ValueError(
                 f"spp_gov_cn detail {normalized} produced empty article text"
