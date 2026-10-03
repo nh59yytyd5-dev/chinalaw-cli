@@ -4214,6 +4214,68 @@ class SppTruncatePressQaTests(unittest.TestCase):
         self.assertLess(len(last["text"]), 100)
 
 
+class SppTruncatePageChromeTests(unittest.TestCase):
+    """``spp_gov_cn._truncate_page_chrome``：zdgz 频道详情页正文末尾的
+    ``[责任编辑： XXX]`` / ``相关新闻`` 页面 chrome 整体裁掉（issue #30）。
+
+    实测样本：zdgz/201612/t20161221_176278（电诈一）、
+    zdgz/201901/t20190130_406993（非法集资）、zdgz/201904/t20190409_414128
+    （软暴力）三页末条尾部均混入该尾部块。
+    """
+
+    def test_truncate_at_editor_credit_line(self) -> None:
+        text = "第一条 正文。\n第二条 正文二。\n[责任编辑： 刘淑娟]\n相关新闻\n"
+        self.assertEqual(
+            spp_gov_cn._truncate_page_chrome(text),
+            "第一条 正文。\n第二条 正文二。",
+        )
+
+    def test_truncate_at_related_news_line(self) -> None:
+        text = "第一条 正文。\n相关新闻\n某新闻链接标题。\n"
+        self.assertEqual(spp_gov_cn._truncate_page_chrome(text), "第一条 正文。")
+
+    def test_text_without_chrome_returned_unchanged(self) -> None:
+        text = "第一条 正文。\n第二条 正文二。"
+        self.assertEqual(spp_gov_cn._truncate_page_chrome(text), text)
+
+    def test_qa_and_chrome_are_both_trimmed_in_payload(self) -> None:
+        """同一页面既有答记者问又有责任编辑尾（发布会页典型布局）：
+        两级截断串联后末条只含规范文本。"""
+        adapter = spp_gov_cn.SppGovCnAdapter()
+        fixture = """
+<html><head><title>最高人民法院 最高人民检察院关于办理示例案件的意见_中华人民共和国最高人民检察院</title></head>
+<body>
+<div id="fontzoom">
+  <h2>关于办理示例案件的意见</h2>
+  <p>为依法惩治示例犯罪，制定本意见。</p>
+  <p>第一条 示例正文一。</p>
+  <p>第二条 本意见自公布之日起施行。</p>
+  <p>有关负责人就《关于办理示例案件的意见》答记者问</p>
+  <p>记者：请问出台背景？</p>
+  <p>[责任编辑： 佟海晴]</p>
+  <p>相关新闻</p>
+</div>
+<div id="pageBreak"></div>
+</body></html>
+"""
+        fake = spp_gov_cn.FetchResult(
+            url="https://www.spp.gov.cn/spp/xwfbh/wsfbh/202001/t20200101_000001.shtml",
+            status_code=200,
+            headers={},
+            text=fixture,
+        )
+        with patch.object(spp_gov_cn, "_fetch_text", return_value=fake):
+            payload = adapter.build_law_payload(
+                "spp/xwfbh/wsfbh/202001/t20200101_000001",
+                search_row={"channel": "sfjs"},
+            )
+        last = payload["articles"][-1]
+        self.assertEqual(last["number_display"], "第二条")
+        self.assertNotIn("记者", last["text"])
+        self.assertNotIn("责任编辑", last["text"])
+        self.assertNotIn("相关新闻", last["text"])
+
+
 class SppGovCnVerifySourceTests(unittest.TestCase):
     """spp_gov_cn 通过 verify-source pipeline 的端到端契约。"""
 
