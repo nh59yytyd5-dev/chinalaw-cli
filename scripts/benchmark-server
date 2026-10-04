@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""Exercise real REST/MCP on an isolated DB copy with authentication and logging.
+
+The server binds only to loopback and uses synthetic credentials. Both the
+server and local load generator run in this process, so externally imposed CPU
+and memory limits cover both. Never changes the input database or live service.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import hashlib
+import json
+import logging
+import math
+import os
+import secrets
+import socket
+import sqlite3
+import statistics
+import sys
+import tempfile
+import threading
+import time
+from collections import Counter
+from contextlib import AsyncExitStack, closing
+from pathlib import Path
+
+import httpx2
+import uvicorn
+from mcp import Client
+from mcp.client.streamable_http import streamable_http_client
+
+from chinalaw.db import connect_readonly, current_version
+from chinalaw.schema import SCHEMA_VERSION
+from chinalaw.server.app import create_app
+from chinalaw.server.auth_store import PUBLIC_SCOPE, AuthStore
+from chinalaw.server.config import ServerConfig
+
+QUERIES = ["保证期间", "合同", "的", "连带责任保证", "民法典第五百零四条", "股东抽逃出资责任"]
+
+
+def memory_reading() -> dict:
+    """Linux RSS and memory charged to this cgroup; unavailable fields are null."""
+    result = {"rss_mib": None, "cgroup_memory_mib": None}
+    try:
+        status = Path("/proc/self/status").read_text().splitlines()
+        result["rss_mib"] = int(next(s for s in status if s.startswith("VmRSS:")).split()[1]) / 1024
+        line = next(s for s in Path("/proc/self/cgroup").read_text().splitlines()
+                    if s.startswith("0::"))
+        root = Path("/sys/fs/cgroup") / line[3:].lstrip("/")
+        result["cgroup_memory_mib"] = int((root / "memory.current").read_text()) / 1024 ** 2
+    except (OSError, StopIteration, ValueError):
+        pass
+    return result
+
+
+def percentile(values, fraction):
+    return round(values[max(0, math.ceil(len(values) * fraction) - 1)], 2) if values else None
+
+
+def resource_limits():
+    try:
+        line = next(s for s in Path("/proc/self/cgroup").read_text().splitlines()
+                    if s.startswith("0::"))
+        root = Path("/sys/fs/cgroup") / line[3:].lstrip("/")
+        quota, period = (root / "cpu.max").read_text().split()
+        maximum = (root / "memory.max").read_text().strip()
+        peak = int((root / "memory.peak").read_text())
+        return {
+            "cpu_quota_cores": None if quota == "max" else int(quota) / int(period),
+            "memory_limit_mib": None if maximum == "max" else int(maximum) / 1024 ** 2,
+            "cgroup_peak_including_setup_mib": round(peak / 1024 ** 2, 2),
+        }
+    except (OSError, StopIteration, ValueError):
+        return None
+
+
+def _stable_payload(value):
+    if isinstance(value, dict):
+        return {
+            key: _stable_payload(item) for key, item in value.items() if key != "freshness_days"
+        }
+    if isinstance(value, list):
+        return [_stable_payload(item) for item in value]
+    return value
+
+
+def digest(payload):
+    # Age in days may roll over during a sustained run without any data change.
+    encoded = json.dumps(_stable_payload(payload), sort_keys=True, ensure_ascii=False).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def mcp_payload(result):
+    if result.is_error:
+        raise RuntimeError("MCP tool returned an error")
+    payload = result.structured_content
+    if payload is None:
+        payload = json.loads(next(item.text for item in result.content if item.type == "text"))
+    if not isinstance(payload, dict):
+        raise ValueError("MCP tool returned an unexpected payload")
+    return payload
+
+
+async def load_phase(call, cases, expected, concurrency, seconds):
+    durations, errors = [], Counter()
+    memory_peak = memory_reading()
+    counts = Counter()
+    started, cpu = time.perf_counter(), time.process_time()
+    deadline = started + seconds
+
+    async def worker(offset):
+        index = offset
+        while time.perf_counter() < deadline and not errors:
+            case = cases[index % len(cases)]
+            index += 1
+            begin = time.perf_counter()
+            try:
+                payload = await call(case, offset)
+                if digest(payload) != expected[case[0]]:
+                    raise ValueError("result changed during the isolated benchmark")
+            except Exception as exc:
+                errors[type(exc).__name__] += 1
+                return
+            durations.append((time.perf_counter() - begin) * 1000)
+            counts[case[0]] += 1
+
+    async def monitor():
+        while time.perf_counter() < deadline and not errors:
+            for key, value in memory_reading().items():
+                if value is not None:
+                    memory_peak[key] = max(memory_peak[key] or 0, value)
+            await asyncio.sleep(.1)
+
+    await asyncio.gather(monitor(), *(worker(i) for i in range(concurrency)))
+    elapsed = time.perf_counter() - started
+    cpu = time.process_time() - cpu
+    durations.sort()
+    return {
+        "concurrency": concurrency, "requests": len(durations), "errors": dict(errors),
+        "duration_s": round(elapsed, 2), "qps": round(len(durations) / elapsed, 2),
+        "cpu_cores": round(cpu / elapsed, 2),
+        "cpu_ms_per_request": round(cpu * 1000 / len(durations), 2) if durations else None,
+        "p50_ms": round(statistics.median(durations), 2) if durations else None,
+        "p95_ms": percentile(durations, .95), "p99_ms": percentile(durations, .99),
+        "memory_peak_mib_sampled": memory_peak, "completed_by_case": dict(counts),
+    }
+
+
+async def exercise(base, tokens, args):
+    cases = [(f"search-{i}", "chinalaw_search", {"query": q, "limit": 10})
+             for i, q in enumerate(args.query or QUERIES)]
+    report = {"rest": [], "mcp": [], "result_hashes": {}}
+    async with httpx2.AsyncClient(
+        headers={"Host": "benchmark.invalid"}, timeout=20,
+    ) as http:
+        async def rest(case, user=0):
+            response = await http.get(base + "/api/v1/search",
+                                      params={"q": case[2]["query"], "limit": 10},
+                                      headers={"Authorization": "Bearer " + tokens[user]})
+            response.raise_for_status()
+            return response.json()
+
+        expected = {case[0]: digest(await rest(case)) for case in cases}
+        report["result_hashes"].update(expected)
+        for n in args.concurrency:
+            result = await load_phase(rest, cases, expected, n, args.seconds)
+            report["rest"].append(result)
+            print(f"REST concurrency={n}: {result['qps']} QPS, errors={result['errors']}",
+                  file=sys.stderr, flush=True)
+            if result["errors"]:
+                return report
+
+        async with AsyncExitStack() as stack:
+            clients = []
+            for token in tokens:
+                transport_http = await stack.enter_async_context(httpx2.AsyncClient(headers={
+                    "Host": "benchmark.invalid", "Authorization": "Bearer " + token,
+                }))
+                client = await stack.enter_async_context(Client(
+                    streamable_http_client(base + "/mcp", http_client=transport_http),
+                    mode="legacy", read_timeout_seconds=20,
+                ))
+                resolved = await client.call_tool("chinalaw_resolve", {"name": args.law})
+                if not mcp_payload(resolved).get("matched"):
+                    raise ValueError("benchmark law not found; set --law to an existing law")
+                clients.append(client)
+
+            async def mcp(case, user=0):
+                result = await clients[user].call_tool(case[1], case[2])
+                return mcp_payload(result)
+
+            mixed = [*cases,
+                     ("article", "chinalaw_article", {"law": args.law, "number": "1"}),
+                     ("list", "chinalaw_list", {"kind": "law", "page_size": 5})]
+            expected = {case[0]: digest(await mcp(case)) for case in mixed}
+            if any(expected[key] != value for key, value in report["result_hashes"].items()):
+                raise ValueError("REST and MCP returned different search results")
+            report["result_hashes"].update(expected)
+            for n in args.concurrency:
+                result = await load_phase(mcp, mixed, expected, n, args.seconds)
+                report["mcp"].append(result)
+                print(f"MCP concurrency={n}: {result['qps']} QPS, errors={result['errors']}",
+                      file=sys.stderr, flush=True)
+                if result["errors"]:
+                    break
+    return report
+
+
+def benchmark(args, folder):
+    database = folder / "library.db"
+    with connect_readonly(args.db) as source, closing(sqlite3.connect(database)) as target:
+        if current_version(source) != SCHEMA_VERSION:
+            raise ValueError("input schema must match the installed package")
+        source.backup(target)
+    # Evict only the private copy, so Linux charges subsequent file reads to
+    # the benchmark cgroup instead of borrowing another process's warm cache.
+    if hasattr(os, "posix_fadvise"):
+        with database.open("rb") as stream:
+            os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        config = ServerConfig(database, folder / "state", public_url="https://benchmark.invalid",
+                              port=port, local_mode=False, start_worker=False)
+        auth = AuthStore(config.auth_path, config.resource_url)
+        auth.set_password(secrets.token_urlsafe(24))
+        tokens = [auth.issue_query_token(f"benchmark-{i}", [PUBLIC_SCOPE])["token"]
+                  for i in range(max(args.concurrency))]
+        app = create_app(config, auth_store=auth)
+        logging.getLogger().setLevel(logging.WARNING)
+        for name in ("httpx", "httpx2", "mcp"):
+            logging.getLogger(name).setLevel(logging.WARNING)
+        server = uvicorn.Server(uvicorn.Config(app, log_level="error", access_log=False))
+        thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 30
+            while not server.started and thread.is_alive() and time.monotonic() < deadline:
+                time.sleep(.02)
+            if not server.started:
+                raise RuntimeError("isolated server failed to start")
+            report = asyncio.run(exercise(f"http://127.0.0.1:{port}", tokens, args))
+            report["query_log_rows"] = len(app.state.query_log.export())
+            if not any(row["errors"] for key in ("rest", "mcp") for row in report[key]):
+                warmups = 2 * len(args.query or QUERIES) + 2 + len(tokens)
+                expected_logs = warmups + sum(
+                    row["requests"] for key in ("rest", "mcp") for row in report[key]
+                )
+                if report["query_log_rows"] != expected_logs:
+                    raise RuntimeError("query log lost records during the benchmark")
+            report.update(schema_version=SCHEMA_VERSION, source_modified=False,
+                          scope="isolated-loopback-real-REST-MCP",
+                          includes_local_load_generator=True, independent_tokens=len(tokens),
+                          maintenance_worker=False, digest_ignored_fields=["freshness_days"])
+            report["resource_limits"] = resource_limits()
+            return report
+        finally:
+            server.should_exit = True
+            thread.join(timeout=30)
+            if thread.is_alive():
+                raise RuntimeError("isolated server did not shut down")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--db", required=True, type=Path)
+    parser.add_argument("--seconds", type=int, default=20, help="seconds per protocol/concurrency")
+    parser.add_argument("--concurrency", nargs="+", type=int, default=[2, 4, 8])
+    parser.add_argument("--query", action="append")
+    parser.add_argument("--law", default="民法典", help="existing law for the MCP article workload")
+    args = parser.parse_args()
+    if not 1 <= args.seconds <= 300 or any(not 1 <= n <= 32 for n in args.concurrency):
+        parser.error("seconds must be 1–300 and concurrency must be 1–32")
+    if args.query and (
+        len(args.query) > 100 or any(not q.strip() or len(q) > 200 for q in args.query)
+    ):
+        parser.error("provide at most 100 queries of 1–200 characters")
+    with tempfile.TemporaryDirectory(prefix="chinalaw-server-benchmark-") as folder:
+        report = benchmark(args, Path(folder))
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    if any(row["errors"] for key in ("rest", "mcp") for row in report[key]):
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

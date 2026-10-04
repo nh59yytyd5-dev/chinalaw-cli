@@ -88,6 +88,57 @@ class SearchTests(unittest.TestCase):
         return [(hit["law_id"], hit["number"]) for hit in result["article_hits"]
                 if hit["match_mode"] != "fuzzy"]
 
+    def test_late_text_fetch_matches_eager_rows_including_ties_and_tiers(self) -> None:
+        text = "公司作出决议并提供担保。" * 100
+        self.load(
+            _law("a", [text] * 20, title="并列测试法"),
+            _law("b", [text] * 20, title="并列测试法"),
+            _law("local", [text] * 20, title="并列测试法", level="local_regulation"),
+        )
+        with connect(self.db) as conn:
+            for approximate in (False, True):
+                for tier in (None, "national", "local"):
+                    for limit in (1, 10, 50):
+                        options = dict(
+                            query="公司担保", terms=["公司", "担保"], use_fts=True,
+                            limit=limit, tier=tier, approximate=approximate,
+                        )
+                        # A tautological row filter exercises the original eager
+                        # SQL with exactly the same eligible rows and scores.
+                        eager = service._search_articles(conn, law_where=" AND 1", **options)
+                        actual = service._search_articles(conn, **options)
+                        self.assertEqual(actual, eager, (approximate, tier, limit))
+
+    def test_row_filters_are_applied_before_candidate_limit(self) -> None:
+        self.load(_law("outside", ["公司担保。"] * 20), _law(
+            "inside", [], level="local_regulation",
+            articles=[{"number": "1", "text": "公司为他人提供担保。", "part": "目标章"}],
+        ))
+        with connect(self.db) as conn:
+            for filters in (
+                {"law_ids": ["inside"]}, {"in_part": "目标章"},
+                {"law_where": " AND l.level = ?", "law_where_params": ("local_regulation",)},
+            ):
+                hits = service._search_articles(
+                    conn, query="担保", terms=["担保"], use_fts=True, limit=1, **filters,
+                )
+                self.assertEqual([(h["law_id"], h["number"]) for h in hits], [("inside", "1")])
+
+    def test_ordered_substring_scan_preserves_date_position_and_ties(self) -> None:
+        for key, published, level in (
+            ("z", "2020-01-01", "law"), ("a", "2020-01-01", "law"),
+            ("new", "2025-01-01", "law"), ("local", "2025-01-01", "local_regulation"),
+            ("undated", None, "law"),
+        ):
+            self.load(_law(key, ["公司的责任。", "无关。", "对他人的责任。"],
+                           effective_at=published, level=level))
+        with connect(self.db) as conn:
+            for tier in (None, "national", "local"):
+                for limit in (1, 3, 20):
+                    options = dict(query="的", terms=["的"], use_fts=False, limit=limit, tier=tier)
+                    eager = service._search_articles(conn, law_where=" AND 1", **options)
+                    self.assertEqual(service._search_articles(conn, **options), eager)
+
     def test_hits_equal_a_substring_scan(self) -> None:
         self.load(
             _law(

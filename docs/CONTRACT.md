@@ -2362,6 +2362,13 @@ GET `/backups/restore/{id}` 重新读取预览；POST `/backups/restore/{id}/com
 常用 HTTP 状态：400 参数或文件无效，401 未认证，403 权限/同源校验失败，404 无对应资料，
 409 并发冲突/维护占用，410 草稿过期，413 超限，422 请求模型校验，429 队列/登录限流，503 存储或 worker 不可用。
 
+REST search 与 MCP chinalaw_search 在单进程内共享重检索执行额度，默认执行 4、等待 16。
+可通过 `--search-concurrency` / `--search-queue` 或环境变量
+`CHINALAW_SEARCH_CONCURRENCY` / `CHINALAW_SEARCH_QUEUE` 调整。
+队列满返回 `search_busy`、`details.retry_after=1`；REST 为 HTTP 429 并带
+`Retry-After: 1`，MCP 为 `isError=true` 的工具结果，structuredContent 含 `status=429`。
+拒绝请求仍审计，不改变检索排序、权限与正文语义。
+
 ### v0.7.1 查询诊断与时间效力覆盖（设计记录 #20）
 
 HTTP MCP 预期业务错误返回 `CallToolResult(isError=true)`；`content[0].text` 为 JSON，

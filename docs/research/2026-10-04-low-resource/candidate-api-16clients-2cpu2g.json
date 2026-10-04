@@ -1,0 +1,81 @@
+{
+  "rest": [
+    {
+      "concurrency": 16,
+      "requests": 1917,
+      "errors": {},
+      "duration_s": 60.41,
+      "qps": 31.73,
+      "cpu_cores": 1.99,
+      "cpu_ms_per_request": 62.69,
+      "p50_ms": 500.9,
+      "p95_ms": 661.08,
+      "p99_ms": 740.87,
+      "memory_peak_mib_sampled": {
+        "rss_mib": 163.984375,
+        "cgroup_memory_mib": 182.86328125
+      },
+      "completed_by_case": {
+        "search-3": 322,
+        "search-0": 319,
+        "search-1": 320,
+        "search-2": 319,
+        "search-5": 318,
+        "search-4": 319
+      }
+    }
+  ],
+  "mcp": [
+    {
+      "concurrency": 16,
+      "requests": 2233,
+      "errors": {},
+      "duration_s": 60.42,
+      "qps": 36.96,
+      "cpu_cores": 1.98,
+      "cpu_ms_per_request": 53.66,
+      "p50_ms": 486.07,
+      "p95_ms": 714.1,
+      "p99_ms": 805.81,
+      "memory_peak_mib_sampled": {
+        "rss_mib": 173.1875,
+        "cgroup_memory_mib": 193.12890625
+      },
+      "completed_by_case": {
+        "list": 279,
+        "article": 278,
+        "search-3": 280,
+        "search-2": 280,
+        "search-5": 277,
+        "search-0": 280,
+        "search-4": 278,
+        "search-1": 281
+      }
+    }
+  ],
+  "result_hashes": {
+    "search-0": "0f32ae1a73ad626c56787a58e32e7e52db2ca3f26c44a592e1d8791b1c958d2f",
+    "search-1": "6208656c7a0959173cb886054f3a8c6b82793fc05bc3d9848ae969b80cb9b2bc",
+    "search-2": "68df6b9c3c8fc60400d7ce354502773c0c2cac5f1daccda3bfaf5b6ef4c27ae9",
+    "search-3": "4bc7f6ec79f31df4b5600a9b1c37eab964013af00bcf1730f5a24e1f3984f205",
+    "search-4": "86836fdfcc0f51a266b7632c97dd696a734be1e0ccdd55f359e79122ddd315ac",
+    "search-5": "aff5f501258bd0ec9f5707a3510c0e21eb94e6e529113ff2c6bf62ddc48c99a2",
+    "article": "172e53257157c5a35b0cdda866bddd5cf1b3ba5bec3bacfa0e8bf1b03748e619",
+    "list": "42146f9c27394704aa8b56dfdf199834ca76c41c95e7cf4b09c15aa168aa01aa"
+  },
+  "query_log_rows": 4180,
+  "schema_version": 17,
+  "source_modified": false,
+  "scope": "isolated-loopback-real-REST-MCP",
+  "includes_local_load_generator": true,
+  "independent_tokens": 16,
+  "maintenance_worker": false,
+  "digest_ignored_fields": [
+    "freshness_days"
+  ],
+  "resource_limits": {
+    "cpu_quota_cores": 2.0,
+    "memory_limit_mib": 2048.0,
+    "cgroup_peak_including_setup_mib": 398.18
+  }
+}

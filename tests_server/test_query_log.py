@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 
 from chinalaw.server import cli
 from chinalaw.server.auth_store import PRIVATE_SCOPE, PUBLIC_SCOPE
@@ -103,9 +106,54 @@ def test_queries_command_exports_json_lines(owner_api, capsys):
 
 def test_log_write_failure_does_not_break_queries(owner_api):
     path = owner_api.app.state.config.query_log_path
+    owner_api.app.state.query_log.close()
     path.unlink()
     path.mkdir()  # sqlite cannot open a directory: every write fails
     try:
         assert owner_api.get("/api/v1/search", params={"q": "公开全文"}).status_code == 200
     finally:
         path.rmdir()
+
+
+def test_persistent_writer_commits_concurrent_records_and_releases_files(tmp_path):
+    path = tmp_path / "queries.db"
+    log = QueryLog(path)
+    log.start()
+    log.start()
+    try:
+        def record(index):
+            log.record(channel="http", client="test", tool="search", params={"q": index},
+                       outcome={"counts": {}}, error=None, duration_ms=1)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(record, range(80)))
+        # Readers see every committed row before the writer is closed.
+        rows = log.export()
+        assert len(rows) == 80
+        assert {row["params"]["q"] for row in rows} == set(range(80))
+        with closing(sqlite3.connect(path)) as reader:
+            assert reader.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    finally:
+        log.close()
+        log.close()
+    path.rename(tmp_path / "closed.db")  # Also verifies handle release on Windows.
+
+
+def test_persistent_writer_recovers_after_failed_insert(tmp_path):
+    log = QueryLog(tmp_path / "queries.db")
+    log.start()
+    try:
+        with closing(sqlite3.connect(log.path)) as conn:
+            conn.execute("CREATE TRIGGER fail_insert BEFORE INSERT ON queries "
+                         "BEGIN SELECT RAISE(FAIL, 'synthetic disk failure'); END")
+        result = log.run(lambda: {"counts": {}}, channel="http", client=None,
+                         tool="search", params={"q": "failed log"})
+        assert result == {"counts": {}}
+        assert log.export() == []
+        with closing(sqlite3.connect(log.path)) as conn:
+            conn.execute("DROP TRIGGER fail_insert")
+        log.run(lambda: {"counts": {}}, channel="http", client=None,
+                tool="search", params={"q": "recovered"})
+        assert [row["params"]["q"] for row in log.export()] == ["recovered"]
+    finally:
+        log.close()
