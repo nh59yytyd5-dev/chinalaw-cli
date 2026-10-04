@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Bounded, read-only public search benchmark; run against an isolated DB copy.
+
+Use the installed package (or explicitly set PYTHONPATH) to compare releases.
+No HTTP, authentication, query logging or network latency is measured.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import platform
+import sqlite3
+import statistics
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from chinalaw.admin.catalog import search_library
+from chinalaw.db import connect_readonly, current_version
+from chinalaw.schema import SCHEMA_VERSION
+
+DEFAULT_QUERIES = [
+    "保证期间", "合同", "的", "连带责任保证", "民法典第五百零四条", "股东抽逃出资责任",
+]
+
+
+def bounded_integer(value: str) -> int:
+    number = int(value)
+    if not 1 <= number <= 32:
+        raise argparse.ArgumentTypeError("must be between 1 and 32")
+    return number
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--db", required=True, type=Path)
+    parser.add_argument("--query", action="append", help="repeat for a custom query mix")
+    parser.add_argument("--repeat", type=bounded_integer, default=4)
+    parser.add_argument("--concurrency", nargs="+", type=bounded_integer, default=[1, 2, 4, 8])
+    args = parser.parse_args()
+    queries = args.query or DEFAULT_QUERIES
+    if len(queries) > 100 or any(not q.strip() or len(q) > 200 for q in queries):
+        parser.error("provide 1–100 nonempty queries, each at most 200 characters")
+    with connect_readonly(args.db) as conn:
+        version = current_version(conn)
+    if version != SCHEMA_VERSION:
+        parser.error("upgrade the isolated copy with this release before benchmarking")
+
+    def run(query):
+        started = time.perf_counter()
+        result = search_library(args.db, query, limit=10, include_private=False)
+        elapsed = time.perf_counter() - started
+        digest = hashlib.sha256(json.dumps(
+            result, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+        ).encode()).hexdigest()
+        return query, elapsed, digest
+
+    # Warm each query and retain only result hashes, never normative content.
+    reference = {q: digest for q, _elapsed, digest in map(run, queries)}
+    report = {
+        "python": platform.python_version(), "sqlite": sqlite3.sqlite_version,
+        "schema_version": version, "scope": "public-query-layer-warm",
+        "result_hashes": reference, "measurements": [],
+    }
+    for workers in args.concurrency:
+        started, cpu = time.perf_counter(), time.process_time()
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(run, queries * args.repeat))
+        elapsed, cpu_seconds = time.perf_counter() - started, time.process_time() - cpu
+        if any(digest != reference[q] for q, _elapsed, digest in results):
+            raise RuntimeError("results changed during benchmark; use an isolated stable copy")
+        durations = sorted(duration * 1000 for _q, duration, _digest in results)
+        report["measurements"].append({
+            "concurrency": workers, "requests": len(results),
+            "qps": round(len(results) / elapsed, 2),
+            "cpu_cores": round(cpu_seconds / elapsed, 2),
+            "p50_ms": round(statistics.median(durations), 2),
+            "p95_ms": round(durations[math.ceil(.95 * len(durations)) - 1], 2),
+        })
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

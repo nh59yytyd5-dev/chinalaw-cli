@@ -962,6 +962,26 @@ def _match_outline_item(line: str) -> tuple[int, str, str] | None:
     return int(normalized), f"（{match.group('ordinal')}）", match.group("body")
 
 
+def _clean_outline_lines(text: str) -> list[str]:
+    """Normalize outline input and discard blank and table-of-contents lines."""
+    lines = []
+    for raw_line in text.splitlines():
+        line = _clean_text(raw_line.strip().lstrip("#").strip())
+        if line and not _is_toc_line(line):
+            lines.append(line)
+    return lines
+
+
+def _uses_flat_cjk_articles(lines: list[str]) -> bool:
+    """Distinguish top-level CJK articles from headings containing nested items."""
+    section_markers = [line for line in lines if OUTLINE_SECTION_MARKER_RE.match(line)]
+    if not section_markers or all(_is_heading_shaped_marker(line) for line in section_markers):
+        return False
+    item_count = sum(1 for line in lines if _match_outline_item(line))
+    # More nested items than CJK markers means the long markers are headings.
+    return item_count <= len(section_markers)
+
+
 def parse_outline_numbered_items_from_text(
     text: str,
     *,
@@ -1015,30 +1035,16 @@ def parse_outline_numbered_items_from_text(
     ``min_items`` 时返回 ``[]``，由调用方决定回退路径。
     """
 
-    lines: list[str] = []
-    for raw_line in text.splitlines():
-        line = _clean_text(raw_line.strip().lstrip("#").strip())
-        if not line:
-            continue
-        if _is_toc_line(line):
-            continue
-        lines.append(line)
-
-    section_markers = [
-        line for line in lines if OUTLINE_SECTION_MARKER_RE.match(line)
-    ]
-    if section_markers and not all(
-        _is_heading_shaped_marker(line) for line in section_markers
-    ):
-        item_count = sum(1 for line in lines if _match_outline_item(line))
-        if item_count <= len(section_markers):
-            return _parse_flat_cjk_articles(lines, min_items=min_items)
-        # （一）条目数多于 CJK 标记行数：长句形标记行是节标题而非条文，
-        # 落入下方形态 A 主路径。
-
+    lines = _clean_outline_lines(text)
+    if _uses_flat_cjk_articles(lines):
+        return _parse_flat_cjk_articles(lines, min_items=min_items)
     if not any(_match_outline_item(line) for line in lines):
         return _parse_outline_section_items(lines, min_items=min_items)
+    return _parse_nested_outline_items(lines, min_items=min_items)
 
+
+def _parse_nested_outline_items(lines: list[str], *, min_items: int) -> list[dict]:
+    """Assemble nested items, preserving section lead-ins and numbering checks."""
     context = _new_parse_context()
     preamble: list[str] = []
     items: list[dict] = []
@@ -1139,6 +1145,13 @@ def parse_outline_numbered_items_from_text(
         # 全文以裸段落节收尾：同样合成节条目，不回挂到上一节的末条目。
         items.append(_synthesize_section_item())
 
+    return _finish_outline_items(items, preamble, min_items=min_items)
+
+
+def _finish_outline_items(
+    items: list[dict], preamble: list[str], *, min_items: int,
+) -> list[dict]:
+    """Validate assembled nested items and prepend the original preamble."""
     if len(items) < min_items:
         return []
     for item in items:

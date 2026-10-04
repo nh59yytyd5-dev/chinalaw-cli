@@ -1,0 +1,48 @@
+{
+  "python": "3.12.14",
+  "sqlite": "3.34.1",
+  "schema_version": 16,
+  "scope": "public-query-layer-warm",
+  "result_hashes": {
+    "保证期间": "23f4c8f393209c7ba314c86923ae9b687a079c849e8a9de77a72bb9ba76f5cec",
+    "合同": "eb4a7eaa5096a1a932fef785ea5d9d76be1ecc632674aba5fadd331bbc853620",
+    "的": "73a66c1c7c483a9a3a68bb327494b6febbe7e3a9f558f4bf44bf80bbcac5e517",
+    "连带责任保证": "f32c2a90f70f28b5495018043b219fc36ab68ad61bdd00ea26d2a09f3784e91f",
+    "民法典第五百零四条": "1e512ce98ab4b0b58b0525c98d6d6367e3ce94bc5c29d294e8d9ac903c6a9a02",
+    "股东抽逃出资责任": "2e539f1c209aead675d9d119c037685e61af4c30930283df921dcdc6534a88ec"
+  },
+  "measurements": [
+    {
+      "concurrency": 1,
+      "requests": 48,
+      "qps": 6.33,
+      "cpu_cores": 0.99,
+      "p50_ms": 164.83,
+      "p95_ms": 296.56
+    },
+    {
+      "concurrency": 2,
+      "requests": 48,
+      "qps": 10.92,
+      "cpu_cores": 1.89,
+      "p50_ms": 204.56,
+      "p95_ms": 335.36
+    },
+    {
+      "concurrency": 4,
+      "requests": 48,
+      "qps": 17.53,
+      "cpu_cores": 3.34,
+      "p50_ms": 210.98,
+      "p95_ms": 452.42
+    },
+    {
+      "concurrency": 8,
+      "requests": 48,
+      "qps": 17.63,
+      "cpu_cores": 3.56,
+      "p50_ms": 383.88,
+      "p95_ms": 883.44
+    }
+  ]
+}

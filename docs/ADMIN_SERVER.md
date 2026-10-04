@@ -23,7 +23,7 @@ chinalaw-server serve --db ./var/my-library.db --open
 
 `init` 是显式写入操作。新库默认建立空库，`--with-fixtures` 会加载随包公开规范。旧 schema 升级前自动产生同目录的 `*.before-upgrade-时间.sqlite3` 数据库备份；来源附件目录保持原位。`init` 默认输出人类可读摘要，加 `--json` 输出机器可读 JSON（含 `db_path`、`schema_version`、`upgrade_backup` 与库状态），便于脚本判断。`serve` 不会自动初始化或升级资料库。
 
-默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到当前 schema（16）后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌，以及检索日志 `queries.db`），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
+默认库 `~/.chinalaw/chinalaw.db` 由 `init` 升级到当前 schema（17）后，CLI（`chinalaw` / `chinalaw-mcp`）继续兼容同一文件，不需要另建库；升级前已自动生成上述备份。服务相关目录默认与资料库同级：`--state-dir` 默认为 `<db>.server-state/`（认证数据库 `auth.db`、会话与令牌，以及检索日志 `queries.db`），来源附件目录为 `<db>.assets/`（不可通过参数改动，随库迁移）。
 
 升级资料库（再次运行 `init`）前必须先停止运行中的 `serve`：`init` 与服务的维护 worker 共用同一把 `<db>.worker.lock`，服务未停时 `init` 会报"此资料库已有维护服务运行"。
 
@@ -83,6 +83,46 @@ docker compose -f deploy/compose.yaml up -d
 ```
 
 环境变量可替代对应参数：`CHINALAW_DB`、`CHINALAW_STATE_DIR`、`CHINALAW_HOST`、`CHINALAW_PORT`、`CHINALAW_PUBLIC_URL`。不要把密码或访问令牌写入镜像、仓库或命令行参数。`password` 使用交互式隐藏输入。
+
+## 自托管升级与性能验证（schema 17）
+
+修订索引与批量日期查询属于通用优化，适用于本地、容器和企业内网部署，不依赖
+Oracle、ARM 或指定内存容量。新库自动创建索引；旧库必须使用新版本显式初始化，
+只读 HTTP/MCP 请求不会代为迁移。v16 → v17 只增加索引，不改写法规、私域资料或修订快照。
+检索还会跳过纯汉字/数字条件下的正文大小写转换，并在同一批近似候选内复用相同
+正文的匹配计算。这些复用随本次查询结束释放，不跨请求保存，不需要配置缓存失效。
+
+服务器升级按以下顺序执行：备份资料库、附件、认证状态及旧运行环境；停止服务；
+安装新版本；用服务账号运行 `chinalaw-server init --db /srv/chinalaw/library.db`；
+确认返回 `schema_version=17` 后启动服务。路径按实际部署替换。
+`init` 会为旧资料库额外生成 `before-upgrade` SQLite 备份，但不代替附件和认证状态备份。
+回退旧程序时同时恢复升级前资料库；旧服务器不支持读取 v17，不能只降级 wheel。
+Docker 使用上文的 stop → 新镜像 run init → up 顺序。
+
+面板 ZIP 备份恢复目前只接受与运行程序相同的 schema，v16 旧 ZIP 不能直接上传到
+v17 面板。需要时先在隔离的旧版本环境恢复旧备份，再按上述流程升级该副本并重新
+导出 v17 备份；不要手改 ZIP 内的版本号绕过校验。升级后应重新生成一份可供当前面板恢复的备份。
+
+性能测试应使用一致的数据库文件快照，勿复制正在写入的 `.db` 而遗漏 WAL；
+通过现有备份功能或 SQLite backup API 生成快照，并在受限目录保存。
+源码提供查询层基准脚本：
+
+```bash
+python scripts/benchmark-search --db /absolute/isolated-library.db \
+  --repeat 4 --concurrency 1 2 4 8 > benchmark.json
+```
+
+脚本使用当前 Python 环境安装的包；源码开发可显式设置 `PYTHONPATH=src`。
+升级比较时，先用旧运行环境测试 v16 副本，再对同一隔离副本升级并用新环境重测。
+两次 `result_hashes` 应一致，且应在同一北京时间日期内运行，以免默认时点跨日。
+可重复传入 `--query` 定义业务查询组合。脚本默认只查公开库、limit=10、不改库，
+报告只保存查询词与结果哈希，不保存法规正文；若检测到结果变化会失败。
+
+报告的 QPS/CPU 包含结果哈希计算；单次查询延迟只计查询函数执行，不含线程排队、
+认证、日志写入、MCP/REST 编解码和网络。默认样本量适合快速比较，不代表生产 SLA。
+SQLite shared-cache 内存副本不能替代实际文件连接的并发测试。
+确定生产容量还需端到端测试和持续负载测试。增加入口并发并不增加 CPU 算力；
+现有每库单 ASGI worker 约束继续适用，企业管理员应按负载和延迟目标配置代理限流。
 
 ## 远程客户端
 
