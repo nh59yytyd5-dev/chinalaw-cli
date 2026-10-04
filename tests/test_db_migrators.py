@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest import mock
 
 from chinalaw.db import (
     _MIGRATORS,
@@ -37,6 +39,7 @@ from chinalaw.schema import (
     SCHEMA_V15_DELTA_COLUMNS,
     SCHEMA_V15_DELTA_SQL,
     SCHEMA_VERSION,
+    articles_fts_ddl,
 )
 
 SCHEMA_SQL_BY_VERSION = {
@@ -61,6 +64,11 @@ SCHEMA_SQL_BY_VERSION = {
     )
     + SCHEMA_V15_DELTA_SQL,
 }
+SCHEMA_SQL_BY_VERSION[16] = (
+    SCHEMA_SQL_BY_VERSION[15]
+    + "DROP TABLE articles_fts;\n"
+    + articles_fts_ddl(sqlite3.sqlite_version_info)
+)
 
 
 class MigratorRegistryTests(unittest.TestCase):
@@ -178,6 +186,14 @@ class MigratorRegistryTests(unittest.TestCase):
                             existing_tables,
                             f"start={start}: missing required table {required}",
                         )
+                    plan = conn.execute(
+                        "EXPLAIN QUERY PLAN SELECT effective_at FROM revisions WHERE law_id=?",
+                        ("example",),
+                    ).fetchall()
+                    self.assertTrue(any(
+                        "COVERING INDEX idx_revisions_law_effective" in row[3]
+                        for row in plan
+                    ), plan)
                 finally:
                     conn.close()
 
@@ -215,6 +231,46 @@ class MigratorRegistryTests(unittest.TestCase):
                     ("legacy-department-rule",),
                 ).fetchone()
                 self.assertEqual(row["level"], "department_rule")
+            finally:
+                conn.close()
+
+    def test_v17_preserves_rows_and_rolls_back_failed_index_upgrade(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = open_connection(Path(tmp) / "t.db")
+            try:
+                conn.executescript(SCHEMA_SQL_BY_VERSION[16])
+                conn.execute(
+                    "INSERT INTO laws(id,title,level,status,source_url,source_name,"
+                    "source_checked_at,source_hash) VALUES "
+                    "('law','测试法','law','current','https://example.org','test','2026','hash')"
+                )
+                conn.execute(
+                    "INSERT INTO revisions(id,law_id,version_label,released_at,"
+                    "effective_at,content_hash,snapshot_json) VALUES "
+                    "('rev','law','v1','2020-01-01','2020-02-01','hash','{}')"
+                )
+                set_meta(conn, "schema_version", "16")
+                conn.commit()
+                before = tuple(conn.execute("SELECT * FROM revisions").fetchone())
+                original = _MIGRATORS[16]
+
+                def fail_after_index(connection):
+                    original(connection)
+                    raise RuntimeError("interrupted upgrade")
+
+                with (
+                    mock.patch.dict(_MIGRATORS, {16: fail_after_index}),
+                    self.assertRaisesRegex(RuntimeError, "interrupted"),
+                ):
+                    migrate(conn)
+                self.assertEqual(current_version(conn), 16)
+                self.assertIsNone(conn.execute(
+                    "SELECT name FROM sqlite_master WHERE name='idx_revisions_law_effective'"
+                ).fetchone())
+                self.assertEqual(migrate(conn), SCHEMA_VERSION)
+                self.assertEqual(tuple(conn.execute("SELECT * FROM revisions").fetchone()), before)
+                self.assertEqual(migrate(conn), SCHEMA_VERSION)
+                self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             finally:
                 conn.close()
 

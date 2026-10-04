@@ -1,10 +1,27 @@
 """Literal fallback must remain bounded, explicit, and scoped."""
+from unittest import mock
+
 from chinalaw import formatters, service
 from chinalaw.fuzzy import fragments, matching_fragments
 from tests.test_search_ranking import SearchTests, _law
 
 
 class FuzzyTests(SearchTests):
+    def test_duplicate_candidates_share_work_but_not_mutable_results(self):
+        matched = '公司作出决议并提供担保'
+        missed = '公司另行规定'
+        self.load(_law('dup', [matched, matched, missed, missed]))
+        with mock.patch.object(service, 'matching_fragments', wraps=matching_fragments) as check:
+            result = service.search(self.db, '公司担保决议', kind='article', versions='all')
+        self.assertEqual(check.call_count, 2)
+        first, second = result['article_hits']
+        self.assertEqual(first['fuzzy']['matched'], second['fuzzy']['matched'])
+        first['fuzzy']['matched'].append('仅修改第一条')
+        self.assertNotIn('仅修改第一条', second['fuzzy']['matched'])
+        self.assertEqual(service.search(self.db, '公司返还投资')['counts']['total'], 0)
+        self.load(_law('dup', [missed, missed]))
+        self.assertEqual(service.search(self.db, '公司担保决议')['counts']['total'], 0)
+
     def test_complete_fragments_in_one_article(self):
         self.load(_law('a', ['公司担保决议', '公司作出决议并提供担保', '公司', '担保决议']))
         result = service.search(self.db, '公司担保决议', kind='article')

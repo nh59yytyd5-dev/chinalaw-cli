@@ -25,6 +25,7 @@ from chinalaw.schema import (
     SCHEMA_V14_SQL,
     SCHEMA_V15_DELTA_COLUMNS,
     SCHEMA_V15_DELTA_SQL,
+    SCHEMA_V17_DELTA_SQL,
     SCHEMA_VERSION,
     articles_fts_ddl,
 )
@@ -581,6 +582,11 @@ def _migrate_v15_to_v16(conn: sqlite3.Connection) -> None:
     set_meta(conn, "search_tokenizer_version", TOKENIZER_VERSION)
 
 
+def _migrate_v16_to_v17(conn: sqlite3.Connection) -> None:
+    """Index revision ownership and dates without rewriting stored snapshots."""
+    _execute_script(conn, SCHEMA_V17_DELTA_SQL)
+
+
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """空 DB → 一次性落最新累积 DDL。
 
@@ -619,6 +625,7 @@ _MIGRATORS: dict[int, Callable[[sqlite3.Connection], None]] = {
     13: _migrate_v13_to_v14,
     14: _migrate_v14_to_v15,
     15: _migrate_v15_to_v16,
+    16: _migrate_v16_to_v17,
 }
 
 def build_current_schema(conn: sqlite3.Connection) -> None:

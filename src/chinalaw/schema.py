@@ -9,7 +9,13 @@ v0.1 策略：
 
 from __future__ import annotations
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
+
+# Covers version-boundary lookups without reading full revision snapshots.
+SCHEMA_V17_DELTA_SQL = """
+CREATE INDEX IF NOT EXISTS idx_revisions_law_effective
+ON revisions(law_id, effective_at);
+"""
 
 
 SCHEMA_V1_SQL = """

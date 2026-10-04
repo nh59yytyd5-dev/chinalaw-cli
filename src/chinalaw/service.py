@@ -1041,21 +1041,24 @@ def _work_version_starts(conn: sqlite3.Connection, members: list[sqlite3.Row]) -
     """Start dates of every version in the work: each record and its stored revisions."""
     starts = {start for member in members
               if (start := _parse_iso_date(member["effective_at"])) is not None}
-    for member in members:
-        for revision in _fetch_revisions(conn, member["id"]):
-            start = _parse_iso_date(revision.get("effective_at"))
-            if start is not None:
-                starts.add(start)
     # A verified amendment can end a text's currency even before its new full
     # text is available. It is not a repeal of the law itself.
-    for member in members:
-        for row in conn.execute(
-            "SELECT effective_at FROM law_relations "
-            "WHERE from_law_id = ? AND relation_type = 'revised_by'",
-            (member["id"],),
+    # Only dates are needed: avoid reading/sorting snapshot_json for every
+    # member. Batches also stay below older SQLite builds' 999-variable limit.
+    ids = list(dict.fromkeys(member["id"] for member in members))
+    for offset in range(0, len(ids), 400):
+        batch = ids[offset:offset + 400]
+        placeholders = ",".join("?" for _ in batch)
+        for table, key, extra in (
+            ("revisions", "law_id", ""),
+            ("law_relations", "from_law_id", " AND relation_type = 'revised_by'"),
         ):
-            if (boundary := _parse_iso_date(row["effective_at"])) is not None:
-                starts.add(boundary)
+            for row in conn.execute(
+                f"SELECT effective_at FROM {table} WHERE {key} IN ({placeholders}){extra}",
+                batch,
+            ):
+                if (boundary := _parse_iso_date(row["effective_at"])) is not None:
+                    starts.add(boundary)
     return starts
 
 
@@ -1515,7 +1518,14 @@ def _segment_check(terms: list[str], *, indexed: bool) -> tuple[str, list[str]]:
         if indexed and is_exact_phrase(term):
             continue
         folded = term.lower()
-        clauses.append("(instr(lower(a.text), ?) > 0 OR instr(lower(l.title), ?) > 0)")
+        # Han characters and digits cannot change under case folding. Avoid
+        # lower() over every stored text for these terms; retain it for all
+        # other input, including non-ASCII letters on ICU-enabled SQLite.
+        if re.fullmatch(r"[㐀-䶿一-鿿0-9]+", folded):
+            text_column, title_column = "a.text", "l.title"
+        else:
+            text_column, title_column = "lower(a.text)", "lower(l.title)"
+        clauses.append(f"(instr({text_column}, ?) > 0 OR instr({title_column}, ?) > 0)")
         params.extend((folded, folded))
     return " AND ".join(clauses), params
 
@@ -1593,13 +1603,20 @@ def _search_articles(
             [*check_params, *extra_params, *tier_params, limit],
         ).fetchall()
     hits = []
+    fragment_cache: dict[str, list[str] | None] = {}
     for row in rows:
-        hit = _article_hit_from_row(row, terms)
         if approximate:
-            matched = matching_fragments(terms, row["text"])
+            # Versions often repeat the same text. Reuse only within this
+            # candidate batch (bounded by the search pool), including misses.
+            text = row["text"]
+            if text not in fragment_cache:
+                fragment_cache[text] = matching_fragments(terms, text)
+            matched = fragment_cache[text]
             if matched is None:
                 continue
-            hit.update(match_mode="fuzzy", fuzzy={"matched": matched})
+        hit = _article_hit_from_row(row, terms)
+        if approximate:
+            hit.update(match_mode="fuzzy", fuzzy={"matched": list(matched)})
         hits.append(hit)
     return hits
 
