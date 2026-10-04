@@ -6,9 +6,16 @@ import ipaddress
 import socket
 from dataclasses import dataclass, replace
 from email.message import Message
+from http.cookiejar import CookieJar
 from typing import Any
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, OpenerDirector, Request, build_opener
+from urllib.request import (
+    HTTPCookieProcessor,
+    HTTPRedirectHandler,
+    OpenerDirector,
+    Request,
+    build_opener,
+)
 
 from chinalaw.resource_limits import (
     MAX_BINARY_BYTES,
@@ -183,7 +190,12 @@ class PolicyRedirectHandler(HTTPRedirectHandler):
 
 
 def build_policy_opener(policy: SourcePolicy, *handlers: object) -> OpenerDirector:
-    return build_opener(PolicyRedirectHandler(policy), *handlers)
+    # 每次调用新建 CookieJar：只在单次请求链内容纳 cookie——足够通过
+    # WAF 的"307 + Set-Cookie 质询"（公报站 wzws_cid 实测：质询跳转时
+    # 回显 cookie 即放行，不跨调用持久化，避免源间状态串扰）。
+    return build_opener(
+        PolicyRedirectHandler(policy), HTTPCookieProcessor(CookieJar()), *handlers
+    )
 
 
 def response_charset(headers: dict[str, str], default: str = "utf-8") -> str:

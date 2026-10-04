@@ -23,6 +23,19 @@ class NetworkPolicyTests(unittest.TestCase):
             resolve_hosts=False,
         )
 
+    def test_build_policy_opener_carries_per_call_cookie_jar(self) -> None:
+        """opener 带单次请求链 CookieJar：WAF"307 + Set-Cookie 质询"（公报站
+        wzws_cid 实测形态）需要在质询跳转时回显 cookie，否则无限重定向。"""
+
+        from urllib.request import HTTPCookieProcessor
+
+        from chinalaw.netio import build_policy_opener
+
+        opener = build_policy_opener(self.policy)
+        self.assertTrue(
+            any(isinstance(handler, HTTPCookieProcessor) for handler in opener.handlers)
+        )
+
     def test_allows_https_allowlisted_host_and_subdomain(self) -> None:
         self.assertEqual(
             validate_url("https://example.test/rules", self.policy),
