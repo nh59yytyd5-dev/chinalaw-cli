@@ -32,6 +32,25 @@ def _law(law_id: str, texts: list[str], **extra) -> dict:
 
 
 class TokenTests(unittest.TestCase):
+    def test_segment_checks_match_legacy_lower_for_mixed_unicode(self) -> None:
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript("CREATE TABLE articles(text); CREATE TABLE laws(title);")
+            conn.executemany("INSERT INTO articles VALUES (?)", [
+                ("公司的WTO规则第30条",), ("㐀汉字 15000元",),
+                ("Ä ä İ i ß Ⅰ ⅰ",), ("无关文本",),
+            ])
+            conn.executemany("INSERT INTO laws VALUES (?)", [("WTO条例",), ("公司规定",)])
+            for terms in (["的"], ["30"], ["公司", "wto"], ["WTO"], ["Ä"],
+                          ["İ"], ["ß"], ["Ⅰ"], ["㐀"], ["公司，"]):
+                check, params = service._segment_check(terms, indexed=False)
+                legacy = " AND ".join(
+                    "(instr(lower(a.text), ?) > 0 OR instr(lower(l.title), ?) > 0)"
+                    for _ in terms
+                )
+                prefix = "SELECT a.rowid,l.rowid FROM articles a CROSS JOIN laws l WHERE "
+                self.assertEqual(conn.execute(prefix + check, params).fetchall(),
+                                 conn.execute(prefix + legacy, params).fetchall(), terms)
+
     def test_bigrams_digits_and_single_characters(self) -> None:
         self.assertEqual(index_tokens("超越权限，处30日"), "超越 越权 权限 处 30 日")
         self.assertEqual(index_tokens("ＷＴＯ规则"), "wto 规则")
