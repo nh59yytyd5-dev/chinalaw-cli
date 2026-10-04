@@ -315,11 +315,29 @@ def _gov_cn_meta(html: str, name: str) -> str | None:
     return None
 
 
+GOV_CN_CONTENT_CLOSE_RE = re.compile(r"<div\b|</div\s*>", re.IGNORECASE)
+
+
+def _span_div_body(html: str, start: int) -> str:
+    """从 ``start``（UCAP-CONTENT 开标签结束处）数 div 嵌套，返回配对
+    ``</div>`` 之前的片段；嵌套失衡时退化为到文档末尾（与既有行为一致）。"""
+
+    depth = 1
+    for match in GOV_CN_CONTENT_CLOSE_RE.finditer(html, start):
+        if match.group(0).lower().startswith("</"):
+            depth -= 1
+            if depth == 0:
+                return html[start : match.start()]
+        else:
+            depth += 1
+    return html[start:]
+
+
 def _extract_gov_cn_content_html(html: str) -> str:
     match = GOV_CN_CONTENT_OPEN_RE.search(html or "")
     if not match:
         return ""
-    body = html[match.end():]
+    body = _span_div_body(html, match.end())
     # zhengceku 等页面常并列 PC / 移动两份内容容器（mhide / pchide 交替
     # 隐藏），第一份 id=UCAP-CONTENT、第二份无 id 但 class 同为
     # pages_content（实测：公安机关办理刑事案件程序规定 2020

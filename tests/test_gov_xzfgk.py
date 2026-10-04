@@ -212,6 +212,24 @@ class GovXzfgkAdapterTests(unittest.TestCase):
         self.assertEqual(content.count("第一条"), 1)
         self.assertNotIn("pchide", content)
 
+    def test_extract_gov_cn_content_html_stops_at_content_div_close(self) -> None:
+        """公报页无 gjgzk_wz 标记时以 UCAP-CONTENT 闭标签为界，页脚不进正文。"""
+
+        html = (
+            '<div class="pages_content mhide" id="UCAP-CONTENT">'
+            "<p>第三十四条 本规定自2014年12月1日起施行。</p>"
+            '<div style="display:none"></div>'
+            "</div>"
+            '<div class="pageInfo pageGray" id="pagination"></div>'
+            '<div class="xg-list related"><div class="pannel-title">相关稿件</div></div>'
+            '<div class="footer_wrap"><ul><li>链接：全国人大</li></ul></div>'
+        )
+        content = gov_xzfgk._extract_gov_cn_content_html(html)
+        self.assertIn("第三十四条", content)
+        self.assertNotIn("相关稿件", content)
+        self.assertNotIn("footer_wrap", content)
+        self.assertNotIn("全国人大", content)
+
     def test_build_law_payload_cleans_admin_regulation_detail(self) -> None:
         adapter = gov_xzfgk.GovXzfgkAdapter()
         with patch.object(gov_xzfgk, "_fetch_text", return_value=self._detail_result()):
