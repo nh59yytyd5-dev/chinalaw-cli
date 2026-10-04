@@ -11,9 +11,10 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 import time
 from collections.abc import Callable
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypeVar
@@ -62,11 +63,44 @@ def summarize(tool: str, result: Any) -> dict:
 class QueryLog:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
+        self._write_lock = threading.RLock()
+        self._connection: sqlite3.Connection | None = None
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with closing(sqlite3.connect(self.path, timeout=10)) as conn:
             conn.executescript(QUERY_LOG_SCHEMA)
         if os.name == "posix":
             self.path.chmod(0o600)
+
+    def start(self) -> None:
+        """Keep a serialized writer open during serving, retaining durable commits."""
+        with self._write_lock:
+            if self._connection is not None:
+                return
+            conn = sqlite3.connect(self.path, timeout=1, check_same_thread=False)
+            try:
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA synchronous = FULL")
+            except Exception:
+                conn.close()
+                raise
+            self._connection = conn
+
+    def close(self) -> None:
+        with self._write_lock:
+            if self._connection is not None:
+                self._connection.close()
+                self._connection = None
+
+    @contextmanager
+    def _writer(self):
+        with self._write_lock:
+            if self._connection is not None:
+                with self._connection:
+                    yield self._connection
+            else:
+                # CLI/standalone users need not manage a persistent lifecycle.
+                with closing(sqlite3.connect(self.path, timeout=1)) as conn, conn:
+                    yield conn
 
     def record(
         self,
@@ -80,7 +114,7 @@ class QueryLog:
         duration_ms: int,
     ) -> None:
         try:
-            with closing(sqlite3.connect(self.path, timeout=1)) as conn, conn:
+            with self._writer() as conn:
                 conn.execute(
                     "INSERT INTO queries(at, channel, client, tool, params_json, outcome_json, "
                     "error, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

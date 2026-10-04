@@ -151,7 +151,31 @@ MCP 暴露 `chinalaw_resolve`、`chinalaw_search`、`chinalaw_article`、`chinal
 
 已用 MCP SDK 2.2.0 的标准客户端测试 `legacy`（2025-11-25）与 `auto`（2026-07-28）两种 HTTP 协议模式，并覆盖匿名拒绝、私域隔离、完整正文和只读工具集合。既有 stdio 协议仍保持 2025-06-18。具体商业 Work 平台的账号权限、连接入口和托管 OAuth 接入未作实际登录验证，不作全平台兼容承诺。
 
+## 小配置与多人检索
+
+以 2 核 / 2GB、单 ASGI worker 为验证目标。REST search 和 MCP chinalaw_search
+共享重检索额度，默认同时执行 4 个，另允许 16 个等待。排队不占工作线程；认证、
+文章读取与健康检查使用普通线程池。此设置适用于自建服务器、容器及云主机，不依赖甲骨文。
+
+启动参数 `--search-concurrency 4 --search-queue 16` 可覆盖默认值，也可设置
+`CHINALAW_SEARCH_CONCURRENCY`（1–32）与 `CHINALAW_SEARCH_QUEUE`（0–128）；命令行优先。
+执行额度不是在线用户数，等待位置也不增加吞吐。客户端建议最多同时发出 2 个重检索。
+队列满时 REST 返回 HTTP 429、`Retry-After: 1`；MCP 返回 `isError=true`，错误载荷含
+`error=search_busy`、`status=429`、`details.retry_after=1`。客户端至少等待 1 秒并加入
+随机退避再重试。拒绝请求仍记录日志；日志 `duration_ms` 不含等待执行额度的时间。
+
+代理请求额度与应用执行额度分别设置；提高代理额度前应保留按令牌限速。MCP 长连接数
+不等于同时执行的查询数。导入、备份与恢复安排在低峰，单独评估维护期间的资源预算。
+
+真实协议基准 `python scripts/benchmark-server --db /path/to/library-copy.db --seconds 60
+--concurrency 4 8` 使用临时数据库副本、独立令牌与 MCP 会话，保留认证和日志，验证结果与
+日志条数。服务器与负载发生器同进程运行，统计包含二者，未覆盖 TLS、外网往返、操作系统
+和维护任务。详细结果见[小配置验证记录](research/2026-10-04-low-resource/README.md)。
+
 ## 检索日志
+
+运行时复用串行日志写连接，使用 WAL 和逐条 FULL 同步事务提交。热备份使用 SQLite backup
+API，或停服后复制；不能只复制正在使用的 `queries.db` 而忽略 WAL。
 
 服务记录每次只读查询，用来了解资料库的实际用法：MCP 的六个工具和 REST `/api/v1/search`。每条记录包含时间、渠道、客户端、工具、查询参数、命中概况（数量或是否找到）、错误代码和耗时；不记录条文或私域规范的正文。
 

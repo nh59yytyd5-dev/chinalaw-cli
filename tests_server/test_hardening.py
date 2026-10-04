@@ -16,10 +16,34 @@ from chinalaw.admin.gate import MaintenanceGate
 from chinalaw.server import auth_store as auth_module
 from chinalaw.server import cli
 from chinalaw.server.app import create_app
-from chinalaw.server.auth_store import AuthStore
+from chinalaw.server.auth_store import PUBLIC_SCOPE, AuthStore
 from chinalaw.server.oauth import MAX_PENDING_PER_CLIENT
 from tests_server.conftest import PASSWORD
 from tests_server.test_oauth_mcp import authorization, consent_code
+
+
+def test_token_use_skips_same_second_writes_without_caching_authorization(tmp_path, monkeypatch):
+    auth = AuthStore(tmp_path / "auth.db", "https://example.org/mcp")
+    token = auth.issue_query_token("test", [PUBLIC_SCOPE])
+    now = int(time.time())
+    monkeypatch.setattr(auth_module.time, "time", lambda: now)
+    connect = sqlite3.connect
+    statements = []
+
+    def traced_connect(*args, **kwargs):
+        conn = connect(*args, **kwargs)
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    monkeypatch.setattr(auth_module.sqlite3, "connect", traced_connect)
+    for _ in range(5):
+        assert auth.bearer(token["token"]) is not None
+    assert sum(sql.startswith("UPDATE credentials SET last_used_at") for sql in statements) == 1
+    monkeypatch.setattr(auth_module.time, "time", lambda: now + 1)
+    assert auth.bearer(token["token"]) is not None
+    assert sum(sql.startswith("UPDATE credentials SET last_used_at") for sql in statements) == 2
+    auth.revoke_credential(token["id"])
+    assert auth.bearer(token["token"]) is None
 
 
 def test_login_limit_is_per_address_with_backoff(api):

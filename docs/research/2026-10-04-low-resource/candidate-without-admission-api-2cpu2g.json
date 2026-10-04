@@ -1,0 +1,131 @@
+{
+  "rest": [
+    {
+      "concurrency": 4,
+      "requests": 2105,
+      "errors": {},
+      "duration_s": 60.1,
+      "qps": 35.03,
+      "cpu_cores": 1.89,
+      "cpu_ms_per_request": 53.98,
+      "p50_ms": 103.25,
+      "p95_ms": 203.28,
+      "p99_ms": 254.91,
+      "memory_peak_mib_sampled": {
+        "rss_mib": 122.8515625,
+        "cgroup_memory_mib": 141.84375
+      },
+      "completed_by_case": {
+        "search-2": 351,
+        "search-3": 351,
+        "search-1": 351,
+        "search-0": 351,
+        "search-4": 351,
+        "search-5": 350
+      }
+    },
+    {
+      "concurrency": 8,
+      "requests": 1646,
+      "errors": {},
+      "duration_s": 60.17,
+      "qps": 27.35,
+      "cpu_cores": 1.99,
+      "cpu_ms_per_request": 72.87,
+      "p50_ms": 266.55,
+      "p95_ms": 536.32,
+      "p99_ms": 699.45,
+      "memory_peak_mib_sampled": {
+        "rss_mib": 148.47265625,
+        "cgroup_memory_mib": 167.86328125
+      },
+      "completed_by_case": {
+        "search-0": 275,
+        "search-1": 277,
+        "search-3": 273,
+        "search-5": 274,
+        "search-4": 274,
+        "search-2": 273
+      }
+    }
+  ],
+  "mcp": [
+    {
+      "concurrency": 4,
+      "requests": 2199,
+      "errors": {},
+      "duration_s": 60.16,
+      "qps": 36.55,
+      "cpu_cores": 1.73,
+      "cpu_ms_per_request": 47.23,
+      "p50_ms": 92.26,
+      "p95_ms": 212.03,
+      "p99_ms": 276.92,
+      "memory_peak_mib_sampled": {
+        "rss_mib": 150.55859375,
+        "cgroup_memory_mib": 170.34765625
+      },
+      "completed_by_case": {
+        "search-2": 276,
+        "search-3": 276,
+        "search-1": 275,
+        "search-0": 274,
+        "search-4": 276,
+        "search-5": 275,
+        "article": 274,
+        "list": 273
+      }
+    },
+    {
+      "concurrency": 8,
+      "requests": 2061,
+      "errors": {},
+      "duration_s": 60.13,
+      "qps": 34.28,
+      "cpu_cores": 1.98,
+      "cpu_ms_per_request": 57.84,
+      "p50_ms": 200.5,
+      "p95_ms": 459.81,
+      "p99_ms": 589.14,
+      "memory_peak_mib_sampled": {
+        "rss_mib": 153.55078125,
+        "cgroup_memory_mib": 174.28125
+      },
+      "completed_by_case": {
+        "article": 257,
+        "list": 256,
+        "search-3": 259,
+        "search-0": 257,
+        "search-2": 258,
+        "search-5": 258,
+        "search-1": 258,
+        "search-4": 258
+      }
+    }
+  ],
+  "result_hashes": {
+    "search-0": "0f32ae1a73ad626c56787a58e32e7e52db2ca3f26c44a592e1d8791b1c958d2f",
+    "search-1": "6208656c7a0959173cb886054f3a8c6b82793fc05bc3d9848ae969b80cb9b2bc",
+    "search-2": "68df6b9c3c8fc60400d7ce354502773c0c2cac5f1daccda3bfaf5b6ef4c27ae9",
+    "search-3": "4bc7f6ec79f31df4b5600a9b1c37eab964013af00bcf1730f5a24e1f3984f205",
+    "search-4": "86836fdfcc0f51a266b7632c97dd696a734be1e0ccdd55f359e79122ddd315ac",
+    "search-5": "aff5f501258bd0ec9f5707a3510c0e21eb94e6e529113ff2c6bf62ddc48c99a2",
+    "article": "172e53257157c5a35b0cdda866bddd5cf1b3ba5bec3bacfa0e8bf1b03748e619",
+    "list": "42146f9c27394704aa8b56dfdf199834ca76c41c95e7cf4b09c15aa168aa01aa"
+  },
+  "query_log_rows": 8033,
+  "schema_version": 17,
+  "source_modified": false,
+  "scope": "isolated-loopback-real-REST-MCP",
+  "includes_local_load_generator": true,
+  "independent_tokens": 8,
+  "maintenance_worker": false,
+  "digest_ignored_fields": [
+    "freshness_days"
+  ],
+  "resource_limits": {
+    "cpu_quota_cores": 2.0,
+    "memory_limit_mib": 2048.0,
+    "cgroup_peak_including_setup_mib": 398.12
+  }
+}
