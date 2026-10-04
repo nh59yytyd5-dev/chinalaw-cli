@@ -51,6 +51,16 @@ def build_parser() -> argparse.ArgumentParser:
             command.add_argument(
                 "--server", action="store_true", help="服务器模式，要求 HTTPS 和密码"
             )
+            command.add_argument(
+                "--search-concurrency", type=int,
+                default=os.environ.get("CHINALAW_SEARCH_CONCURRENCY", "4"),
+                help="同时执行的重检索数（1–32，默认 4）",
+            )
+            command.add_argument(
+                "--search-queue", type=int,
+                default=os.environ.get("CHINALAW_SEARCH_QUEUE", "16"),
+                help="等待检索的请求数（0–128，默认 16）",
+            )
             command.add_argument("--open", action="store_true", help="本机启动时打开浏览器")
             command.add_argument(
                 "--no-query-log", action="store_true", help="不记录检索日志（默认记录）"
@@ -124,6 +134,8 @@ def _serve(args) -> int:
         port=args.port,
         local_mode=not args.server,
         query_log=not args.no_query_log,
+        search_concurrency=args.search_concurrency,
+        search_queue=args.search_queue,
     )
     # Fail before creating credentials if the library needs initialization.
     if not db.is_file() or service.status(db)["schema_version"] != SCHEMA_VERSION:

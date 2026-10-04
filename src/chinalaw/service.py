@@ -1530,6 +1530,44 @@ def _segment_check(terms: list[str], *, indexed: bool) -> tuple[str, list[str]]:
     return " AND ".join(clauses), params
 
 
+def _indexed_article_rows(conn, match, check, extra, params, limit):
+    """Sort narrow candidate rows before fetching text when no row filter needs it."""
+    if not check and not extra:
+        return conn.execute(
+            f"""
+            SELECT {_ARTICLE_HIT_COLUMNS}, matches.score
+            FROM (
+                SELECT r.article_id, articles_fts.rowid AS tie,
+                       bm25(articles_fts, 0.0, 0.1, 1.0) AS score
+                FROM articles_fts
+                JOIN articles_fts_rows r ON r.fts_rowid = articles_fts.rowid
+                WHERE articles_fts MATCH ?
+                ORDER BY score, articles_fts.rowid
+                LIMIT ?
+            ) AS matches
+            JOIN articles a ON a.id = matches.article_id
+            JOIN laws l ON l.id = a.law_id
+            ORDER BY matches.score, matches.tie
+            """,
+            (match, limit),
+        ).fetchall()
+    # Substring checks and law/part filters must run before LIMIT, otherwise
+    # higher-ranked out-of-scope hits could hide eligible results.
+    return conn.execute(
+        f"""
+        SELECT {_ARTICLE_HIT_COLUMNS}, bm25(articles_fts, 0.0, 0.1, 1.0) AS score
+        FROM articles_fts
+        JOIN articles_fts_rows r ON r.fts_rowid = articles_fts.rowid
+        JOIN articles a ON a.id = r.article_id
+        JOIN laws l ON l.id = a.law_id
+        WHERE articles_fts MATCH ?{check}{extra}
+        ORDER BY score
+        LIMIT ?
+        """,
+        (match, *params, limit),
+    ).fetchall()
+
+
 def _search_articles(
     conn: sqlite3.Connection,
     *,
@@ -1571,19 +1609,9 @@ def _search_articles(
             match = f"tier : {tier} AND {{title text}} : ({match})"
         else:
             match = f"{{title text}} : ({match})"
-        rows = conn.execute(
-            f"""
-            SELECT {_ARTICLE_HIT_COLUMNS}, bm25(articles_fts, 0.0, 0.1, 1.0) AS score
-            FROM articles_fts
-            JOIN articles_fts_rows r ON r.fts_rowid = articles_fts.rowid
-            JOIN articles a ON a.id = r.article_id
-            JOIN laws l ON l.id = a.law_id
-            WHERE articles_fts MATCH ?{check}{extra}
-            ORDER BY score
-            LIMIT ?
-            """,
-            (match, *check_params, *extra_params, limit),
-        ).fetchall()
+        rows = _indexed_article_rows(
+            conn, match, check, extra, [*check_params, *extra_params], limit,
+        )
     else:
         tier_filter, tier_params = "", []
         if tier is not None:
@@ -1591,13 +1619,22 @@ def _search_articles(
             op = "IN" if tier == "local" else "NOT IN"
             tier_filter = f" AND l.level {op} ({', '.join('?' for _ in local)})"
             tier_params = local
+        # Broad substring searches otherwise scan every article before sorting.
+        # Keep laws outermost so the released_at index can supply date groups
+        # in order and LIMIT can stop early. Scoped/local scans retain their
+        # existing selective plans and tie order.
+        ordered_scan = not extra and tier != "local"
+        source_join = (
+            "laws l CROSS JOIN articles a ON a.law_id = l.id" if ordered_scan
+            else "articles a JOIN laws l ON l.id = a.law_id"
+        )
+        tie_order = ", a.rowid ASC" if ordered_scan else ""
         rows = conn.execute(
             f"""
             SELECT {_ARTICLE_HIT_COLUMNS}, 0.0 AS score
-            FROM articles a
-            JOIN laws l ON l.id = a.law_id
+            FROM {source_join}
             WHERE 1{check}{extra}{tier_filter}
-            ORDER BY l.released_at DESC, a.position ASC
+            ORDER BY l.released_at DESC, a.position ASC{tie_order}
             LIMIT ?
             """,
             [*check_params, *extra_params, *tier_params, limit],

@@ -344,10 +344,14 @@ class AuthStore:
             scopes = frozenset(json.loads(row["scopes_json"]))
             if PUBLIC_SCOPE not in scopes or not scopes <= READ_SCOPES:
                 return None
-            conn.execute(
-                "UPDATE credentials SET last_used_at = ? WHERE id = ?",
-                (int(time.time()), row["id"]),
-            )
+            used_at = int(time.time())
+            # The stored precision is one second. Rewriting the same value
+            # only acquires a writer lock; authorization is still read afresh.
+            if row["last_used_at"] != used_at:
+                conn.execute(
+                    "UPDATE credentials SET last_used_at = ? WHERE id = ?",
+                    (used_at, row["id"]),
+                )
         return Principal(
             "owner", scopes, "token", client_id=row["client_id"], log_label=credential_label(row)
         )
