@@ -22,7 +22,11 @@ from xml.etree import ElementTree as ET
 
 from chinalaw.aliases import display_short_title, merge_law_aliases
 from chinalaw.contracts import validate_law_payload
-from chinalaw.document_numbers import extract_document_number
+from chinalaw.document_numbers import (
+    DOCUMENT_NUMBER_INLINE_RE,
+    extract_document_number,
+    normalize_document_number,
+)
 from chinalaw.resource_limits import (
     MAX_LOCAL_SOURCE_BYTES,
     read_zip_member_limited,
@@ -248,18 +252,52 @@ def single_body_article(text: str) -> list[dict]:
     ]
 
 
+# 引用语境中的文号是对其他文件的引用，不是本文件文号（issue #26：黑恶势力
+# 2019 系列意见引言"……正确理解和适用……《关于办理黑恶势力犯罪案件若干问题
+# 的指导意见》（法发〔2018〕1号）……"曾把法发〔2018〕1号误抽为本文件文号）。
+# 判定规则：
+# - 紧跟其他文件书名号收尾（《…》（ 或 《…》）→ 引用；
+# - 前缀为引证语（根据/依据/参照/按照/正确理解和适用）且同行内未跨句读 → 引用。
+# 独占一行的文号（发布会页实测：高检发办字〔2023〕187号、高检发〔2026〕5号）
+# 与 "现予公布（法释〔2019〕10号）" 类无引证前缀的行内文号不受抑制。
+DOCUMENT_NUMBER_CITATION_LEAD_RE = re.compile(
+    r"(?:根据|依据|参照|按照|正确理解和适用)[^。；：\n]{0,60}$"
+)
+DOCUMENT_NUMBER_BOOK_TITLE_TAIL_RE = re.compile(r"》\s*[（(]?\s*$")
+
+
 def extract_document_number_from_preamble(text: str | None) -> str | None:
     """Extract a document number only from the heading / preamble region.
 
     HTML source pages often quote repealed or related documents inside article
     bodies. Scanning the whole body would index those references as this
     document's own number, so adapters should use this helper for metadata.
+    Matches in citation context (after another document's book title or a
+    citation lead-in such as 根据/正确理解和适用) are references to other
+    documents and are skipped.
     """
 
     if not text:
         return None
     preamble = _metadata_preamble_text_from_lines(str(text).splitlines())
-    return extract_document_number(preamble)
+    return _extract_own_document_number(preamble)
+
+
+def _extract_own_document_number(text: str) -> str | None:
+    """抽出第一个本文件文号候选；引用语境命中跳过（见上方规则常量）。"""
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        for match in DOCUMENT_NUMBER_INLINE_RE.finditer(line):
+            prefix = line[: match.start()]
+            if not prefix.strip():
+                return normalize_document_number(match.group(1))
+            if DOCUMENT_NUMBER_BOOK_TITLE_TAIL_RE.search(prefix):
+                continue
+            if DOCUMENT_NUMBER_CITATION_LEAD_RE.search(prefix):
+                continue
+            return normalize_document_number(match.group(1))
+    return None
 
 
 def canonicalize_flk_npc(

@@ -104,6 +104,60 @@ class ExtractDocumentNumberTests(unittest.TestCase):
             "法释〔2024〕7号",
         )
 
+    def test_extract_document_number_from_preamble_skips_citation_context(self) -> None:
+        """前言引用他文的文号不是本文件文号（issue #26 软暴力意见实例）。"""
+
+        text = "\n".join(
+            [
+                "最高人民法院 最高人民检察院 公安部 司法部",
+                "关于办理实施“软暴力”的刑事案件若干问题的意见",
+                "为深入贯彻落实中央关于开展扫黑除恶专项斗争的决策部署，正确理解和适用最高人民法院、最高人民检察院、公安部、司法部《关于办理黑恶势力犯罪案件若干问题的指导意见》（法发〔2018〕1号）的有关规定，制定本意见。",
+                "一、“软暴力”是指行为人为谋取不法利益或形成非法影响……",
+            ]
+        )
+        self.assertIsNone(cleaning.extract_document_number_from_preamble(text))
+
+    def test_extract_document_number_from_preamble_skips_bare_citation_lead(self) -> None:
+        """引证语（根据/依据……）引导的行内文号同样视为引用。"""
+
+        text = "\n".join(
+            [
+                "某示例规定",
+                "根据《中华人民共和国刑法》（法发〔1997〕1号）的有关规定，制定本规定。",
+            ]
+        )
+        self.assertIsNone(cleaning.extract_document_number_from_preamble(text))
+
+    def test_extract_document_number_from_preamble_keeps_standalone_number(self) -> None:
+        """独占一行的文号不受引用抑制（醉驾意见题注区实测形态）。"""
+
+        text = "\n".join(
+            [
+                "最高人民法院 最高人民检察院 公安部 司法部关于办理醉酒危险驾驶刑事案件的意见",
+                "高检发办字〔2023〕187号",
+                "第一条 为维护人民群众生命财产安全和道路交通安全……",
+            ]
+        )
+        self.assertEqual(
+            cleaning.extract_document_number_from_preamble(text),
+            "高检发办字〔2023〕187号",
+        )
+
+    def test_extract_document_number_from_preamble_keeps_number_after_notice(self) -> None:
+        """印发通知标题后的独占行文号仍可抽出（认罪认罚 2026 版实测形态）。"""
+
+        text = "\n".join(
+            [
+                "最高人民法院 最高人民检察院 公安部 国家安全部 司法部关于印发《关于适用认罪认罚从宽制度的指导意见》的通知",
+                "高检发〔2026〕5号",
+                "各省、自治区、直辖市高级人民法院、人民检察院、公安厅（局）、国家安全厅（局）、司法厅（局）：",
+            ]
+        )
+        self.assertEqual(
+            cleaning.extract_document_number_from_preamble(text),
+            "高检发〔2026〕5号",
+        )
+
     def test_court_gongbao_extract_document_number_uses_shared_helper(self) -> None:
         """court_gongbao 现在能抽出非 ``法`` 前缀文号——修前漏召的关键场景。
 
