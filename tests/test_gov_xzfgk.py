@@ -157,6 +157,61 @@ class GovXzfgkAdapterTests(unittest.TestCase):
         self.assertEqual(row["title"], "商业银行股权管理暂行办法")
         self.assertEqual(row["source_name"], "www.gov.cn")
 
+    def test_static_pages_cover_zhengceku_and_gongbao_paths(self) -> None:
+        """非 /zhengce/content_ 默认路径的页面经静态表直达（zhengceku/公报）。"""
+
+        adapter = gov_xzfgk.GovXzfgkAdapter()
+        self.assertEqual(
+            adapter.detail_url("gov_cn:content_5535125"),
+            "https://www.gov.cn/zhengce/zhengceku/2020-08/16/content_5535125.htm",
+        )
+        self.assertEqual(
+            adapter.detail_url("gov_cn:content_2827228"),
+            "https://www.gov.cn/gongbao/content/2015/content_2827228.htm",
+        )
+        # 未登记静态表的裸 content id 仍回退默认拼接。
+        self.assertEqual(
+            adapter.detail_url("gov_cn:content_9999999"),
+            "https://www.gov.cn/zhengce/content_9999999.htm",
+        )
+
+    def test_search_list_matches_new_static_rows(self) -> None:
+        adapter = gov_xzfgk.GovXzfgkAdapter()
+        empty = gov_xzfgk.FetchResult(
+            url="https://xzfg.moj.gov.cn/SearchAdvancedFront?title=x",
+            status_code=200,
+            headers={},
+            text="<html><body></body></html>",
+        )
+        with patch.object(gov_xzfgk, "_fetch_text", return_value=empty):
+            gongan = adapter.search_list("公安机关办理刑事案件程序规定", page_size=5)
+            zanyu = adapter.search_list("暂予监外执行规定", page_size=5)
+
+        self.assertEqual(
+            [row["detail_id"] for row in gongan["rows"]],
+            ["gov_cn:content_5535125"],
+        )
+        self.assertEqual(
+            [row["detail_id"] for row in zanyu["rows"]],
+            ["gov_cn:content_2827228"],
+        )
+
+    def test_extract_gov_cn_content_html_drops_duplicate_mobile_container(self) -> None:
+        """PC / 移动双容器页面只保留第一份正文（公安程序规定 2020 实测形态）。"""
+
+        html = (
+            '<div class="pages_content mhide" id="UCAP-CONTENT">'
+            "<p>中华人民共和国公安部令</p><p>第一条 正文。</p>"
+            "</div>"
+            '<div class="pages_content pages_contentm pchide">'
+            "<p>中华人民共和国公安部令</p><p>第一条 正文。</p>"
+            "</div>"
+            '<div class="gjgzk_wz">脚注</div>'
+        )
+        content = gov_xzfgk._extract_gov_cn_content_html(html)
+        self.assertEqual(content.count("第一条"), 1)
+        self.assertNotIn("pchide", content)
+
     def test_build_law_payload_cleans_admin_regulation_detail(self) -> None:
         adapter = gov_xzfgk.GovXzfgkAdapter()
         with patch.object(gov_xzfgk, "_fetch_text", return_value=self._detail_result()):

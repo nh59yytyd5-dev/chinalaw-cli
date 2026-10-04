@@ -110,6 +110,22 @@ GOV_CN_STATIC_PAGES: tuple[dict[str, str], ...] = (
         "url": "https://www.gov.cn/zhengce/2020-02/06/content_5725862.htm",
         "issuing_body": "中国银行保险监督管理委员会",
     },
+    {
+        # 公安部令第159号，zhengceku 路径（非 /zhengce/content_ 默认拼接）。
+        "detail_id": "gov_cn:content_5535125",
+        "title": "公安机关办理刑事案件程序规定",
+        "url": "https://www.gov.cn/zhengce/zhengceku/2020-08/16/content_5535125.htm",
+        "issuing_body": "公安部",
+        "level": "department_rule",
+    },
+    {
+        # 司发通〔2014〕112号，公报路径（非 /zhengce/content_ 默认拼接）。
+        "detail_id": "gov_cn:content_2827228",
+        "title": "暂予监外执行规定",
+        "url": "https://www.gov.cn/gongbao/content/2015/content_2827228.htm",
+        "issuing_body": "最高人民法院 最高人民检察院 公安部 司法部 国家卫生计生委",
+        "level": "judicial_policy",
+    },
 )
 
 
@@ -304,6 +320,18 @@ def _extract_gov_cn_content_html(html: str) -> str:
     if not match:
         return ""
     body = html[match.end():]
+    # zhengceku 等页面常并列 PC / 移动两份内容容器（mhide / pchide 交替
+    # 隐藏），第一份 id=UCAP-CONTENT、第二份无 id 但 class 同为
+    # pages_content（实测：公安机关办理刑事案件程序规定 2020
+    # content_5535125，全文重复两遍致"第一条"duplicate）。在下一个
+    # pages_content 容器起点处截断，只保留第一份。
+    duplicate = re.search(
+        r'<div[^>]*class=["\'][^"\']*\bpages_content\b',
+        body,
+        flags=re.IGNORECASE,
+    )
+    if duplicate:
+        body = body[: duplicate.start()]
     marker = re.search(
         r'<div[^>]*class=["\'][^"\']*\bgjgzk_wz\b',
         body,
@@ -549,8 +577,8 @@ class GovXzfgkAdapter:
                 {},
             )
             title = (
-                _clean_text(content_text.splitlines()[0] if content_text else "")
-                or row.get("title")
+                row.get("title")
+                or _clean_text(content_text.splitlines()[0] if content_text else "")
                 or _strip_title_suffix(_extract_title(result.text) or "")
                 or normalized
             )
@@ -567,7 +595,8 @@ class GovXzfgkAdapter:
                 "source_etag": result.headers.get("ETag"),
                 "checked_at": datetime.now(timezone.utc).isoformat(),
                 "source_name": "www.gov.cn",
-                "level": (
+                "level": row.get("level")
+                or (
                     "department_rule"
                     if _gov_cn_meta(result.text, "lanmu") == "部门规章"
                     else "admin_regulation"
