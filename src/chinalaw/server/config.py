@@ -17,8 +17,14 @@ class ServerConfig:
     local_mode: bool = True
     start_worker: bool = True
     query_log: bool = True
+    search_concurrency: int = 4
+    search_queue: int = 16
 
     def __post_init__(self) -> None:
+        if not 1 <= self.search_concurrency <= 32:
+            raise ValueError("search_concurrency must be between 1 and 32")
+        if not 0 <= self.search_queue <= 128:
+            raise ValueError("search_queue must be between 0 and 128")
         if self.db_path.resolve() == self.auth_path.resolve():
             raise ValueError("the library and authentication database must use different files")
         parsed = urlsplit(self.public_url)

@@ -27,6 +27,7 @@ from chinalaw.server.guard import RequestGuard
 from chinalaw.server.mcp_http import make_mcp
 from chinalaw.server.oauth import OwnerOAuth
 from chinalaw.server.query_log import QueryLog
+from chinalaw.server.search_executor import SearchExecutor
 
 LOG = logging.getLogger(__name__)
 
@@ -40,7 +41,8 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
         raise ValueError("Server mode requires an owner password; initialize credentials first")
     oauth = OwnerOAuth(auth, config.origin)
     query_log = QueryLog(config.query_log_path) if config.query_log else None
-    mcp, mcp_app = make_mcp(config, oauth, query_log)
+    search_executor = SearchExecutor(config.search_concurrency, config.search_queue)
+    mcp, mcp_app = make_mcp(config, oauth, query_log, search_executor)
     gate = MaintenanceGate()
     worker = (
         JobWorker(config.db_path, config.artifacts_dir, gate=gate) if config.start_worker else None
@@ -51,14 +53,20 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
         routes_backup.clear_exports(config.state_dir)
         backups.sweep_restores(config.restores_dir)
         drafts.sweep_drafts(config.db_path)
-        if worker is not None:
-            worker.start()
         try:
+            if query_log is not None:
+                query_log.start()
+            if worker is not None:
+                worker.start()
             async with mcp.session_manager.run():
                 yield
         finally:
-            if worker is not None:
-                worker.stop()
+            try:
+                if worker is not None:
+                    worker.stop()
+            finally:
+                if query_log is not None:
+                    query_log.close()
 
     app = FastAPI(
         title="chinalaw 资料库",
@@ -71,6 +79,7 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
     app.state.config, app.state.auth, app.state.oauth = config, auth, oauth
     app.state.worker = worker
     app.state.query_log = query_log
+    app.state.search_executor = search_executor
     app.state.gate = gate
     app.add_middleware(RequestGuard, config=config)
     app.include_router(routes_auth.router)
@@ -90,6 +99,8 @@ def create_app(config: ServerConfig, *, auth_store: AuthStore | None = None) -> 
     @app.exception_handler(LibraryError)
     async def library_error(request: Request, exc: LibraryError):
         headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
+        if exc.code == "search_busy":
+            headers = {"Retry-After": "1"}
         return JSONResponse(exc.payload(), status_code=exc.status, headers=headers)
 
     @app.exception_handler(RequestValidationError)

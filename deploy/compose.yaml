@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     environment:
       CHINALAW_PUBLIC_URL: https://${CHINALAW_DOMAIN:?Set CHINALAW_DOMAIN to your domain}
+      CHINALAW_SEARCH_CONCURRENCY: ${CHINALAW_SEARCH_CONCURRENCY:-4}
+      CHINALAW_SEARCH_QUEUE: ${CHINALAW_SEARCH_QUEUE:-16}
     volumes:
       - library_data:/data
     expose:

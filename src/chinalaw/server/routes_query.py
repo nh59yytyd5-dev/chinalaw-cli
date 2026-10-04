@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 
+import anyio
 from fastapi import APIRouter, Request
 
 from chinalaw import models, sources
@@ -60,7 +61,7 @@ def revisions(request: Request, kind: str, id: str) -> dict:
 
 
 @router.get("/search")
-def search(
+async def search(
     request: Request,
     q: str,
     kind: str = "all",
@@ -72,7 +73,7 @@ def search(
     versions: str = "folded",
     in_laws: str | None = None,
 ) -> dict:
-    value = principal(request)
+    value = await anyio.to_thread.run_sync(principal, request)
     options = {
         "as_of": as_of,
         "status": status,
@@ -93,15 +94,16 @@ def search(
         )
 
     query_log = request.app.state.query_log
-    if query_log is None:
-        return call()
-    return query_log.run(
-        call,
-        channel="http",
-        client=value.log_label or value.client_id,
-        tool="search",
-        params={"query": q, "kind": kind, "limit": limit, **_set(options)},
-    )
+
+    def logged(operation):
+        if query_log is None:
+            return operation()
+        return query_log.run(
+            operation, channel="http", client=value.log_label or value.client_id,
+            tool="search", params={"query": q, "kind": kind, "limit": limit, **_set(options)},
+        )
+
+    return await request.app.state.search_executor.run_logged(call, logged)
 
 
 @router.get("/system")

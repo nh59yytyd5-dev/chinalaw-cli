@@ -19,6 +19,7 @@ from chinalaw.server.auth_store import PRIVATE_SCOPE, PUBLIC_SCOPE, READ_SCOPES
 from chinalaw.server.config import ServerConfig
 from chinalaw.server.oauth import OwnerOAuth
 from chinalaw.server.query_log import QueryLog
+from chinalaw.server.search_executor import SearchExecutor
 
 READ_ONLY = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
@@ -73,7 +74,11 @@ def _logged(query_log, tool: str, params: dict, call):
         )
 
 
-def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None = None):
+def make_mcp(
+    config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None = None,
+    search_executor: SearchExecutor | None = None,
+):
+    executor = search_executor or SearchExecutor(config.search_concurrency, config.search_queue)
     server = MCPServer(
         "chinalaw",
         version=__version__,
@@ -113,7 +118,7 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
         return logged("resolve", {"name": name}, lambda: resolve(name))
 
     @server.tool(annotations=READ_ONLY)
-    def chinalaw_search(
+    async def chinalaw_search(
         query: str,
         kind: str = "all",
         limit: int = 10,
@@ -149,17 +154,14 @@ def make_mcp(config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None
             "in_laws": in_laws,
         }
         given = {key: value for key, value in options.items() if value and value != "folded"}
-        return logged(
-            "search",
-            {"query": query, "kind": kind, "limit": limit, **given},
+        params = {"query": query, "kind": kind, "limit": limit, **given}
+
+        return await executor.run_logged(
             lambda: catalog.search_library(
-                config.db_path,
-                query,
-                kind=kind,
-                limit=limit,
-                include_private=_private_allowed(),
-                **options,
+                config.db_path, query, kind=kind, limit=limit,
+                include_private=_private_allowed(), **options,
             ),
+            lambda call: logged("search", params, call),
         )
 
     def applicable(date: str, topic: str | None, law: str | None, domain: str | None) -> dict:
