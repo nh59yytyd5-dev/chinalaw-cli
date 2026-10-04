@@ -1,0 +1,41 @@
+{
+  "scope": "warm-public-service-layer-alternating",
+  "measurements": [
+    {
+      "variant": "final",
+      "concurrency": 4,
+      "requests": 72,
+      "qps": 44.77,
+      "cpu_cores": 3.62,
+      "p50_ms": 83.62,
+      "p95_ms": 186.43
+    },
+    {
+      "variant": "first_pass",
+      "concurrency": 4,
+      "requests": 72,
+      "qps": 30.5,
+      "cpu_cores": 3.5,
+      "p50_ms": 105.15,
+      "p95_ms": 258.08
+    },
+    {
+      "variant": "first_pass",
+      "concurrency": 4,
+      "requests": 72,
+      "qps": 30.11,
+      "cpu_cores": 3.47,
+      "p50_ms": 113.08,
+      "p95_ms": 265.91
+    },
+    {
+      "variant": "final",
+      "concurrency": 4,
+      "requests": 72,
+      "qps": 44.45,
+      "cpu_cores": 3.6,
+      "p50_ms": 80.54,
+      "p95_ms": 193.02
+    }
+  ]
+}

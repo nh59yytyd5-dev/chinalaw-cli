@@ -48,7 +48,8 @@
 ## 2. 数据模型（SQLite DDL）
 
 > 所有表 schema 由 `chinalaw.schema` 模块在显式写入流程调用 `migrate()` 时创建。
-> 当前 schema 版本 = **16**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
+> 当前 schema 版本 = **17**；`status` / `doctor` 默认只读，不会借检查之名迁移旧库。
+> v17 增加修订归属与施行日期索引，减少版本判断的扫描开销；不改变法规数据或检索返回协议。
 >
 > `law_relations` / `applicability_rules` 已进入 alpha 协议，用于时间效力检索线索。`alias_records` / `call_log` 仍属后续方向。
 
