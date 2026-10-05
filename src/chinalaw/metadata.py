@@ -697,13 +697,15 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "chinalaw_article",
         "title": "Get Chinese legal article",
         "description": (
-            "Return one local article by law name/id and article number. "
+            "Read a complete article: prefer detail=compact for ordinary reading; "
+            "set it explicitly. "
+            "Compact includes complete text, provenance, selected/current versions and diagnosis, "
+            "including historical dates via as_of. Choose full only for full revision/version "
+            "lists or compatibility fields; view.full supplies that call. "
             "If not found, inspect diagnosis before citing. Private norm "
             "fallback hits are excluded unless the server is started with "
-            "--allow-private-norms. detail=compact keeps complete text, provenance, "
-            "selected/current versions and diagnosis; omits duplicate item and version lists. "
-            "view.full gives the full-history lookup. "
-            "Default full preserves all fields. Risk: read."
+            "--allow-private-norms. Omitted detail defaults to full for backward compatibility. "
+            "Risk: read."
         ),
         "cli_equivalent": "chinalaw article <law> <number> --format json",
         "risk": "read",
@@ -744,6 +746,10 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "chinalaw_search",
         "title": "Search Chinese law database",
         "description": (
+            "Find provisions: prefer view=brief for search and discovery; set it explicitly. "
+            "An excerpt with truncated=false already contains complete provision text; no extra "
+            "read is needed for the same text. For needed truncated provisions use hit.read. "
+            "Choose full when complete text of multiple hits is needed together. "
             "Exact-first search of local laws/articles/norms. Sparse article hits "
             "are supplemented by same-article literal fragments, marked fuzzy. "
             "If empty, retry with statutory wording. Use kind=article for legal basis "
@@ -755,7 +761,7 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
             "--allow-private-norms. view=brief keeps candidates/metadata with literal excerpts "
             "(240 Unicode chars max); excerpt.truncated marks partial text. Use hit.read for "
             "full text and check text_version.sha256; view.full restores full search. "
-            "Default full preserves all fields. Risk: read."
+            "Omitted view defaults to full for backward compatibility. Risk: read."
         ),
         "cli_equivalent": "chinalaw search <query> --format json",
         "risk": "read",

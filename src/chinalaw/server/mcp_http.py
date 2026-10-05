@@ -175,8 +175,16 @@ def make_mcp(
         in_laws: list[str] | str | None = None,
         view: SearchView = "full",
     ) -> dict:
-        """Exact-first search; sparse article hits add literal fragments marked fuzzy.
+        """Find provisions: prefer view=brief for search and discovery; set it explicitly.
 
+        Brief keeps candidates and source/version metadata. If an excerpt has
+        truncated=false, its provision text is already complete; no extra read
+        is needed just to obtain the same text. For needed truncated provisions,
+        follow that hit's read tool/arguments. Choose view=full when complete
+        text of multiple hits is needed together. Omitted view defaults to full
+        only for backward compatibility, not as the recommended discovery mode.
+
+        Exact-first search; sparse hits add literal fragments marked fuzzy.
         Fuzzy fragments must all occur in one article. Empty results suggest
         retrying with statutory wording. Bare article numbers are content searches;
         use chinalaw_article(law, number) for a particular article.
@@ -264,11 +272,13 @@ def make_mcp(
     def chinalaw_article(
         law: str, number: str, as_of: str | None = None, detail: ArticleDetail = "full",
     ) -> dict:
-        """Read a complete article with provenance, optionally at a historical date.
+        """Read a complete article: prefer detail=compact for ordinary reading; set it explicitly.
 
-        detail=compact omits the duplicate item and full version lists, retaining
-        complete text, selected/current versions and diagnostics. view.full gives
-        the same lookup with full history. Default full preserves all fields.
+        Compact already includes the complete article text, provenance,
+        selected/current versions and diagnostics. It also supports historical
+        dates via as_of. Choose detail=full only when the full revision/version
+        lists or compatibility fields are needed; view.full supplies that call.
+        Omitted detail defaults to full only for backward compatibility.
         """
         params = {"law": law, "number": number, "as_of": as_of}
         if detail != "full":

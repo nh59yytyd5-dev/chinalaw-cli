@@ -93,6 +93,11 @@ chinalaw-remote-check --env-file /absolute/remote.env --query 保证期间 --law
 需要查看完整修订列表时执行该调用，不把简洁视图中的省略理解为“没有其他版本”。
 HTTP 与 stdio 支持同样的 detail 语义；CLI、REST 和批量工具不受此选项影响。
 
+推荐调用策略直接写在 MCP 的工具描述中，客户端读取 tools/list 即可获得，不依赖
+安装或同步本项目的 skill：**常规读条（含历史日期）显式优先 detail=compact**，它已经
+包含完整正文；需要完整修订/版本清单或旧兼容字段时再选择 full。参数缺省仍为 full，
+这是旧调用的兼容行为，并非对新 agent 的优先推荐。
+
 搜索也可选择定位视图（先确认工具 schema 包含 `view`）：
 
 ```json
@@ -104,6 +109,10 @@ HTTP 与 stdio 支持同样的 detail 语义；CLI、REST 和批量工具不受�
 `text` 是最多 240 个 Unicode 字符的连续原文，`start_char/end_char` 是从 0 开始、
 右端不含的字符位置，`total_chars` 是原文长度，`truncated` 表示是否只展示了部分正文。
 没有头尾拼接或生成式摘要。`truncated=false` 时整条正文已展示，无须为补全文再读一次。
+
+工具说明推荐**搜索定位显式优先 view=brief**；只对实际需要的截断条文执行 read，
+需要同时读取或比较多个命中的完整正文时再使用 full。客户端需刷新工具列表才会收到
+新的说明；实际参数仍由客户端/agent 选择，服务不会将省略参数的旧调用强制改成简洁视图。
 
 需要完整条文时按命中的 `read.tool/arguments` 调用。使用返回的法规 ID、条号与
 `text_version.sha256`（正文 UTF-8 的 SHA-256）核对身份和内容；不匹配时重新检索，
