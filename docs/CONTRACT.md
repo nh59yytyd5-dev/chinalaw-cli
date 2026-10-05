@@ -735,7 +735,7 @@ JSON 输出 schema：
 {
   "input": "string",
   "matched": "boolean",
-  "via": "id_match|title_match|short_title_match|alias_exact|alias_derived|like_fallback|null",
+  "via": "id_match|title_match|short_title_match|alias_exact|alias_derived|document_number_match|like_fallback|null",
   "id": "string | omitted when matched=false",
   "official_title": "string | omitted when matched=false",
   "short_title": "string|null | omitted when matched=false",
@@ -757,6 +757,7 @@ JSON 输出 schema：
 | `short_title_match` | 精确命中 `laws.short_title` |
 | `alias_exact` | 精确命中 fixture / DB 的 `laws.aliases` |
 | `alias_derived` | 命中规则层派生 alias（如 issuer + 宿主法 + 后缀） |
+| `document_number_match` | 文号元数据唯一匹配；显式旧文号不改取现行版本，同文号多文件返回候选 |
 | `like_fallback` | 最后兜底的 `LIKE` 模糊匹配，调用方必须谨慎使用 |
 | `null` | 未命中 |
 
@@ -2399,3 +2400,25 @@ HTTP MCP search 增加 in_laws（字符串或列表），REST /search 增加逗�
 最多 20 个法规，每项最多 200 字；仅解析成功的法规参与查询，全部失败时不退回全库。
 chinalaw-remote-check 是可选 SDK 诊断命令，不是服务器或代理；读取 remote.env/环境变量，
 成功退出 0 并打印 ok=true，配置/网络/协议/工具错误退出 1 并给出不含凭据的诊断。
+
+### 2026-10-05 体验诊断（候选）
+
+- search 零命中增加 `guidance={code,message,next_steps}`；`next_steps` 中每项为
+  `{tool,arguments}`，tool 为 search 或 resolve，对应 MCP 的 chinalaw_search/chinalaw_resolve。
+  这些建议尚未执行，不改变 counts、实际检索条件或结果。恢复搜索保留原范围、日期及筛选；
+  未解析的法规范围首先建议 resolve。命中结果不增加恢复建议。
+- resolve 的 like_fallback 保持原有匹配规则，增加核对 official_title 的 hint，提醒修改决定
+  等标题子串命中不等同于所问文件的完整文本。
+- MCP 私域权限错误仍为 isError=true、403、private_access_denied，增加公开/私域 kind 的
+  说明和 details.public_kinds，不探测私域资料是否存在。
+- MCP document 增加 returned（本页条目数）、next_offset（下一页零基偏移，结束时 null）；
+  offset/limit/total/has_more 含义不变。
+- 服务查询日志摘要增加 fuzzy_count、unresolved_scope_count、guidance_code（如有），
+  document 摘要保留 returned/next_offset；仍不记录条文正文或认证凭据。
+- search 的 law/all 分支补充文号元数据精确匹配，匹配项标记 match_mode=document_number；
+  名称解析新增 document_number_match，多个文件共用文号时返回候选。精确引文服从用户
+  筛选，且不再添加分拆数字的近似补充；一般近似检索也不拆开数字串和第…条引用。
+- HTTP MCP 已知法规下 article=null 也返回 found=false、article_not_found 与原因/提示；
+  非法日期单列 invalid_as_of，正常读条内容不变。
+- applicable.coverage.domains 列出本库实际领域标签；未知 domain 增加告知，不改变原有
+  domain=all 匹配规则。顶层 law 为定位元数据，新增相应提醒，不代表 as_of 的适用结论。

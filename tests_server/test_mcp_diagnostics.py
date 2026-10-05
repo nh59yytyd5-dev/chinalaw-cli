@@ -67,6 +67,10 @@ def test_private_denial_is_actionable(call_mcp, name, arguments):
     payload = result["structuredContent"]
     assert payload["error"] == "private_access_denied"
     assert payload["status"] == 403
+    assert "kind=norm" in payload["message"] and "kind=law" in payload["message"]
+    assert payload["details"]["public_kinds"] == (
+        ["law", "article", "all"] if name == "search" else ["law"]
+    )
     assert json.loads(result["content"][0]["text"]) == payload
 
 
@@ -76,8 +80,33 @@ def test_document_name_and_pagination(call_mcp):
     assert not by_name.get("isError")
     assert by_name["structuredContent"] == by_id["structuredContent"]
     assert len(by_name["structuredContent"]["document"]["articles"][0]["text"]) > 100
+    assert by_name["structuredContent"]["returned"] == 1
+    assert by_name["structuredContent"]["next_offset"] is None
     empty = call_mcp("document", kind="law", id="公开查询测试资料", offset=1)
     assert empty["structuredContent"]["document"]["articles"] == []
+    assert empty["structuredContent"]["returned"] == 0
+    assert empty["structuredContent"]["next_offset"] is None
+
+
+def test_document_next_offset_reads_each_entry_once(call_mcp, owner_api):
+    from chinalaw import loader
+    from chinalaw.db import connect
+
+    with connect(owner_api.app.state.config.db_path) as conn:
+        loader.load_law_from_dict(conn, {
+            "id": "paged-test", "title": "分页测试文件", "level": "other", "status": "unknown",
+            "source_url": "https://example.com/test", "source_name": "synthetic-test",
+            "articles": [{"number": str(i), "text": f"第{i}个测试条目"} for i in range(1, 6)],
+        })
+    seen, offset = [], 0
+    while offset is not None:
+        page = call_mcp("document", kind="law", id="paged-test", offset=offset, limit=2)
+        payload = page["structuredContent"]
+        entries = payload["document"]["articles"]
+        assert payload["returned"] == len(entries)
+        seen.extend(entry["number"] for entry in entries)
+        offset = payload["next_offset"]
+    assert seen == ["1", "2", "3", "4", "5"]
 
 
 def test_missing_name_and_bad_bounds(call_mcp):
@@ -87,6 +116,23 @@ def test_missing_name_and_bad_bounds(call_mcp):
     bad = call_mcp("document", kind="law", id="public-test", limit=101)
     assert bad["isError"]
     assert bad["structuredContent"]["status"] == 400
+
+
+def test_missing_article_in_known_law_is_explicit_and_logged(call_mcp, owner_api):
+    result = call_mcp("article", law="public-test", number="999")["structuredContent"]
+    assert result["found"] is False
+    assert result["error"] == "article_not_found" and result["reason"] == "article_null"
+    assert result["article"] is None and result["law"]["id"] == "public-test"
+    assert "条号" in result["hint"]
+    log = owner_api.app.state.query_log.export()[-1]
+    assert log["outcome"]["found"] is False
+
+
+def test_invalid_article_date_is_not_reported_as_missing_content(call_mcp):
+    result = call_mcp("article", law="public-test", number="1", as_of="2020-99-99")
+    payload = result["structuredContent"]
+    assert payload["found"] is False
+    assert payload["error"] == "invalid_as_of"
 
 
 def test_unexpected_errors_stay_masked(call_mcp, monkeypatch):

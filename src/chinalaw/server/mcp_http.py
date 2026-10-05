@@ -13,7 +13,7 @@ from pydantic import AnyHttpUrl
 
 from chinalaw import __version__, service
 from chinalaw.admin import catalog
-from chinalaw.admin.errors import LibraryError
+from chinalaw.admin.errors import LibraryError, private_access_denied
 from chinalaw.db import read_only_operation
 from chinalaw.server.auth_store import PRIVATE_SCOPE, PUBLIC_SCOPE, READ_SCOPES
 from chinalaw.server.config import ServerConfig
@@ -74,6 +74,44 @@ def _logged(query_log, tool: str, params: dict, call):
         )
 
 
+def _article_payload(db_path, law: str, number: str, as_of: str | None,
+                     *, include_private: bool) -> dict:
+    if not 1 <= len(law) <= 200 or not 1 <= len(number) <= 60:
+        raise LibraryError("invalid_arguments", "law or article number is too long")
+    with read_only_operation():
+        if as_of:
+            result = service.get_article_as_of(
+                db_path, law, number, as_of, include_norm=include_private
+            )
+        else:
+            result = service.get_article(
+                db_path, law, number, include_norm=include_private
+            )
+        if result and result.get("article") is not None:
+            return result
+        if result and result.get("error"):
+            return {**result, "found": False}
+        if result and isinstance(result.get("law"), dict):
+            return {
+                **result, "kind": "article_missing", "found": False,
+                "error": "article_not_found",
+                "reason": "article_null_as_of" if as_of else "article_null",
+                "hint": (
+                    "法规或规范已定位，但该条号在所请求的版本中未找到。请核对条号与版本；"
+                    "条文总数不等于最大条号，历史条文不能用当前文本替代。"
+                ),
+            }
+        diagnosis = service.diagnose_article_miss(db_path, law, number, as_of=as_of)
+        return {
+            "kind": "article_missing",
+            "found": False,
+            "error": "invalid_as_of" if diagnosis["reason"] == "invalid_as_of"
+            else "article_not_found",
+            "law": law,
+            **diagnosis,
+        }
+
+
 def make_mcp(
     config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None = None,
     search_executor: SearchExecutor | None = None,
@@ -114,7 +152,12 @@ def make_mcp(
 
     @server.tool(annotations=READ_ONLY)
     def chinalaw_resolve(name: str) -> dict:
-        """Resolve a public law name/alias to the local record and source metadata."""
+        """Resolve a public law name/alias or document number to source metadata.
+
+        Check official_title: via=like_fallback is only a title substring match,
+        which may name an amendment decision rather than the requested full law.
+        A shared document number returns candidates for explicit ID selection.
+        """
         return logged("resolve", {"name": name}, lambda: resolve(name))
 
     @server.tool(annotations=READ_ONLY)
@@ -134,6 +177,14 @@ def make_mcp(
         Fuzzy fragments must all occur in one article. Empty results suggest
         retrying with statutory wording. Bare article numbers are content searches;
         use chinalaw_article(law, number) for a particular article.
+
+        kind=law searches PUBLIC document titles, including judicial interpretations;
+        kind=article searches public provisions. kind=norm means PRIVATE imported
+        documents, not all normative sources. kind=all searches authorized content.
+        kind=law/all also matches exact document-number metadata (e.g. 法释〔2024〕10号).
+        A title plus document number must match both; verify the returned metadata.
+        A zero-hit result may include guidance.next_steps with explicit arguments;
+        suggested searches retain the original filters and are not already executed.
 
         Private hits appear only with private-read authorization. Public hits
         are judged on ``as_of`` (YYYY-MM-DD, default today in Beijing): laws in
@@ -181,6 +232,8 @@ def make_mcp(
 
         Curated transition rules, e.g. 民法典 and 公司法 2023 time-effect
         provisions and 刑法 retroactivity. Filter by topic, law or domain.
+        Domain labels are listed in coverage.domains; this is a literal filter.
+        The top-level law is reference metadata, not the law version at that date.
         """
         return logged(
             "applicable",
@@ -189,24 +242,8 @@ def make_mcp(
         )
 
     def article(law: str, number: str, as_of: str | None) -> dict:
-        include_private = _private_allowed()
-        if not 1 <= len(law) <= 200 or not 1 <= len(number) <= 60:
-            raise LibraryError("invalid_arguments", "law or article number is too long")
-        with read_only_operation():
-            if as_of:
-                result = service.get_article_as_of(
-                    config.db_path, law, number, as_of, include_norm=include_private
-                )
-            else:
-                result = service.get_article(
-                    config.db_path, law, number, include_norm=include_private
-                )
-            return result or {
-                "kind": "article_missing",
-                "error": "article_not_found",
-                "law": law,
-                **service.diagnose_article_miss(config.db_path, law, number, as_of=as_of),
-            }
+        return _article_payload(config.db_path, law, number, as_of,
+                                include_private=_private_allowed())
 
     @server.tool(annotations=READ_ONLY)
     def chinalaw_article(law: str, number: str, as_of: str | None = None) -> dict:
@@ -219,7 +256,7 @@ def make_mcp(
 
     def list_documents(kind: str, query: str, page: int, page_size: int) -> dict:
         if kind == "norm" and not _private_allowed():
-            raise LibraryError("private_access_denied", "未获私域规范访问权限。", status=403)
+            raise private_access_denied()
         _private_allowed()
         return catalog.list_documents(
             config.db_path, kind=kind, query=query, page=page, page_size=page_size
@@ -229,7 +266,12 @@ def make_mcp(
     def chinalaw_list(
         kind: str = "law", query: str = "", page: int = 1, page_size: int = 20
     ) -> dict:
-        """List documents in this library, with stable pagination and provenance."""
+        """List documents in this library, with stable pagination and provenance.
+
+        kind=law lists all PUBLIC document types, including judicial interpretations.
+        kind=norm lists PRIVATE imported documents and requires private permission.
+        query filters titles, not article text; use search for content keywords.
+        """
         return logged(
             "list",
             {"kind": kind, "query": query, "page": page, "page_size": page_size},
@@ -239,7 +281,7 @@ def make_mcp(
     def document(kind: str, id: str, offset: int, limit: int) -> dict:
         private = _private_allowed()
         if kind == "norm" and not private:
-            raise LibraryError("private_access_denied", "未获私域规范访问权限。", status=403)
+            raise private_access_denied()
         if offset < 0 or not 1 <= limit <= 100:
             raise LibraryError(
                 "invalid_arguments", "offset must be non-negative and limit must be 1–100"
@@ -251,13 +293,20 @@ def make_mcp(
         clauses = result["document"].pop(member)
         result["document"][member] = clauses[offset : offset + limit]
         result.update(
-            total=len(clauses), offset=offset, limit=limit, has_more=offset + limit < len(clauses)
+            total=len(clauses), offset=offset, limit=limit, has_more=offset + limit < len(clauses),
+            returned=len(result["document"][member]),
+            next_offset=offset + limit if offset + limit < len(clauses) else None,
         )
         return result
 
     @server.tool(annotations=READ_ONLY)
     def chinalaw_document(kind: str, id: str, offset: int = 0, limit: int = 50) -> dict:
-        """Paginated full text. Law id accepts ID/name/alias; norm requires ID."""
+        """Paginated full text. Law id accepts ID/name/alias; norm requires ID.
+
+        kind=law covers PUBLIC documents; norm is PRIVATE imported material.
+        offset is zero-based and limit counts entries, not characters. Continue
+        at next_offset; null means finished. Do not restart at offset=0 to read more.
+        """
         return logged(
             "document",
             {"kind": kind, "id": id, "offset": offset, "limit": limit},

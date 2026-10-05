@@ -1,0 +1,67 @@
+# Docker 中的真实 DeepSeek Harness 体验测试
+
+不是模拟模型响应。容器运行 DSH headless 和真实 Streamable HTTP MCP 服务，数据库、
+认证和写入状态均为独立副本。模型只获得 MCP/规划工具，不挂载宿主 HOME、Docker socket
+或生产令牌。关闭额外遥测、结果头尾拼接与工具结果裁剪，避免破坏 JSON 对象和来源对应。
+
+## 准备
+
+- 安装 Docker 引擎；示例 context 为独立 Colima profile `colima-chinalaw-eval`。
+- 从仓库根目录构建：
+
+```sh
+docker build -t chinalaw-dsh-eval:20261005-aligned -f scripts/ux_eval/Dockerfile .
+```
+
+- 在 Git 忽略且权限为 0700 的输入目录放入 `library.db`（SQLite backup 一致性副本）、
+  `history-anonymized.json`（重放时使用）和 `deepseek-secret.yaml`。
+  secret 实际使用 JSON 这一 YAML 子集，只包含 `DEEPSEEK_API_KEY`；权限必须为 0600。
+  从已授权的本机凭据存储程序化提取，不打印密钥或写入镜像。
+- 脱敏历史数组的每项需要 `id`、`tool`（如 search）和 `params`；不放入姓名、认证值。
+- 使用前检查库的公开/私域边界。本轮公开快照的 norm_sources/norm_clauses 均为 0。
+
+## 运行
+
+```sh
+python3 scripts/ux_eval/run.py balance --inputs /absolute/private-inputs
+python3 scripts/ux_eval/run.py replay --inputs /absolute/private-inputs \
+  --output /absolute/private-results/replay
+python3 scripts/ux_eval/run.py run --inputs /absolute/private-inputs \
+  --output /absolute/private-results/one-task --prompt /absolute/prompt.txt
+```
+
+`--source` 可挂载冻结的源代码目录，对比时固定数据库与 prompt；不同输出目录不得复用。
+容器为 2 CPU/2 GiB，单任务默认 900 秒，外层再给 120 秒启动/清理余量。引擎未就绪时
+明确失败，不降级到宿主机执行。`--context`、`--image`、`--model` 可显式选择。
+
+批次为人工确定的有限任务队列：
+
+```json
+[{"id":"case-01","source":"/absolute/frozen-src","prompt":"/absolute/prompt.txt"}]
+```
+
+```sh
+python3 scripts/ux_eval/batch.py /absolute/plan.json --inputs /absolute/private-inputs
+node scripts/ux_eval/summarize.cjs /absolute/private-inputs
+```
+
+队列每轮检查真实余额，失败立即停下，不把网络或配置失败认定为余额耗尽。
+只有用户明确授权才持续消费 API。账户结算有延迟，单轮前后余额不可直接当该轮费用。
+一次性消费任务应持续核对余额与已验证问题，优先完成修复后的验收。
+
+## 输出与验收
+
+- `run.json`：模型、时间、退出状态与余额快照。
+- `profile-facts.json`：实际 Harness/插件版本、输出完整性配置。
+- `server-state/queries.db`：该轮真实 MCP 查询摘要；只有隔离凭据。
+- `dsh/sessions/`：完整 DSH 轨迹。zstd 文件有多个拼接帧，不能只解第一帧。
+- `answer.txt`：模型最终报告；它是待核查意见，不是项目已验证结论。
+- `summary.json`：工具次数、模型用量与完成状态，不输出推理文本或凭据。
+
+对模型提出的故障，先查原始服务响应和数据库，再查模型实际看到的内容。不要依据被
+拼接、裁剪或仅有来源 URL 的输出直接更改法律资料。统计日志时区分零命中、权限错误、
+环境失败与任务未完成；命中数增加不等于法律结论正确。
+
+DSH rc.8 的 HMR 依赖范围会拉到已删除 registerConfig 的 1.0.19，本 Dockerfile 固定
+与本机安装一致的 HMR 1.0.16 / loader 1.0.2，启动时提供 --expose-internals。
+这是启动兼容性配置，未改模型驱动或伪造工具调用。

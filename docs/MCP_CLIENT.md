@@ -90,6 +90,22 @@ in_laws 接受字符串或列表（最多 20 个名称/ID，每项最多 200 字
 
 HTTP 暂无 CLI 的章节限定 `--in-part`、批量取条、history/diff/trace、抓取导入和写操作。批量离线工作使用本地库。最终引用使用 article 核验，不能把 search 的正文引用条号当成指定条文。
 
+`kind=law` 指库中的公开资料，包含司法解释等公开文件，不是仅指法律这一效力层级。
+`kind=article` 检索公开条文；`kind=norm` 指私人导入资料，需要额外私域权限。
+`kind=all` 检索当前凭据获准访问的内容。不要为检索司法解释而选择 `norm`。
+
+零命中时可查看 `guidance.code/message/next_steps`。`next_steps` 是尚未执行的建议，
+其中 `tool=search/resolve` 对应 `chinalaw_search/chinalaw_resolve`，`arguments` 可直接使用。
+搜索建议保留原日期、版本、法规范围及筛选条件；未解析范围会先建议 resolve，不能把它
+改成全库结果。建议不会证明相关资料已收录。`search(kind="law" 或 "all")` 可直接匹配
+`法释〔2024〕10号` 这类文号元数据；标题和文号同时给出时，两者都须匹配。
+`resolve` 也支持单独的文号；`via=document_number_match` 表示唯一的文号匹配。
+同一文号对应多个文件时返回候选，请选明确 ID 后读取，不能任选其中一个。
+
+`resolve.via=like_fallback` 仅表示名称子串命中，须核对 `official_title`；命中修改决定
+不能自动证明它就是所问的完整法规。`document` 的 `offset` 从 0 开始，`limit` 按条目数
+计数；按 `next_offset` 续读，`next_offset=null` 表示结束，`returned` 是本页条目数。
+
 ## 不要混淆三种“没找到”
 
 1. **接入失败**：没有工具、401、超时、响应解析失败。先修客户端，不能据此判断数据覆盖。
@@ -97,3 +113,12 @@ HTTP 暂无 CLI 的章节限定 `--in-part`、批量取条、history/diff/trace�
 3. **时间效力主题未匹配**：`applicable` 的 topic 是文字筛选，不是语义问题理解。先看 `coverage.topics`；“公司对外担保”可分别查询 topic="担保" 和 topic="公司治理"，结合事实日期读取相关指引。两条指引不自动组成该问题的完整答案。`rules_loaded=12` 只说明有 12 条规则，零命中不说明没有过渡规定；不要为了命中把案例问题硬标成一条已审核规则。
 
 MCP 业务错误的 `isError=true` 与 `structuredContent.error/message/status/details` 见 [CONTRACT.md](CONTRACT.md)。其中 `status=403` 是工具业务状态，HTTP 可以仍为 200。
+
+`article.found=false` 表示条文未找到，即使同一次返回包含法规元数据也不能当成功读条。
+`article_count` 是条目总数，不一定等于最大条号。`applicable.coverage.domains` 给出本库
+实际标签，domain 按字面筛选；未知标签可能只命中 all 规则，注意对应 warning。
+`applicable` 顶层 law 是定位元数据，历史条文仍须用 article 的 as_of 获取。
+
+对于默认会对工具结果做头尾裁剪的客户端，过长 JSON 可能在裁剪后误拼不同文件的标题、
+正文和来源。应保留完整结构化结果，或按条目分页读取；看到 Omitted/truncated 提示时，
+先重新取单个文件核验，再判断数据是否有误。本项目 Docker/DSH 评测 profile 已关闭这类裁剪。
