@@ -1,0 +1,98 @@
+{
+  "deployment": {
+    "commit": "c4fc8c981c6f716bf6f38564ce2c6b9cbbc69e54",
+    "wheel_sha256": "44df6c0f255a873bac6acf9990997840ddddc39d942637471ca0a26930e8ff52",
+    "started_at": 1791214886.3253012,
+    "schema_version": 17,
+    "status": "deployed",
+    "installed_files_verified": 98,
+    "outage_seconds": 13.37,
+    "database_unchanged": true,
+    "authentication_unchanged": true,
+    "data_tables_verified": 22,
+    "counts": {
+      "laws": 2550,
+      "articles": 94353,
+      "revisions": 2586,
+      "norm_sources": 0,
+      "norm_clauses": 0
+    },
+    "ended_at": 1791214899.6963358
+  },
+  "public_verification": {
+    "code_commit": "c4fc8c981c6f716bf6f38564ce2c6b9cbbc69e54",
+    "phase": "production-verification",
+    "url": "https://law.newcombmath.com",
+    "mcp_calls_before": 6,
+    "mcp_calls_after": 17,
+    "tools": 6,
+    "new_parameters": {
+      "chinalaw_article": [
+        "full",
+        "compact"
+      ],
+      "chinalaw_search": [
+        "full",
+        "brief"
+      ]
+    },
+    "existing_credential_verified": true,
+    "http_statuses": {
+      "/healthz": 200,
+      "/about/": 200,
+      "/console/": 308,
+      "/api/v1/documents": 401
+    },
+    "default_differences": {
+      "resolve": [],
+      "search": [],
+      "article": [],
+      "list": [],
+      "document": [
+        {
+          "path": "/returned",
+          "change": "added"
+        },
+        {
+          "path": "/next_offset",
+          "change": "added"
+        }
+      ],
+      "applicable": [
+        {
+          "path": "/warnings",
+          "change": "value"
+        },
+        {
+          "path": "/coverage/domains",
+          "change": "added"
+        }
+      ]
+    },
+    "feature_checks_passed": true,
+    "warning_codes_after": [
+      "not_legal_conclusion",
+      "law_metadata_is_reference"
+    ]
+  },
+  "release": "/srv/chinalaw/releases/20261005-mcp-views-c4fc8c9-v2",
+  "first_attempt": "/srv/chinalaw/releases/20261005-mcp-views-c4fc8c9",
+  "local_source_commit": "c4fc8c981c6f716bf6f38564ce2c6b9cbbc69e54",
+  "wheel_sha256": "44df6c0f255a873bac6acf9990997840ddddc39d942637471ca0a26930e8ff52",
+  "private_archive": {
+    "root": "~/chinalaw-evidence/20261005-mcp-views-deployment-v1",
+    "schema_version": 1,
+    "created_at": "2026-10-05T15:50:12.932697+00:00",
+    "datasets": [
+      {
+        "dataset": "deploy-mcp-views-20261005v1",
+        "archive": "deploy-mcp-views-20261005v1.tar.gz",
+        "files": 454,
+        "source_bytes": 17154737,
+        "archive_bytes": 5353014,
+        "sha256": "ed5491368d0629f803b28d676a31ff9632ba16122abebecdc01c3529111db393",
+        "verified": true
+      }
+    ]
+  }
+}
