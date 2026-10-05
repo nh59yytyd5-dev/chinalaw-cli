@@ -36,9 +36,22 @@ def matching_fragments(parts: list[str], text: str) -> list[str] | None:
         if part in text:
             matched.append(part)
             continue
+        # Literal recall must not manufacture a different number: 191 cannot
+        # be covered by 19 + 1, nor 第三百零六条 by fragments of 第两百零六条.
+        protected = {i for i in range(1, len(part))
+                     if part[i - 1].isdigit() and part[i].isdigit()}
+        for reference in re.finditer(
+            r"第[0-9〇零一二三四五六七八九十百千万两]+条"
+            r"(?:之[0-9〇零一二三四五六七八九十百千万两]+)?", part,
+        ):
+            protected.update(range(reference.start() + 1, reference.end()))
         paths: dict[int, list[str]] = {len(part): []}
         for start in range(len(part) - 2, -1, -1):
+            if start in protected:
+                continue
             for end in range(len(part), start + 1, -1):
+                if end in protected:
+                    continue
                 if end in paths and part[start:end] in text:
                     paths[start] = [part[start:end], *paths[end]]
                     break

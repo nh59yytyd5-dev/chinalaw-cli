@@ -16,9 +16,15 @@ from pathlib import Path
 
 from chinalaw.aliases import display_short_title, merge_law_aliases
 from chinalaw.db import connect, connect_readonly, current_version, migrate
+from chinalaw.document_numbers import (
+    DOCUMENT_NUMBER_INLINE_RE,
+    looks_like_document_number,
+    normalize_document_number,
+)
 from chinalaw.fuzzy import fragments, matching_fragments, name_score, recall_expression
 from chinalaw.models import norm_source_type_binding_note, normalize_norm_source_type
 from chinalaw.schema import SCHEMA_VERSION
+from chinalaw.search_guidance import empty_search_guidance
 from chinalaw.search_tokens import LOCAL_LEVELS, is_exact_phrase, match_expression
 
 # ---------- 辅助 ----------
@@ -608,6 +614,12 @@ def _resolve_law_row_with_via(
     if row is not None:
         return row, "alias_derived"
 
+    if looks_like_document_number(identifier):
+        rows = _document_number_rows(conn, identifier)
+        # One notice number may issue several different documents. Never pick
+        # one of those arbitrarily for article/document lookup.
+        return (rows[0], "document_number_match") if len(rows) == 1 else (None, None)
+
     if _looks_like_short_normative_name(identifier):
         return None, None
 
@@ -639,6 +651,12 @@ def _law_candidates(conn: sqlite3.Connection, query: str) -> list[dict]:
     candidates = []
     if len(query) > 200:
         return candidates
+    if looks_like_document_number(query):
+        return [{
+            "id": row["id"], "official_title": row["title"],
+            "document_number": row["document_number"], "source_status": row["status"],
+            "match_mode": "document_number",
+        } for row in _document_number_rows(conn, query)[:20]]
     for row in conn.execute("SELECT * FROM laws ORDER BY released_at DESC, id"):
         names = [row["title"], *_aliases_for_law_row(row)]
         score, name = max((name_score(query, name), name) for name in names if name)
@@ -1187,7 +1205,7 @@ def _current_work_version(
     versioned_name = via in {"title_match", "short_title_match"} and re.search(
         r"[（(](?:19|20)\d{2}年?(?:修正文本|修正|修订|修改)?[）)]$", matched_name or ""
     )
-    if via == "id_match" or versioned_name or len(members) < 2:
+    if via in {"id_match", "document_number_match"} or versioned_name or len(members) < 2:
         return row, members
     today = legal_today()
     in_force = [
@@ -1658,6 +1676,29 @@ def _search_articles(
     return hits
 
 
+def _document_number_rows(conn, number: str, *, extra_where="", extra_params=()):
+    # Whitespace normalization matches the importer. The scan is over metadata
+    # only (not 94k article bodies) and preserves all documents sharing a number.
+    normalized = "replace(replace(replace(replace(l.document_number, ' ', ''), "
+    normalized += "char(9), ''), char(10), ''), char(13), '')"
+    return conn.execute(
+        f"SELECT l.*, 0.0 AS score FROM laws l WHERE {normalized} = ? "
+        f"{extra_where} ORDER BY l.id",
+        (normalize_document_number(number), *extra_params),
+    ).fetchall()
+
+
+def _document_number_query(query: str) -> tuple[str, list[str]] | None:
+    matches = list(DOCUMENT_NUMBER_INLINE_RE.finditer(query))
+    if len(matches) != 1:
+        return None
+    match = matches[0]
+    if match.start() and not query[match.start() - 1].isspace():
+        return None
+    remaining = (query[:match.start()] + " " + query[match.end():]).strip(" 《》")
+    return match.group(1), _split_search_terms(remaining)
+
+
 def _search_laws(
     conn: sqlite3.Connection,
     *,
@@ -1699,6 +1740,19 @@ def _search_laws(
             [*params, *law_params, limit],
         ).fetchall()
 
+    metadata_ids = set()
+    number_query = _document_number_query(query)
+    if number_query:
+        number, title_terms = number_query
+        title_where, title_params = _build_law_like_clause(title_terms)
+        extra_where = law_filter + (" AND " + title_where if title_where else "")
+        extra_params = [*law_params, *title_params]
+        metadata_rows = _document_number_rows(
+            conn, number, extra_where=extra_where, extra_params=extra_params,
+        )
+        metadata_ids = {row["id"] for row in metadata_rows}
+        rows = metadata_rows + [row for row in rows if row["id"] not in metadata_ids]
+
     hits = []
     for row in rows:
         payload = _row_to_law(
@@ -1706,6 +1760,8 @@ def _search_laws(
             article_count=_count_articles_for_law(conn, row["id"]),
         )
         payload["score"] = row["score"]
+        if row["id"] in metadata_ids:
+            payload["match_mode"] = "document_number"
         hits.append(payload)
     return hits
 
@@ -2119,6 +2175,13 @@ def search(
             "cache": cache,
             "terms": terms,
         }
+        if citation is not None:
+            scoped = conn.execute(
+                f"SELECT 1 FROM laws l WHERE l.id = ? {scope_sql}",
+                (citation["law_id"], *scope_params),
+            ).fetchone()
+            if scoped is None or not _rank_and_fold(conn, [citation], law_key="law_id", **rank):
+                citation = None
         pool = min(max(limit * 5, 50), _SEARCH_POOL_MAX)
         article_hits: list[dict] = []
         if wants_articles:
@@ -2143,7 +2206,7 @@ def search(
                     if (hit["law_id"], hit["number"]) != (citation["law_id"], citation["number"])
                 ]
                 article_hits = article_hits[:limit]
-        if wants_articles:
+        if wants_articles and citation is None:
             article_hits, fuzzy = _supplement_articles(
                 conn, article_hits, query, limit, law_ids, in_part,
                 (scope_sql, scope_params), rank,
@@ -2197,7 +2260,13 @@ def search(
         }
     )
     if not result["counts"]["total"]:
-        result["hint"] = "未找到匹配内容。请改用法条原文的说法或较短片段再查，并用 article 核对。"
+        arguments = {"kind": kind, "limit": limit}
+        arguments.update({key: value for key, value in {
+            "in_laws": in_laws, "in_part": in_part, "as_of": as_of, "status": status,
+            "level": level, "region": region, "versions": versions,
+        }.items() if value is not None})
+        result["guidance"] = empty_search_guidance(query, law_filter, arguments)
+        result["hint"] = result["guidance"]["message"]
     if re.fullmatch(rf"(?:第\s*)?{_NUMERAL}(?:\s*条)?(?:\s*(?:之|-)\s*{_NUMERAL})?", query):
         result["retrieval"]["bare_article_number"] = True
         result["hint"] = (
@@ -2373,7 +2442,7 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
         return base
 
     aliases_payload = _aliases_for_law_row(row)
-    return {
+    result = {
         "input": raw,
         "matched": True,
         "via": via,
@@ -2388,6 +2457,12 @@ def resolve(db_path: Path | str, identifier: str) -> dict:
         "released_at": row["released_at"],
         "effective_at": row["effective_at"],
     }
+    if via == "like_fallback":
+        result["hint"] = (
+            "此结果仅由名称子串匹配得到，请核对 official_title；"
+            "命中修改决定、通知或解释，不代表已找到所问法规的完整文本。"
+        )
+    return result
 
 
 def get_law_as_of(db_path: Path | str, identifier: str, as_of: str) -> dict | None:
@@ -3767,10 +3842,25 @@ def applicable(
         coverage = {
             "rules_loaded": sum(row["count"] for row in coverage_rows),
             "topics": [row["topic"] for row in coverage_rows],
+            "domains": [row[0] for row in conn.execute(
+                "SELECT DISTINCT domain FROM applicability_rules ORDER BY domain"
+            )],
             "exhaustive": False,
         }
         matches = [_rule_row_to_dict(conn, row) for row in rows]
         warnings = [*base_warnings]
+        if domain and domain not in coverage["domains"]:
+            warnings.append(_warning(
+                "domain_not_in_library",
+                "所给 domain 未出现在本库领域标签中；结果可能仅来自 domain=all 的规则。"
+                "请核对 coverage.domains，不能把这些结果当作该领域的完整覆盖。",
+            ))
+        if resolved_law is not None:
+            warnings.append(_warning(
+                "law_metadata_is_reference",
+                "顶层 law 是定位规范的元数据，不代表 as_of 当日应适用的版本。"
+                "历史条文请通过 article 的 as_of 读取，并结合规则原文核对。",
+            ))
         if not coverage["rules_loaded"]:
             warnings.append(_warning(
                 "applicability_data_missing",

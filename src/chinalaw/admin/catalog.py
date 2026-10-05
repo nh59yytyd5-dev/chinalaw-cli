@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from chinalaw import models, normsources, service
-from chinalaw.admin.errors import LibraryError, require_kind
+from chinalaw.admin.errors import LibraryError, private_access_denied, require_kind
 from chinalaw.admin.payloads import content_fingerprint, current_payload
 from chinalaw.db import connect_readonly, get_meta, read_only_operation
 
@@ -271,7 +271,7 @@ def search_library(
     if kind not in {"all", "law", "article", "norm"} or not 1 <= limit <= 100:
         raise LibraryError("invalid_search", "检索类型或数量不正确。")
     if kind == "norm" and not include_private:
-        raise LibraryError("private_access_denied", "此凭据未获私域规范访问权限。", status=403)
+        raise private_access_denied(search=True)
     if len(query) > 200:
         raise LibraryError("query_too_long", "检索词最多 200 字。")
     if any(len(value or "") > 200 for value in (as_of, status, level, region, versions)):
