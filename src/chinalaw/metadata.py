@@ -752,7 +752,10 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
             "versions=all. A citation such as 民法典第五百零四条 returns that "
             "article first. By default private norm hits are excluded and "
             "kind=norm is rejected unless the server is started with "
-            "--allow-private-norms. Risk: read."
+            "--allow-private-norms. view=brief keeps candidates/metadata with literal excerpts "
+            "(240 Unicode chars max); excerpt.truncated marks partial text. Use hit.read for "
+            "full text and check text_version.sha256; view.full restores full search. "
+            "Default full preserves all fields. Risk: read."
         ),
         "cli_equivalent": "chinalaw search <query> --format json",
         "risk": "read",
@@ -774,6 +777,7 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
                 "level": {"type": "string", "description": "comma-separated LawLevel values"},
                 "region": {"type": "string"},
                 "versions": {"type": "string", "enum": ["folded", "all"]},
+                "view": {"type": "string", "enum": ["full", "brief"], "default": "full"},
             },
             "required": ["query"],
             "additionalProperties": False,

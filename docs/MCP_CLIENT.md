@@ -93,6 +93,31 @@ chinalaw-remote-check --env-file /absolute/remote.env --query 保证期间 --law
 需要查看完整修订列表时执行该调用，不把简洁视图中的省略理解为“没有其他版本”。
 HTTP 与 stdio 支持同样的 detail 语义；CLI、REST 和批量工具不受此选项影响。
 
+搜索也可选择定位视图（先确认工具 schema 包含 `view`）：
+
+```json
+{"name":"chinalaw_search","arguments":{"query":"保证期间","kind":"article","view":"brief"}}
+```
+
+默认 `view=full` 保持原响应。`brief` 保留全部候选、顺序、标题、条号、来源、效力和
+版本标记，只将 `article_hits/norm_clause_hits` 的 text 换成明确的 `excerpt` 对象：
+`text` 是最多 240 个 Unicode 字符的连续原文，`start_char/end_char` 是从 0 开始、
+右端不含的字符位置，`total_chars` 是原文长度，`truncated` 表示是否只展示了部分正文。
+没有头尾拼接或生成式摘要。`truncated=false` 时整条正文已展示，无须为补全文再读一次。
+
+需要完整条文时按命中的 `read.tool/arguments` 调用。使用返回的法规 ID、条号与
+`text_version.sha256`（正文 UTF-8 的 SHA-256）核对身份和内容；不匹配时重新检索，
+不能把变更后的正文当成原摘录来源。`text_version.basis=stored_record` 指普通关键词
+命中的存储记录，read 按明确 ID 读取；搜索 as_of 用于排名/效力判断，不把它擅自传入
+article 后换成别的修订。`basis=as_of` 指明确历史条号命中，read 保留原日期。
+`basis=private_record` 是获准读取的私域条款。
+
+私域条款的 ID 可能与公开法规相同，部分特殊条号也无法直接读条；此时 read 复用完整
+搜索，并用 `result_path=[命中组,下标]` 指向结果，保留原检索范围和权限。它可能返回
+多个候选，不能把整个回复当成单条正文。`view.full` 可恢复整次完整搜索；零命中指导、
+权限错误和未解析范围保持原样。law_hits/norm_source_hits 原本就是文件定位元数据，
+不虚构正文摘录；HTTP 客户端可用原有 document 工具按文件 ID 分页读全文。
+
 法规内搜索示例（对应 CLI `search 保证期间 --in 民法典`）：
 
 ```json

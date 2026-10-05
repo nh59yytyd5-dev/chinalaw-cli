@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "batch": "20261005-search-brief-v1",
+  "private_archive_root": "~/chinalaw-evidence",
+  "created_at": "2026-10-05T14:08:37.231012+00:00",
+  "datasets": [
+    {
+      "dataset": "ux-search-brief-20261005v1",
+      "archive": "ux-search-brief-20261005v1.tar.gz",
+      "files": 246,
+      "source_bytes": 366376340,
+      "archive_bytes": 116930758,
+      "sha256": "b91256a41975ba79be2426aec4d3ebb3bdc53970a0c8d5b390a6f3da4acfc4ee",
+      "verified": true
+    }
+  ],
+  "provenance": {
+    "baseline_commit": "993fb9bb03b6e6c5fcca207461c6fa7c5dcf5593",
+    "candidate_source_sha256": "ea6fd8b2defbee8c01e880f0a50c511af2279bdc7eb9ebea422c2cfa360e1f32",
+    "image_id": "sha256:eaa44e689310a04bece52ef7291128ca49d63b0f22966e26f4b2a9f6142ffd28",
+    "model_calls": 0,
+    "provider_tokens": null,
+    "validation": {
+      "passed": 1117,
+      "skipped": 32,
+      "subtests": 1739
+    },
+    "metrics_sha256": "7d224564864d7e33e6d44a3aaf3d4cde4c4b6dce4d3f3bd9e4708abe82f404a9"
+  },
+  "source_location": "var/ux-search-brief-20261005v1",
+  "storage": "Independent private copy on the same machine; not an off-host backup."
+}

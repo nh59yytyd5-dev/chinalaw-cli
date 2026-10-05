@@ -16,6 +16,7 @@ from chinalaw.admin import catalog
 from chinalaw.admin.errors import LibraryError, private_access_denied
 from chinalaw.article_views import ArticleDetail, article_view
 from chinalaw.db import read_only_operation
+from chinalaw.search_views import SearchView, search_view
 from chinalaw.server.auth_store import PRIVATE_SCOPE, PUBLIC_SCOPE, READ_SCOPES
 from chinalaw.server.config import ServerConfig
 from chinalaw.server.oauth import OwnerOAuth
@@ -172,6 +173,7 @@ def make_mcp(
         region: str | None = None,
         versions: str = "folded",
         in_laws: list[str] | str | None = None,
+        view: SearchView = "full",
     ) -> dict:
         """Exact-first search; sparse article hits add literal fragments marked fuzzy.
 
@@ -196,6 +198,11 @@ def make_mcp(
         citation such as 民法典第五百零四条 returns that article first.
         in_laws limits public search to law names/IDs (string or list, up to 20).
         Unresolved scopes are reported and never fall back to global search.
+
+        view=brief preserves candidates/metadata, replacing provision text with
+        literal excerpts (max 240 Unicode characters). excerpt.truncated marks
+        partial text; use each hit's read tool/arguments for full text and check
+        text_version.sha256. view.full repeats this search with all text.
         """
         options = {
             "as_of": as_of,
@@ -207,11 +214,15 @@ def make_mcp(
         }
         given = {key: value for key, value in options.items() if value and value != "folded"}
         params = {"query": query, "kind": kind, "limit": limit, **given}
+        if view != "full":
+            params["view"] = view
 
         return await executor.run_logged(
-            lambda: catalog.search_library(
-                config.db_path, query, kind=kind, limit=limit,
-                include_private=_private_allowed(), **options,
+            lambda: search_view(
+                catalog.search_library(
+                    config.db_path, query, kind=kind, limit=limit,
+                    include_private=_private_allowed(), **options,
+                ), arguments=params, view=view,
             ),
             lambda call: logged("search", params, call),
         )

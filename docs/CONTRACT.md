@@ -2051,6 +2051,24 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
 - 未知 detail 在参数验证阶段拒绝。简洁视图不依赖服务端会话记忆，不修改 service、
   CLI、REST 或批量读条返回；两种 MCP 接入原有的外层诊断格式仍各自保持兼容。
 
+`chinalaw_search` 在 HTTP / stdio 两种接入中接受 `view="full"|"brief"`，默认 full
+与原返回完全一致。brief 在排序/筛选及授权完成后处理，保持候选数和顺序、标题、
+条号、版本/效力、来源、匹配方式、warnings/guidance 等字段：
+
+- article_hits/norm_clause_hits 的字符串 text 替换为
+  `excerpt={text,start_char,end_char,total_chars,truncated}`。text 是原文连续切片，
+  最多 240 个 Unicode 码点，不增添省略号、不重新拼接或改写；右端位置不包含。
+  truncated=false 表示该条正文完整，不要求额外补读。标题定位命中不生成假正文。
+- 每个摘录增加 `text_version={basis,sha256,as_of?}` 和 `read={tool,arguments,result_path?}`。
+  普通公开条文按已命中的明确 ID 读取，basis=stored_record；明确历史引文命中按原日期
+  读取，basis=as_of。搜索 as_of 不等于普通关键词命中的正文快照日期。
+- read 优先使用现有 chinalaw_article（detail=compact）。私域条款和无法归一的特殊
+  条号回到相同条件的 full 搜索，result_path 指向对应候选，避免公共/私域 ID 碰撞或
+  猜测分页位置。正文 SHA-256 与 ID/条号供调用者核验，数据变化后需重新定位。
+- 顶层 `view={mode:"brief",excerpt_max_chars:240,full:{tool,arguments}}` 可恢复完整
+  搜索，保留查询和筛选参数。业务错误走原错误路径；未知 view 在调用查询前拒绝。
+  CLI/REST 返回和搜索算法不变，不新增模型请求或自动调用 read。
+
 ---
 
 ## 5. 规范包 JSON Schema

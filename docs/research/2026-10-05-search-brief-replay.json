@@ -1,0 +1,735 @@
+{
+  "schema_version": 1,
+  "method": "Real SDK MCP Docker replay; no model calls.",
+  "inputs": [
+    {
+      "path": "replay-baseline/replay.jsonl",
+      "sha256": "885dea9a95dfa6298eaa149e064d28b3d55f982f883a66e6b913e205ace85dc4"
+    },
+    {
+      "path": "replay-pairs/replay.jsonl",
+      "sha256": "aab00604bbd6aafda170481c316ad190a8865557991762f63aa8a871c94eb67f"
+    },
+    {
+      "path": "replay-recovery/replay.jsonl",
+      "sha256": "450ea1de84c8f25f6b932fc9e53d851e59dad615d7b944d1ce4558f65fa5dd97"
+    }
+  ],
+  "default_requests_identical": 193,
+  "brief_requests": 78,
+  "recovery_calls": 264,
+  "total_mcp_calls": 728,
+  "excerpts": 188,
+  "truncated_excerpts": 45,
+  "search_default_bytes": 1052337,
+  "search_brief_bytes": 470415,
+  "search_reduction_pct": 55.298065163536016,
+  "all_default_bytes": 2008637,
+  "all_with_brief_search_bytes": 1426715,
+  "all_response_reduction_pct": 28.970988784932274,
+  "provider_tokens": null,
+  "rows": [
+    {
+      "id": 1684,
+      "default_bytes": 4555,
+      "brief_bytes": 6333,
+      "excerpts": 3,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 3
+    },
+    {
+      "id": 1686,
+      "default_bytes": 4386,
+      "brief_bytes": 6145,
+      "excerpts": 3,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 3
+    },
+    {
+      "id": 1687,
+      "default_bytes": 3190,
+      "brief_bytes": 3446,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1689,
+      "default_bytes": 3185,
+      "brief_bytes": 3435,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1690,
+      "default_bytes": 15213,
+      "brief_bytes": 17929,
+      "excerpts": 9,
+      "truncated": 3,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 9
+    },
+    {
+      "id": 1692,
+      "default_bytes": 1116,
+      "brief_bytes": 1372,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1693,
+      "default_bytes": 14258,
+      "brief_bytes": 18955,
+      "excerpts": 10,
+      "truncated": 3,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 10
+    },
+    {
+      "id": 1694,
+      "default_bytes": 3149,
+      "brief_bytes": 3393,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1757,
+      "default_bytes": 1900,
+      "brief_bytes": 2150,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1758,
+      "default_bytes": 29789,
+      "brief_bytes": 38647,
+      "excerpts": 20,
+      "truncated": 6,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 20
+    },
+    {
+      "id": 1759,
+      "default_bytes": 1107,
+      "brief_bytes": 1354,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1760,
+      "default_bytes": 1301,
+      "brief_bytes": 1589,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1761,
+      "default_bytes": 27154,
+      "brief_bytes": 36016,
+      "excerpts": 20,
+      "truncated": 6,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 20
+    },
+    {
+      "id": 1769,
+      "default_bytes": 2310,
+      "brief_bytes": 3124,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1770,
+      "default_bytes": 1966,
+      "brief_bytes": 2750,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1773,
+      "default_bytes": 2253,
+      "brief_bytes": 2616,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1774,
+      "default_bytes": 2074,
+      "brief_bytes": 2895,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1776,
+      "default_bytes": 2197,
+      "brief_bytes": 2538,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1777,
+      "default_bytes": 1992,
+      "brief_bytes": 2813,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1780,
+      "default_bytes": 1191,
+      "brief_bytes": 1458,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1781,
+      "default_bytes": 399,
+      "brief_bytes": 399,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1782,
+      "default_bytes": 2274,
+      "brief_bytes": 3026,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1783,
+      "default_bytes": 43714,
+      "brief_bytes": 3060,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1784,
+      "default_bytes": 2048,
+      "brief_bytes": 2881,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1785,
+      "default_bytes": 2869,
+      "brief_bytes": 4194,
+      "excerpts": 2,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 2
+    },
+    {
+      "id": 1790,
+      "default_bytes": 152992,
+      "brief_bytes": 7475,
+      "excerpts": 3,
+      "truncated": 3,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 3
+    },
+    {
+      "id": 1791,
+      "default_bytes": 2013,
+      "brief_bytes": 2850,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1801,
+      "default_bytes": 3354,
+      "brief_bytes": 4672,
+      "excerpts": 2,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 2
+    },
+    {
+      "id": 1802,
+      "default_bytes": 2119,
+      "brief_bytes": 3007,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1803,
+      "default_bytes": 2620,
+      "brief_bytes": 3000,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1806,
+      "default_bytes": 3028,
+      "brief_bytes": 3601,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1807,
+      "default_bytes": 1305,
+      "brief_bytes": 1629,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1811,
+      "default_bytes": 1891,
+      "brief_bytes": 2193,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1816,
+      "default_bytes": 1895,
+      "brief_bytes": 2203,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1818,
+      "default_bytes": 2142,
+      "brief_bytes": 2982,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1819,
+      "default_bytes": 2151,
+      "brief_bytes": 2951,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1820,
+      "default_bytes": 1860,
+      "brief_bytes": 2159,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1824,
+      "default_bytes": 2602,
+      "brief_bytes": 3479,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1825,
+      "default_bytes": 98463,
+      "brief_bytes": 3246,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1826,
+      "default_bytes": 1918,
+      "brief_bytes": 2242,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1827,
+      "default_bytes": 1239,
+      "brief_bytes": 1530,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1829,
+      "default_bytes": 6659,
+      "brief_bytes": 9402,
+      "excerpts": 5,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 5
+    },
+    {
+      "id": 1831,
+      "default_bytes": 1644,
+      "brief_bytes": 1930,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1840,
+      "default_bytes": 399,
+      "brief_bytes": 399,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1842,
+      "default_bytes": 2600,
+      "brief_bytes": 3498,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1843,
+      "default_bytes": 98463,
+      "brief_bytes": 3246,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1846,
+      "default_bytes": 1954,
+      "brief_bytes": 2290,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1848,
+      "default_bytes": 1901,
+      "brief_bytes": 2220,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1849,
+      "default_bytes": 1689,
+      "brief_bytes": 1990,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1852,
+      "default_bytes": 8780,
+      "brief_bytes": 7118,
+      "excerpts": 3,
+      "truncated": 3,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 3
+    },
+    {
+      "id": 1853,
+      "default_bytes": 14144,
+      "brief_bytes": 19340,
+      "excerpts": 10,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 10
+    },
+    {
+      "id": 1854,
+      "default_bytes": 3871,
+      "brief_bytes": 5179,
+      "excerpts": 2,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 2
+    },
+    {
+      "id": 1857,
+      "default_bytes": 1847,
+      "brief_bytes": 2144,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1858,
+      "default_bytes": 1918,
+      "brief_bytes": 2239,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1859,
+      "default_bytes": 8322,
+      "brief_bytes": 11071,
+      "excerpts": 5,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 5
+    },
+    {
+      "id": 1862,
+      "default_bytes": 3468,
+      "brief_bytes": 3069,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1865,
+      "default_bytes": 1931,
+      "brief_bytes": 2236,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1873,
+      "default_bytes": 98411,
+      "brief_bytes": 3223,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1877,
+      "default_bytes": 5645,
+      "brief_bytes": 6558,
+      "excerpts": 3,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 3
+    },
+    {
+      "id": 1882,
+      "default_bytes": 17379,
+      "brief_bytes": 22110,
+      "excerpts": 10,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 10
+    },
+    {
+      "id": 1883,
+      "default_bytes": 98411,
+      "brief_bytes": 3222,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1885,
+      "default_bytes": 10333,
+      "brief_bytes": 12479,
+      "excerpts": 6,
+      "truncated": 3,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 6
+    },
+    {
+      "id": 1888,
+      "default_bytes": 2132,
+      "brief_bytes": 2449,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1891,
+      "default_bytes": 2600,
+      "brief_bytes": 2971,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1894,
+      "default_bytes": 14903,
+      "brief_bytes": 19169,
+      "excerpts": 8,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 8
+    },
+    {
+      "id": 1895,
+      "default_bytes": 18487,
+      "brief_bytes": 9102,
+      "excerpts": 4,
+      "truncated": 3,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 4
+    },
+    {
+      "id": 1903,
+      "default_bytes": 1928,
+      "brief_bytes": 2250,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1904,
+      "default_bytes": 2433,
+      "brief_bytes": 3130,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1905,
+      "default_bytes": 1858,
+      "brief_bytes": 2155,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1908,
+      "default_bytes": 98459,
+      "brief_bytes": 3282,
+      "excerpts": 1,
+      "truncated": 1,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    },
+    {
+      "id": 1912,
+      "default_bytes": 11193,
+      "brief_bytes": 16359,
+      "excerpts": 10,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 10
+    },
+    {
+      "id": 1918,
+      "default_bytes": 1823,
+      "brief_bytes": 2244,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1922,
+      "default_bytes": 3557,
+      "brief_bytes": 4918,
+      "excerpts": 2,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 2
+    },
+    {
+      "id": 1923,
+      "default_bytes": 7691,
+      "brief_bytes": 11034,
+      "excerpts": 6,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 6
+    },
+    {
+      "id": 1928,
+      "default_bytes": 30599,
+      "brief_bytes": 35352,
+      "excerpts": 20,
+      "truncated": 3,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 20
+    },
+    {
+      "id": 1929,
+      "default_bytes": 2499,
+      "brief_bytes": 2882,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1931,
+      "default_bytes": 2601,
+      "brief_bytes": 2952,
+      "excerpts": 0,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 0
+    },
+    {
+      "id": 1937,
+      "default_bytes": 2623,
+      "brief_bytes": 3466,
+      "excerpts": 1,
+      "truncated": 0,
+      "candidates_metadata_preserved": true,
+      "full_text_reads_verified": 1
+    }
+  ]
+}

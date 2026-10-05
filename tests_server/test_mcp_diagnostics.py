@@ -287,3 +287,137 @@ def test_http_rejects_unknown_article_detail(call_mcp, monkeypatch):
     monkeypatch.setattr("chinalaw.server.mcp_http.service.get_article", forbidden)
     result = call_mcp("article", law="public-test", number="1", detail="invalid")
     assert result["isError"]
+
+
+def _assert_excerpt_matches_read(call_mcp, hit):
+    import hashlib
+
+    read = hit["read"]
+    result = call_mcp(read["tool"].removeprefix("chinalaw_"), **read["arguments"])
+    assert not result.get("isError")
+    full = result["structuredContent"]
+    if read["tool"] == "chinalaw_search":
+        group, index = read["result_path"]
+        text = full[group][index]["text"]
+    else:
+        assert full["law"]["id"] == hit["law_id"]
+        assert full["article"]["number"] == hit["number"]
+        text = full["article"]["text"]
+    assert hashlib.sha256(text.encode()).hexdigest() == hit["text_version"]["sha256"]
+    excerpt = hit["excerpt"]
+    assert excerpt["text"] == text[excerpt["start_char"]:excerpt["end_char"]]
+    return text
+
+
+def test_brief_search_matches_stdio_and_restores_all_candidates(call_mcp, owner_api):
+    from chinalaw import mcp
+
+    args = {"query": "公开全文", "kind": "article", "in_laws": "public-test"}
+    original = call_mcp("search", **args)["structuredContent"]
+    result = call_mcp("search", **args, view="brief")
+    brief = result["structuredContent"]
+    assert json.loads(result["content"][0]["text"]) == brief
+    hit = brief["article_hits"][0]
+    assert "text" not in hit and hit["excerpt"]["truncated"] is False
+    assert _assert_excerpt_matches_read(call_mcp, hit) == original["article_hits"][0]["text"]
+    restored = call_mcp("search", **brief["view"]["full"]["arguments"])["structuredContent"]
+    assert restored == original
+    # Explicit defaults make the two transports' full-search descriptors equal.
+    stdio = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                               "params": {"name": "chinalaw_search", "arguments": {
+                                   **args, "limit": 10, "view": "brief"}}},
+                              db_path=owner_api.app.state.config.db_path)["result"]["structuredContent"]
+    assert stdio == brief
+
+
+@pytest.mark.parametrize("args", [
+    {"query": "视图测试文件第1条", "as_of": "2021-01-01"},
+    {"query": "完整条文", "as_of": "2021-01-01", "versions": "all", "in_laws": "view-test"},
+])
+def test_brief_read_matches_historical_citation_or_stored_keyword_text(
+    call_mcp, article_versions, args,
+):
+    result = call_mcp("search", **args, view="brief")["structuredContent"]
+    assert result["article_hits"]
+    for hit in result["article_hits"]:
+        text = _assert_excerpt_matches_read(call_mcp, hit)
+        if hit["match_mode"] == "citation":
+            assert hit["read"]["arguments"]["as_of"] == "2021-01-01"
+            assert text == "旧版本完整条文。\n第二段。"
+        else:
+            assert "as_of" not in hit["read"]["arguments"]
+            assert text == "新版本完整条文。"
+
+
+def test_brief_reads_each_version_by_id_without_advancing_old_records(call_mcp, owner_api):
+    from chinalaw import loader
+    from chinalaw.db import connect
+
+    with connect(owner_api.app.state.config.db_path) as conn:
+        for name, year in [("old-search", "2020"), ("new-search", "2025")]:
+            loader.load_law_from_dict(conn, {
+                "id": name, "title": "搜索版本测试文件", "work_id": "search-work",
+                "level": "other", "status": "unknown", "released_at": f"{year}-01-01",
+                "effective_at": f"{year}-02-01", "source_url": f"https://example.test/{name}",
+                "source_name": "synthetic-test",
+                "articles": [{"number": "1", "text": f"担保责任{name}"}],
+            })
+    args = {"query": "担保责任", "as_of": "2026-01-01", "versions": "all"}
+    result = call_mcp("search", **args, view="brief")["structuredContent"]
+    assert {hit["law_id"] for hit in result["article_hits"]} == {"old-search", "new-search"}
+    for hit in result["article_hits"]:
+        assert _assert_excerpt_matches_read(call_mcp, hit) == "担保责任" + hit["law_id"]
+
+
+@pytest.mark.parametrize("args", [
+    {"query": "不存在的关键词", "kind": "article"},
+    {"query": "公开全文", "in_laws": ["public-test", "missing"], "region": "北京市"},
+    {"query": "公开全文", "in_laws": ["missing"], "as_of": "2021-01-01"},
+])
+def test_brief_retains_zero_hit_and_scope_diagnostics(call_mcp, owner_api, args):
+    original = call_mcp("search", **args)["structuredContent"]
+    brief = call_mcp("search", **args, view="brief")["structuredContent"]
+    assert brief.pop("view")["mode"] == "brief"
+    for group in ["article_hits", "norm_clause_hits"]:
+        for full_hit, hit in zip(original[group], brief[group], strict=True):
+            hit.pop("excerpt")
+            hit.pop("read")
+            hit.pop("text_version")
+            hit["text"] = full_hit["text"]
+    assert brief == original
+    assert owner_api.app.state.query_log.export()[-1]["params"]["view"] == "brief"
+
+
+@pytest.mark.parametrize("call_mcp", [[PUBLIC_SCOPE], [PUBLIC_SCOPE, PRIVATE_SCOPE]], indirect=True)
+def test_brief_private_excerpts_obey_permissions_and_use_unambiguous_recovery(
+    call_mcp, owner_api, request,
+):
+    # Deliberately collide IDs across namespaces: a public-first article lookup
+    # would return the wrong source, so private results recover through search.
+    from chinalaw import loader
+    from chinalaw.db import connect
+
+    with connect(owner_api.app.state.config.db_path) as conn:
+        loader.load_law_from_dict(conn, {
+            "id": "private-test", "title": "公开同ID文件", "level": "other", "status": "unknown",
+            "source_url": "https://example.test/public", "source_name": "synthetic-test",
+            "articles": [{"number": "1", "text": "公开正文不得当作私域条款。"}],
+        })
+    allowed = PRIVATE_SCOPE in request.node.callspec.params["call_mcp"]
+    result = call_mcp("search", query="私域独有", kind="norm", view="brief")
+    if allowed:
+        hit = result["structuredContent"]["norm_clause_hits"][0]
+        assert _assert_excerpt_matches_read(call_mcp, hit) == "私域独有关键词正文。"
+        assert hit["text_version"]["basis"] == "private_record"
+    else:
+        assert result["isError"] and result["structuredContent"]["status"] == 403
+        mixed = call_mcp("search", query="私域独有", kind="all", view="brief")["structuredContent"]
+        assert mixed["norm_clause_hits"] == []
+
+
+def test_http_rejects_unknown_search_view(call_mcp, monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Invalid view must not query the library")
+
+    monkeypatch.setattr("chinalaw.server.mcp_http.catalog.search_library", forbidden)
+    assert call_mcp("search", query="test", view="invalid")["isError"]
