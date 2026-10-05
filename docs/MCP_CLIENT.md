@@ -117,6 +117,8 @@ MCP 业务错误的 `isError=true` 与 `structuredContent.error/message/status/d
 `article.found=false` 表示条文未找到，即使同一次返回包含法规元数据也不能当成功读条。
 `article_count` 是条目总数，不一定等于最大条号。`applicable.coverage.domains` 给出本库
 实际标签，domain 按字面筛选；未知标签可能只命中 all 规则，注意对应 warning。
+具体 domain 会并入标记为 all 的规则；`domain="all"` 只取 all 标签，要检索该日全部
+领域的规则应不传 domain。
 `applicable` 顶层 law 是定位元数据，历史条文仍须用 article 的 as_of 获取。
 
 对于默认会对工具结果做头尾裁剪的客户端，过长 JSON 可能在裁剪后误拼不同文件的标题、
