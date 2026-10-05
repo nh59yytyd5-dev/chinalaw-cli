@@ -232,7 +232,9 @@ def make_mcp(
 
         Curated transition rules, e.g. 民法典 and 公司法 2023 time-effect
         provisions and 刑法 retroactivity. Filter by topic, law or domain.
-        Domain labels are listed in coverage.domains; this is a literal filter.
+        Domain labels are listed in coverage.domains. A specific domain also
+        includes rows tagged all; domain=all selects only that tag. Omit domain
+        to query every domain at the date.
         The top-level law is reference metadata, not the law version at that date.
         """
         return logged(
