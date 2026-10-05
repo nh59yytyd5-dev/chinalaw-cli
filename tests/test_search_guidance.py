@@ -141,6 +141,21 @@ def test_citation_honors_explicit_filters(library, filters):
     assert not result["retrieval"]["citation"]
 
 
+def test_citation_inside_scope_preserves_scope_including_inserted_articles(library):
+    numbered_document(library, "inserted", "增设条文测试法", "法发〔2024〕2号",
+                      articles=[{"number": "120-1", "text": "目标增设条文。"}])
+    query = "增设条文测试法第一百二十条之一"
+    found = service.search(library, query, in_laws=["inserted"], kind="article")
+    assert found["retrieval"]["citation"]
+    assert [(hit["law_id"], hit["number"]) for hit in found["article_hits"]] == [
+        ("inserted", "120-1"),
+    ]
+    for scope in ["test-law", "不存在的法"]:
+        blocked = service.search(library, query, in_laws=[scope], kind="article")
+        assert blocked["counts"]["total"] == 0
+        assert not blocked["retrieval"]["citation"]
+
+
 def test_unknown_applicability_domain_explains_wildcard_results(library):
     with connect(library) as conn:
         conn.execute(

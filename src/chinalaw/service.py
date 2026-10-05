@@ -2154,7 +2154,7 @@ def search(
 
     fuzzy = {"applied": False, "min_exact_hits": 5, "count": 0}
     citation = None
-    if wants_articles and in_laws is None and not in_part:
+    if wants_articles and not in_part:
         citation = _citation_hit(db_path, query, as_of=_parse_iso_date(as_of) if as_of else None)
 
     with connect(db_path) as conn:
@@ -2180,7 +2180,11 @@ def search(
                 f"SELECT 1 FROM laws l WHERE l.id = ? {scope_sql}",
                 (citation["law_id"], *scope_params),
             ).fetchone()
-            if scoped is None or not _rank_and_fold(conn, [citation], law_key="law_id", **rank):
+            if (
+                scoped is None
+                or (law_ids is not None and citation["law_id"] not in law_ids)
+                or not _rank_and_fold(conn, [citation], law_key="law_id", **rank)
+            ):
                 citation = None
         pool = min(max(limit * 5, 50), _SEARCH_POOL_MAX)
         article_hits: list[dict] = []
