@@ -1,0 +1,727 @@
+{
+  "schema_version": 1,
+  "method": "Offline payload projection only, on final deterministic replay; remove item only when identical to non-null article, preserve all remaining values. No live MCP, model or billing measurement.",
+  "source": "var/ux-deepseek-20261005/replay-final/replay.jsonl",
+  "source_sha256": "0bcebff1e711f71e92a2ceb249de415044d2a8263c4bad479fed17b1869c7fb1",
+  "counts": {
+    "original_all_bytes": 2008637,
+    "roundtrip_equal": 188,
+    "article_calls": 83,
+    "article_original_bytes": 795545,
+    "exact_duplicate_article_aliases": 83,
+    "alias_bytes_saved": 68935
+  },
+  "article_subtree_pretty_bytes": {
+    "law": 630248,
+    "article": 66499,
+    "item": 66499,
+    "requested_number": 641
+  },
+  "law_subtree_pretty_bytes": {
+    "revisions": 383076,
+    "current_revision": 43322,
+    "selected_revision": 41820,
+    "work_versions": 37887,
+    "categories": 12095,
+    "source_url": 5507,
+    "source_hash": 5478,
+    "title": 4346,
+    "work_id": 3569,
+    "source_name": 3487,
+    "aliases": 2951,
+    "issuing_body": 2734,
+    "id": 2448,
+    "source_checked_at": 2241,
+    "status_checked_at": 2241,
+    "document_number": 1392,
+    "released_at": 996,
+    "effective_at": 996,
+    "effective_status_date": 996,
+    "short_title": 945,
+    "articles_coverage": 913,
+    "level": 835,
+    "source_status": 748,
+    "status": 747,
+    "effective_status_as_of": 747,
+    "repealed_at": 404,
+    "article_count": 233,
+    "revision_count": 118,
+    "freshness_days": 101
+  },
+  "projection_rows": [
+    {
+      "id": 1683,
+      "bytes_saved": 794
+    },
+    {
+      "id": 1685,
+      "bytes_saved": 794
+    },
+    {
+      "id": 1695,
+      "bytes_saved": 436
+    },
+    {
+      "id": 1762,
+      "bytes_saved": 608
+    },
+    {
+      "id": 1763,
+      "bytes_saved": 733
+    },
+    {
+      "id": 1766,
+      "bytes_saved": 511
+    },
+    {
+      "id": 1767,
+      "bytes_saved": 636
+    },
+    {
+      "id": 1768,
+      "bytes_saved": 657
+    },
+    {
+      "id": 1771,
+      "bytes_saved": 1443
+    },
+    {
+      "id": 1778,
+      "bytes_saved": 771
+    },
+    {
+      "id": 1779,
+      "bytes_saved": 733
+    },
+    {
+      "id": 1786,
+      "bytes_saved": 508
+    },
+    {
+      "id": 1787,
+      "bytes_saved": 699
+    },
+    {
+      "id": 1788,
+      "bytes_saved": 508
+    },
+    {
+      "id": 1789,
+      "bytes_saved": 608
+    },
+    {
+      "id": 1792,
+      "bytes_saved": 1210
+    },
+    {
+      "id": 1793,
+      "bytes_saved": 657
+    },
+    {
+      "id": 1800,
+      "bytes_saved": 1210
+    },
+    {
+      "id": 1804,
+      "bytes_saved": 657
+    },
+    {
+      "id": 1805,
+      "bytes_saved": 1038
+    },
+    {
+      "id": 1809,
+      "bytes_saved": 771
+    },
+    {
+      "id": 1810,
+      "bytes_saved": 699
+    },
+    {
+      "id": 1812,
+      "bytes_saved": 491
+    },
+    {
+      "id": 1814,
+      "bytes_saved": 601
+    },
+    {
+      "id": 1815,
+      "bytes_saved": 742
+    },
+    {
+      "id": 1817,
+      "bytes_saved": 450
+    },
+    {
+      "id": 1821,
+      "bytes_saved": 771
+    },
+    {
+      "id": 1822,
+      "bytes_saved": 508
+    },
+    {
+      "id": 1823,
+      "bytes_saved": 1038
+    },
+    {
+      "id": 1828,
+      "bytes_saved": 627
+    },
+    {
+      "id": 1830,
+      "bytes_saved": 1038
+    },
+    {
+      "id": 1832,
+      "bytes_saved": 1689
+    },
+    {
+      "id": 1833,
+      "bytes_saved": 1047
+    },
+    {
+      "id": 1834,
+      "bytes_saved": 1145
+    },
+    {
+      "id": 1835,
+      "bytes_saved": 1689
+    },
+    {
+      "id": 1836,
+      "bytes_saved": 1047
+    },
+    {
+      "id": 1837,
+      "bytes_saved": 737
+    },
+    {
+      "id": 1838,
+      "bytes_saved": 510
+    },
+    {
+      "id": 1841,
+      "bytes_saved": 756
+    },
+    {
+      "id": 1844,
+      "bytes_saved": 1365
+    },
+    {
+      "id": 1845,
+      "bytes_saved": 773
+    },
+    {
+      "id": 1847,
+      "bytes_saved": 632
+    },
+    {
+      "id": 1850,
+      "bytes_saved": 676
+    },
+    {
+      "id": 1860,
+      "bytes_saved": 552
+    },
+    {
+      "id": 1863,
+      "bytes_saved": 710
+    },
+    {
+      "id": 1864,
+      "bytes_saved": 651
+    },
+    {
+      "id": 1867,
+      "bytes_saved": 2399
+    },
+    {
+      "id": 1868,
+      "bytes_saved": 586
+    },
+    {
+      "id": 1869,
+      "bytes_saved": 745
+    },
+    {
+      "id": 1870,
+      "bytes_saved": 382
+    },
+    {
+      "id": 1871,
+      "bytes_saved": 489
+    },
+    {
+      "id": 1872,
+      "bytes_saved": 1243
+    },
+    {
+      "id": 1874,
+      "bytes_saved": 551
+    },
+    {
+      "id": 1875,
+      "bytes_saved": 1238
+    },
+    {
+      "id": 1876,
+      "bytes_saved": 745
+    },
+    {
+      "id": 1879,
+      "bytes_saved": 586
+    },
+    {
+      "id": 1880,
+      "bytes_saved": 1238
+    },
+    {
+      "id": 1881,
+      "bytes_saved": 1195
+    },
+    {
+      "id": 1884,
+      "bytes_saved": 549
+    },
+    {
+      "id": 1887,
+      "bytes_saved": 1342
+    },
+    {
+      "id": 1893,
+      "bytes_saved": 745
+    },
+    {
+      "id": 1897,
+      "bytes_saved": 1342
+    },
+    {
+      "id": 1898,
+      "bytes_saved": 648
+    },
+    {
+      "id": 1900,
+      "bytes_saved": 1386
+    },
+    {
+      "id": 1902,
+      "bytes_saved": 1122
+    },
+    {
+      "id": 1910,
+      "bytes_saved": 769
+    },
+    {
+      "id": 1911,
+      "bytes_saved": 367
+    },
+    {
+      "id": 1914,
+      "bytes_saved": 514
+    },
+    {
+      "id": 1915,
+      "bytes_saved": 844
+    },
+    {
+      "id": 1916,
+      "bytes_saved": 405
+    },
+    {
+      "id": 1917,
+      "bytes_saved": 363
+    },
+    {
+      "id": 1919,
+      "bytes_saved": 769
+    },
+    {
+      "id": 1921,
+      "bytes_saved": 917
+    },
+    {
+      "id": 1925,
+      "bytes_saved": 733
+    },
+    {
+      "id": 1926,
+      "bytes_saved": 769
+    },
+    {
+      "id": 1927,
+      "bytes_saved": 917
+    },
+    {
+      "id": 1932,
+      "bytes_saved": 771
+    },
+    {
+      "id": 1933,
+      "bytes_saved": 606
+    },
+    {
+      "id": 1934,
+      "bytes_saved": 2399
+    },
+    {
+      "id": 1935,
+      "bytes_saved": 436
+    },
+    {
+      "id": 1936,
+      "bytes_saved": 696
+    },
+    {
+      "id": 1938,
+      "bytes_saved": 571
+    },
+    {
+      "id": 1939,
+      "bytes_saved": 632
+    }
+  ],
+  "article_byte_reduction_pct": 8.665128936766619,
+  "all_response_byte_reduction_pct": 3.4319292136906765,
+  "optional_compact_history_projection": {
+    "method": "In addition to identical item alias removal, omit law.revisions and law.work_versions lists from this hypothetical view only; retain selected_revision, current_revision, revision_count and other law fields. Full history must remain explicitly retrievable before implementation. Not a measured token or quality saving.",
+    "bytes_saved": 521728,
+    "article_byte_reduction_pct": 65.58120533722165,
+    "all_response_byte_reduction_pct": 25.974230286507716,
+    "rows": [
+      {
+        "id": 1683,
+        "bytes_saved": 1640
+      },
+      {
+        "id": 1685,
+        "bytes_saved": 1640
+      },
+      {
+        "id": 1695,
+        "bytes_saved": 1278
+      },
+      {
+        "id": 1762,
+        "bytes_saved": 12437
+      },
+      {
+        "id": 1763,
+        "bytes_saved": 12562
+      },
+      {
+        "id": 1766,
+        "bytes_saved": 12370
+      },
+      {
+        "id": 1767,
+        "bytes_saved": 12495
+      },
+      {
+        "id": 1768,
+        "bytes_saved": 12486
+      },
+      {
+        "id": 1771,
+        "bytes_saved": 13272
+      },
+      {
+        "id": 1778,
+        "bytes_saved": 1613
+      },
+      {
+        "id": 1779,
+        "bytes_saved": 12562
+      },
+      {
+        "id": 1786,
+        "bytes_saved": 1350
+      },
+      {
+        "id": 1787,
+        "bytes_saved": 1541
+      },
+      {
+        "id": 1788,
+        "bytes_saved": 1350
+      },
+      {
+        "id": 1789,
+        "bytes_saved": 12437
+      },
+      {
+        "id": 1792,
+        "bytes_saved": 2052
+      },
+      {
+        "id": 1793,
+        "bytes_saved": 12486
+      },
+      {
+        "id": 1800,
+        "bytes_saved": 2052
+      },
+      {
+        "id": 1804,
+        "bytes_saved": 12486
+      },
+      {
+        "id": 1805,
+        "bytes_saved": 12867
+      },
+      {
+        "id": 1809,
+        "bytes_saved": 1613
+      },
+      {
+        "id": 1810,
+        "bytes_saved": 1541
+      },
+      {
+        "id": 1812,
+        "bytes_saved": 1144
+      },
+      {
+        "id": 1814,
+        "bytes_saved": 1443
+      },
+      {
+        "id": 1815,
+        "bytes_saved": 1584
+      },
+      {
+        "id": 1817,
+        "bytes_saved": 1292
+      },
+      {
+        "id": 1821,
+        "bytes_saved": 1613
+      },
+      {
+        "id": 1822,
+        "bytes_saved": 1350
+      },
+      {
+        "id": 1823,
+        "bytes_saved": 12867
+      },
+      {
+        "id": 1828,
+        "bytes_saved": 1280
+      },
+      {
+        "id": 1830,
+        "bytes_saved": 12867
+      },
+      {
+        "id": 1832,
+        "bytes_saved": 2342
+      },
+      {
+        "id": 1833,
+        "bytes_saved": 1700
+      },
+      {
+        "id": 1834,
+        "bytes_saved": 1798
+      },
+      {
+        "id": 1835,
+        "bytes_saved": 2342
+      },
+      {
+        "id": 1836,
+        "bytes_saved": 1700
+      },
+      {
+        "id": 1837,
+        "bytes_saved": 1390
+      },
+      {
+        "id": 1838,
+        "bytes_saved": 1163
+      },
+      {
+        "id": 1841,
+        "bytes_saved": 2427
+      },
+      {
+        "id": 1844,
+        "bytes_saved": 3036
+      },
+      {
+        "id": 1845,
+        "bytes_saved": 2444
+      },
+      {
+        "id": 1847,
+        "bytes_saved": 2303
+      },
+      {
+        "id": 1850,
+        "bytes_saved": 12505
+      },
+      {
+        "id": 1860,
+        "bytes_saved": 1205
+      },
+      {
+        "id": 1863,
+        "bytes_saved": 1552
+      },
+      {
+        "id": 1864,
+        "bytes_saved": 1493
+      },
+      {
+        "id": 1867,
+        "bytes_saved": 3052
+      },
+      {
+        "id": 1868,
+        "bytes_saved": 12415
+      },
+      {
+        "id": 1869,
+        "bytes_saved": 12574
+      },
+      {
+        "id": 1870,
+        "bytes_saved": 12241
+      },
+      {
+        "id": 1871,
+        "bytes_saved": 12348
+      },
+      {
+        "id": 1872,
+        "bytes_saved": 2085
+      },
+      {
+        "id": 1874,
+        "bytes_saved": 9685
+      },
+      {
+        "id": 1875,
+        "bytes_saved": 13067
+      },
+      {
+        "id": 1876,
+        "bytes_saved": 12574
+      },
+      {
+        "id": 1879,
+        "bytes_saved": 12415
+      },
+      {
+        "id": 1880,
+        "bytes_saved": 13067
+      },
+      {
+        "id": 1881,
+        "bytes_saved": 13054
+      },
+      {
+        "id": 1884,
+        "bytes_saved": 1395
+      },
+      {
+        "id": 1887,
+        "bytes_saved": 13201
+      },
+      {
+        "id": 1893,
+        "bytes_saved": 12574
+      },
+      {
+        "id": 1897,
+        "bytes_saved": 13191
+      },
+      {
+        "id": 1898,
+        "bytes_saved": 12497
+      },
+      {
+        "id": 1900,
+        "bytes_saved": 2248
+      },
+      {
+        "id": 1902,
+        "bytes_saved": 12951
+      },
+      {
+        "id": 1910,
+        "bytes_saved": 12598
+      },
+      {
+        "id": 1911,
+        "bytes_saved": 12226
+      },
+      {
+        "id": 1914,
+        "bytes_saved": 1167
+      },
+      {
+        "id": 1915,
+        "bytes_saved": 1497
+      },
+      {
+        "id": 1916,
+        "bytes_saved": 1058
+      },
+      {
+        "id": 1917,
+        "bytes_saved": 12192
+      },
+      {
+        "id": 1919,
+        "bytes_saved": 12598
+      },
+      {
+        "id": 1921,
+        "bytes_saved": 1759
+      },
+      {
+        "id": 1925,
+        "bytes_saved": 12562
+      },
+      {
+        "id": 1926,
+        "bytes_saved": 12598
+      },
+      {
+        "id": 1927,
+        "bytes_saved": 1759
+      },
+      {
+        "id": 1932,
+        "bytes_saved": 1613
+      },
+      {
+        "id": 1933,
+        "bytes_saved": 1672
+      },
+      {
+        "id": 1934,
+        "bytes_saved": 3052
+      },
+      {
+        "id": 1935,
+        "bytes_saved": 1502
+      },
+      {
+        "id": 1936,
+        "bytes_saved": 1762
+      },
+      {
+        "id": 1938,
+        "bytes_saved": 1224
+      },
+      {
+        "id": 1939,
+        "bytes_saved": 1285
+      }
+    ]
+  }
+}
