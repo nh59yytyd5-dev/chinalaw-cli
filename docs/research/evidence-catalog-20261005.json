@@ -1,0 +1,360 @@
+{
+  "schema_version": 1,
+  "base_commit": "8ea707de9dee09b16a16a3255e50f1c8e77d36c3",
+  "private_archive_root": "~/chinalaw-evidence",
+  "scope": "Existing local var evaluation/release directories, web/test-results and all 48 research files as of base_commit; not off-host backup.",
+  "archives": [
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "admin-preview20260913v1",
+      "archive": "admin-preview20260913v1.tar.gz",
+      "files": 4,
+      "source_bytes": 25211649,
+      "archive_bytes": 7435262,
+      "sha256": "a0ae4f2949ed788cfcad0be97bbba157381f03c33f11332af80e4a38b3dfbe8a",
+      "verified": true
+    },
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "mcp-research",
+      "archive": "mcp-research.tar.gz",
+      "files": 3,
+      "source_bytes": 7899,
+      "archive_bytes": 4446,
+      "sha256": "f8f8acee628e3bc6303ac5de970d554bc7228f12ad4452ce2bf54b5e3d7594b7",
+      "verified": true
+    },
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "national-import",
+      "archive": "national-import.tar.gz",
+      "files": 2551,
+      "source_bytes": 78963418,
+      "archive_bytes": 26405800,
+      "sha256": "efbb76faa2069a71bccf7ecba6c903e33f5b17d9b4517f055dd998c3a1e6057f",
+      "verified": true
+    },
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "release-0.7.0",
+      "archive": "release-0.7.0.tar.gz",
+      "files": 22675,
+      "source_bytes": 749194794,
+      "archive_bytes": 311291980,
+      "sha256": "500a70ade34f67e9a83d1360b2d61c5a94dc192dac4806fe0bc37eedb5bd906a",
+      "verified": true
+    },
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "release-0.7.1",
+      "archive": "release-0.7.1.tar.gz",
+      "files": 2548,
+      "source_bytes": 440127591,
+      "archive_bytes": 199532078,
+      "sha256": "19edce58dbf9becf5b3b149f4c705cde1f9b8ce46224749198406f36a6fdb006",
+      "verified": true
+    },
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "release-0.7.2",
+      "archive": "release-0.7.2.tar.gz",
+      "files": 24,
+      "source_bytes": 6237639,
+      "archive_bytes": 5153724,
+      "sha256": "27b6b2aaf880119d2d85029ff392f99eee4cb1eddecf710166fda5c3d8b6ba9e",
+      "verified": true
+    },
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "step5-validation",
+      "archive": "step5-validation.tar.gz",
+      "files": 22,
+      "source_bytes": 601857162,
+      "archive_bytes": 283252819,
+      "sha256": "9103ce7645caf69dd589de3ee6a3b9779438a4418529edd6f36c8f3c554c755f",
+      "verified": true
+    },
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "ux-deepseek-20261005",
+      "archive": "ux-deepseek-20261005.tar.gz",
+      "files": 1249,
+      "source_bytes": 509989199,
+      "archive_bytes": 249273967,
+      "sha256": "12e322c38194f3e5d92fada17d8339d26b21e032f45dbf7101595e89fd889a5c",
+      "verified": true
+    },
+    {
+      "batch": "20261005-tests-v1",
+      "created_at": "2026-10-05T12:44:06.559639+00:00",
+      "dataset": "research",
+      "archive": "research.tar.gz",
+      "files": 48,
+      "source_bytes": 1067637,
+      "archive_bytes": 230025,
+      "sha256": "75d00bd652c2bdbeba329b7b00caca560fdf97ca402af6893698003f50e7c6dd",
+      "verified": true
+    },
+    {
+      "batch": "20261005-web-tests-v1",
+      "created_at": "2026-10-05T12:46:34.592493+00:00",
+      "dataset": "test-results",
+      "archive": "test-results.tar.gz",
+      "files": 5,
+      "source_bytes": 5859928,
+      "archive_bytes": 5804876,
+      "sha256": "ff724fc1cd5ea04321d5d28a4041907605bf0b36b6c1f0ced80bf4ea4ffc4c29",
+      "verified": true
+    }
+  ],
+  "prior_research_files": [
+    {
+      "path": "docs/research/2026-08-22-private-norm-structure-survey.md",
+      "bytes": 13578,
+      "sha256": "0296516c913d39d962e8c86c2d8018bdd874741f2f6be98d7ec70381f7b258d7"
+    },
+    {
+      "path": "docs/research/2026-09-23-fuzzy-search-design.md",
+      "bytes": 21732,
+      "sha256": "60a9912e82f5cd248429850ab34fde8c3cfd59e09175c19dbb740501634463e5"
+    },
+    {
+      "path": "docs/research/2026-09-24-fulltext-search-at-scale.md",
+      "bytes": 33390,
+      "sha256": "2c47ae8daa93b42e76cb47f61ff5c9e221d5a255f0fc5dc5ac6d5a9b0e80b7ae"
+    },
+    {
+      "path": "docs/research/2026-09-25-flk-full-import.md",
+      "bytes": 17965,
+      "sha256": "058211e0560c52ec9d7e20642c8f384f2552bc3f15d2bf3d8e62978b8d0aa530"
+    },
+    {
+      "path": "docs/research/2026-09-25-revised-plan.md",
+      "bytes": 6777,
+      "sha256": "0994d29d4ba9c075177db20073473e85b819a11d514ff75e165d19a2e34ad031"
+    },
+    {
+      "path": "docs/research/2026-09-29-mcp-research-workflow.md",
+      "bytes": 9324,
+      "sha256": "e7d38b4f9b8951bad5b16a11a4736dded49d38ca89e159f4beface3965efeb40"
+    },
+    {
+      "path": "docs/research/2026-09-29-minimal-fuzzy-validation.md",
+      "bytes": 6652,
+      "sha256": "ee440de2ed905637954407ec71d5634c8dfb33c030b81227764088203cf3cceb"
+    },
+    {
+      "path": "docs/research/2026-09-29-national-import-quality.md",
+      "bytes": 4769,
+      "sha256": "5b8b69e9b87cf3ba4e2c08f7b82e9006404c3c368469836e87e64cacfc4c0f11"
+    },
+    {
+      "path": "docs/research/2026-09-29-release-data-audit.md",
+      "bytes": 5361,
+      "sha256": "0a8da91dbb3dcb801389e95e492ae4536ac7a2409fc608d36e9a542712e9538b"
+    },
+    {
+      "path": "docs/research/2026-09-29-v070-deployment.md",
+      "bytes": 2491,
+      "sha256": "5af350f54c12e748026056120ea85dc91e71f9c3f4289b6913ab36e6838be15d"
+    },
+    {
+      "path": "docs/research/2026-09-30-mcp-diagnostics-release.md",
+      "bytes": 4033,
+      "sha256": "f47ba456ce473cee3407732611ac20f8d657f97b543fd1a4a95c781b9ff916f1"
+    },
+    {
+      "path": "docs/research/2026-10-02-mcp-client-release.md",
+      "bytes": 4651,
+      "sha256": "87ee4b412f6dd885e79817e00522742c23ba39e79eff4a7b4e6821078ff978ff"
+    },
+    {
+      "path": "docs/research/2026-10-04-cpu-deployment.md",
+      "bytes": 1753,
+      "sha256": "ec2497085cdef4c7e610c744e45169e26dcb3910d87c6bec5142849ed53045f5"
+    },
+    {
+      "path": "docs/research/2026-10-04-fetch-source-candidates.md",
+      "bytes": 5920,
+      "sha256": "d65bf2e315d08d35569d1f55bae0dfc9115f05baa5cca11014725c01a1b8626c"
+    },
+    {
+      "path": "docs/research/2026-10-04-low-resource/README.md",
+      "bytes": 7276,
+      "sha256": "434638c8ec4066fcd3cf086493f36d35381b7d8313ee59301b585800a41d1217"
+    },
+    {
+      "path": "docs/research/2026-10-04-low-resource/baseline-api-2cpu2g.json",
+      "bytes": 3479,
+      "sha256": "ebd72f756aae6167be64b1a7be62ba486a45950eb7b528bcf6f1a9772b75c718"
+    },
+    {
+      "path": "docs/research/2026-10-04-low-resource/baseline-query-1cpu256m.json",
+      "bytes": 1412,
+      "sha256": "c5d0564462f7e1111e60bbc458ead0c1f7ee49d87fd78dd643c4492ea4e08852"
+    },
+    {
+      "path": "docs/research/2026-10-04-low-resource/candidate-api-16clients-2cpu2g.json",
+      "bytes": 2308,
+      "sha256": "81c4feecbe7cdff193f3aaad2cecea1a0ee8551946b177faee34edd2fdaf26a7"
+    },
+    {
+      "path": "docs/research/2026-10-04-low-resource/candidate-api-2cpu2g.json",
+      "bytes": 3475,
+      "sha256": "5099e6fbf0a6f6d47885388c37b75d029f0f80cc71d81624600e0e727e1fed25"
+    },
+    {
+      "path": "docs/research/2026-10-04-low-resource/candidate-query-1cpu256m.json",
+      "bytes": 1410,
+      "sha256": "b841b4bf57abbf2ee2408e55009a1ccb641d7266a39e67ffeb388d855eb4c364"
+    },
+    {
+      "path": "docs/research/2026-10-04-low-resource/candidate-without-admission-api-2cpu2g.json",
+      "bytes": 3478,
+      "sha256": "d9243821798a095eb993162372d9110a1866a134f069e4d49a8ecb2184077855"
+    },
+    {
+      "path": "docs/research/2026-10-04-low-resource/deployment.md",
+      "bytes": 2013,
+      "sha256": "f17a56a8a2a17321c3a9c6be305e916f8c41199150d1ff95dd72da8aaa9804fa"
+    },
+    {
+      "path": "docs/research/2026-10-04-remote-concurrency.md",
+      "bytes": 15122,
+      "sha256": "559cd687dd180fe818793aa4a2a0494c11709dfa1b44be91c87308e2d5203935"
+    },
+    {
+      "path": "docs/research/2026-10-04-search-after.json",
+      "bytes": 1305,
+      "sha256": "9632b181bfce39ac8a900e4abcb275e47bdcd3af4f6cf25cdca1105a70dfaa23"
+    },
+    {
+      "path": "docs/research/2026-10-04-search-batch-after.json",
+      "bytes": 1306,
+      "sha256": "e4383f37739c0e4a683452d405b60d048b8386416ee00873c34926627dfd4640"
+    },
+    {
+      "path": "docs/research/2026-10-04-search-batch-before.json",
+      "bytes": 1305,
+      "sha256": "01d44d4eb8d198d3dfa33d9123519db0fa73e5c75e230cc70ec6986fafa301ec"
+    },
+    {
+      "path": "docs/research/2026-10-04-search-before.json",
+      "bytes": 1308,
+      "sha256": "57242cf93fae35f00167c7dd1f926f0d1b0d3813e46748c4708d07ff44c13c05"
+    },
+    {
+      "path": "docs/research/2026-10-04-search-cpu-after.json",
+      "bytes": 1305,
+      "sha256": "a004441e88c58be71f5ff7609382f347e3e74a3213e4e028f690919c30a519c3"
+    },
+    {
+      "path": "docs/research/2026-10-04-search-cpu-repeat.json",
+      "bytes": 792,
+      "sha256": "56f74f91840c5b396f69a065ebb3b517bddc04c4c89462025d5bfc06c950d6a3"
+    },
+    {
+      "path": "docs/research/2026-10-05-real-user-ux.md",
+      "bytes": 12811,
+      "sha256": "c2a450e844f72e0e2c9bd1a575717e52dc2442ce3576dd77f2937f259c7eaee6"
+    },
+    {
+      "path": "docs/research/mcp-research-20260929/cases.json",
+      "bytes": 5499,
+      "sha256": "1a70682d54bf0dd9cefa5e5aef1d30f97f368f90971e474908c4cb2f31a74be8"
+    },
+    {
+      "path": "docs/research/mcp-research-20260929/trace.jsonl",
+      "bytes": 496725,
+      "sha256": "986a2456234ee087adb404186f5d6faa9bb675cf5fd37504709f671d9375a684"
+    },
+    {
+      "path": "docs/research/national-import-20260929/id-preservation.json",
+      "bytes": 9657,
+      "sha256": "b52bd871e701801b9413a4cb2b747ff3d08a1e8110fae0849319ef9d300a4830"
+    },
+    {
+      "path": "docs/research/national-import-20260929/merged-evaluation.json",
+      "bytes": 54276,
+      "sha256": "78a752b865f68e6b188f6e1150c325c8e775caf0a298698cdd6a4eb6d5353659"
+    },
+    {
+      "path": "docs/research/national-import-20260929/national-live-status.json",
+      "bytes": 1383,
+      "sha256": "417a49a40a0df8f21e1eb0a54671c62116f284a0ec5055197eadf54742eace8f"
+    },
+    {
+      "path": "docs/research/national-import-20260929/quality.json",
+      "bytes": 4043,
+      "sha256": "670d88d64fa0212097e3f06d0da04c521261b3f12da0f0db993760a8af452fda"
+    },
+    {
+      "path": "docs/research/national-import-20260929/remote-smoke.json",
+      "bytes": 1328,
+      "sha256": "4588effe5df3fae92de41ee313115e1907790fd006171f75d09e070028028cd1"
+    },
+    {
+      "path": "docs/research/national-import-20260929/repeal-check.json",
+      "bytes": 35,
+      "sha256": "032803d752e059973a4363278d2db2b2cc18faa573d44d528d43ffe59d9dcaeb"
+    },
+    {
+      "path": "docs/research/step5-validation/local-stress.json",
+      "bytes": 26280,
+      "sha256": "6c2457adc24e8219b6374dbd4c7d620110fbcd53cffd2dfb9774209d7ca46e71"
+    },
+    {
+      "path": "docs/research/step5-validation/national-2000.json",
+      "bytes": 56935,
+      "sha256": "97f43f1f38a085486293bdc7a55d8720c7c1876a9440c618e66021880e0f5774"
+    },
+    {
+      "path": "docs/research/step5-validation/national-final.json",
+      "bytes": 55146,
+      "sha256": "4062d8ab536dbc1668d7ee087db2ee0931642edac9aa9996ff3a7d80da55cb39"
+    },
+    {
+      "path": "docs/research/step5-validation/oracle-national-500.json",
+      "bytes": 55200,
+      "sha256": "1c7e7a8ad3302286ce62e14b075b7c9c15ff1643f780ca43b18215196825d1f1"
+    },
+    {
+      "path": "docs/research/step5-validation/oracle-production-copy.json",
+      "bytes": 35947,
+      "sha256": "a3aa64a37218199a739ceb2c0aa9c78ee9b04e917458f05a521140fa5b4be35b"
+    },
+    {
+      "path": "docs/research/step5-validation/oracle-stress.json",
+      "bytes": 26298,
+      "sha256": "6618df920521d28ab334dc5932e5eefe1eac0cb786e258d5c4e010e153577e4e"
+    },
+    {
+      "path": "docs/research/step5-validation/queries.json",
+      "bytes": 2614,
+      "sha256": "dd1630cd20f3e0cc61c5ef4337b019ba05e519869aab5c3e8b1f3dbe80ec4f6e"
+    },
+    {
+      "path": "docs/research/step5-validation/remote-smoke.json",
+      "bytes": 1142,
+      "sha256": "69c30769093f7c3037be05599204ea584afb078a7e1713cba00f9cb347d4ec1d"
+    },
+    {
+      "path": "docs/research/step5-validation/small-final.json",
+      "bytes": 35923,
+      "sha256": "051d80c283214641b584ebcadb907061382e7c661f5c0a52fe43e63e7bff8663"
+    },
+    {
+      "path": "docs/research/step5-validation/stress.json",
+      "bytes": 705,
+      "sha256": "1832237ea1e09ae3ffc7b4d86e686ebd400b190591b18675f8b79ccb2bea714b"
+    }
+  ]
+}
