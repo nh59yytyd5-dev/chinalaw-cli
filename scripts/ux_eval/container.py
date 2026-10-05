@@ -104,8 +104,8 @@ def profile(token):
                 "id": "llm-deepseek",
                 "config": {
                     "apiKeyEnv": "DEEPSEEK_API_KEY",
-                    "maxTokens": 16384,
-                    "reasoningEffort": "high",
+                    "maxTokens": int(os.environ.get("EVAL_MAX_TOKENS", "16384")),
+                    "reasoningEffort": os.environ.get("EVAL_EFFORT", "high"),
                 },
             },
             {

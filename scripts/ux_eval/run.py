@@ -39,8 +39,12 @@ def main():
     parser.add_argument("--context", default="colima-chinalaw-eval")
     parser.add_argument("--image", default="chinalaw-dsh-eval:20261005-aligned")
     parser.add_argument("--model", default="deepseek-v4-pro")
+    parser.add_argument("--max-tokens", type=int, default=16384)
+    parser.add_argument("--effort", choices=["off", "high", "max"], default="high")
     parser.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args()
+    if not 128 <= args.max_tokens <= 65536:
+        parser.error("--max-tokens must be between 128 and 65536")
     inputs = args.inputs.resolve()
     secret = inputs / "deepseek-secret.yaml"
     if args.mode == "balance":
@@ -84,6 +88,10 @@ def main():
         "-e",
         "EVAL_MODEL=" + args.model,
         "-e",
+        f"EVAL_MAX_TOKENS={args.max_tokens}",
+        "-e",
+        "EVAL_EFFORT=" + args.effort,
+        "-e",
         f"EVAL_TIMEOUT={args.timeout}",
     ]
 
@@ -113,9 +121,16 @@ def main():
         "container": name,
         "source_sha256": source_digest(args.source.resolve()),
         "image": args.image,
+        "max_tokens": args.max_tokens,
+        "reasoning_effort": args.effort,
     }
     if args.mode == "run":
         metadata["balance_before"] = balance(secret)
+        if not metadata["balance_before"].get("is_available"):
+            metadata.update(exit_code=3, reason="balance_unavailable", ended=time.time())
+            (output / "run.json").write_text(json.dumps(metadata, indent=2))
+            print(json.dumps(metadata))
+            raise SystemExit(3)
     try:
         with (output / "container.log").open("w") as log:
             result = subprocess.run(
