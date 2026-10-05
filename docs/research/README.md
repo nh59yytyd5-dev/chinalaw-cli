@@ -11,6 +11,11 @@
 调用，83 次读条返回体积降低 62.03%；[逐次指标](2026-10-05-article-compact-replay.json)
 与[新增私有归档校验值](2026-10-05-article-compact-archive.json) 独立保留，不覆写此前实验。
 
+第二批已实现：[搜索 brief 的实际 Docker 验收](2026-10-05-search-brief.md)，728 次
+MCP 调用、188 个摘录全文逐项核验，固定搜索集返回体积减少 55.30%。
+[逐次指标](2026-10-05-search-brief-replay.json) 与[私有归档校验值](2026-10-05-search-brief-archive.json)
+另存；全文补读的实际模型净用量仍待验证。
+
 ## 已有研究与数据
 
 | 研究 / 日期 | 报告及仓库数据 | 能回答的问题与限制 |
