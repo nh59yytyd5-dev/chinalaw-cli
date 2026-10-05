@@ -65,3 +65,11 @@ node scripts/ux_eval/summarize.cjs /absolute/private-inputs
 DSH rc.8 的 HMR 依赖范围会拉到已删除 registerConfig 的 1.0.19，本 Dockerfile 固定
 与本机安装一致的 HMR 1.0.16 / loader 1.0.2，启动时提供 --expose-internals。
 这是启动兼容性配置，未改模型驱动或伪造工具调用。
+
+短回归可以显式使用 `--max-tokens 1024 --effort off`；正常任务默认 16384 / high。
+直接运行和批次运行都会在余额不可用时停止，不启动新的模型容器。余额 API 有结算延迟，
+因此大请求被拒绝时仍可能暂时显示正余额；以实际额度错误及随后确认的账户终态为准。
+
+本轮收尾已停止独立 Colima VM。复用时先运行
+`colima start --profile chinalaw-eval --cpu 2 --memory 4`，再使用对应 Docker context；
+临时 API-key 副本已清理，需要从仍保留的原始授权凭据重新准备，不能依赖旧结果目录留密钥。
