@@ -80,6 +80,19 @@ chinalaw-remote-check --env-file /absolute/remote.env --query 保证期间 --law
 | chinalaw_document | 分页全文；公开法规 id 可用法规名、别名或 ID |
 | chinalaw_applicable | 已录入的时间效力检索指引，覆盖不完整，不输出选法结论 |
 
+读条可显式使用简洁视图（先检查 tools/list 的 schema 是否包含 `detail`）：
+
+```json
+{"name":"chinalaw_article","arguments":{"law":"民法典","number":"143","detail":"compact"}}
+```
+
+`detail` 默认 `full`，返回与原接口一致。`compact` 保留完整 `article`、所选/当前版本、
+状态、来源和诊断，只省略与 article 相同的 `item` 及 law 中的 `revisions/work_versions`
+列表；缺失条文的 null 和错误信息保留。`view.omitted_fields` 明列实际省略的字段，
+`view.full.tool/arguments` 给出恢复完整结果的调用，保留原 law、number 与显式 as_of。
+需要查看完整修订列表时执行该调用，不把简洁视图中的省略理解为“没有其他版本”。
+HTTP 与 stdio 支持同样的 detail 语义；CLI、REST 和批量工具不受此选项影响。
+
 法规内搜索示例（对应 CLI `search 保证期间 --in 民法典`）：
 
 ```json

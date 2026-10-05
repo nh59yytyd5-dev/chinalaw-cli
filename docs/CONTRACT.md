@@ -2039,6 +2039,18 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
 
 工具返回 `structuredContent` 与 JSON 文本；错误以 `isError=true` 返回，不把法律结论写进自然语言描述。
 
+`chinalaw_article` 在 HTTP / stdio 两种接入中均接受 `detail="full"|"compact"`：
+
+- 缺省或 `full` 保持原返回契约，不添加视图字段。
+- `compact` 只省略与非空 article 对象相等的 item 别名，以及 law 对象中的
+  `revisions`、`work_versions` 列表。其余字段、完整正文、selected_revision、
+  current_revision、来源/状态、缺失与错误诊断原样保留；选版和权限由原服务路径负责。
+- 简洁结果新增 `view.detail="compact"`、`view.omitted_fields` 和
+  `view.full={tool:"chinalaw_article", arguments:{law,number,detail:"full",as_of?}}`。
+  字段省略不表示历史不存在；完整调用保留原请求中显式提供的 as_of。
+- 未知 detail 在参数验证阶段拒绝。简洁视图不依赖服务端会话记忆，不修改 service、
+  CLI、REST 或批量读条返回；两种 MCP 接入原有的外层诊断格式仍各自保持兼容。
+
 ---
 
 ## 5. 规范包 JSON Schema

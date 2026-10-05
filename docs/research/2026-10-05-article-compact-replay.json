@@ -1,0 +1,1028 @@
+{
+  "schema_version": 1,
+  "method": "Real SDK MCP replay inside Docker; no model calls.",
+  "inputs": [
+    {
+      "path": "replay-baseline/replay.jsonl",
+      "sha256": "a24bbbed473482bc7c2e1b7f0e2e0c1f23ec8106e6e9451b2de1337a095dfd1e"
+    },
+    {
+      "path": "replay-pairs/replay.jsonl",
+      "sha256": "2a271b098a3ea467e6065dd48b85c478d9db51a715e3f9978826aa4205addb44"
+    },
+    {
+      "path": "replay-full/replay.jsonl",
+      "sha256": "6668c1e40bf81619e12c48a448109fa1c19e73d55d1dcbc2a9b4f1357db5d5f9"
+    }
+  ],
+  "default_requests": 193,
+  "default_results_identical": 193,
+  "compact_requests": 83,
+  "full_followup_requests": 83,
+  "total_mcp_calls": 552,
+  "article_default_bytes": 795545,
+  "article_compact_bytes": 302047,
+  "article_reduction_pct": 62.032694567874856,
+  "all_default_bytes": 2008637,
+  "all_with_compact_articles_bytes": 1515139,
+  "all_response_reduction_pct": 24.568799638760012,
+  "provider_tokens": null,
+  "rows": [
+    {
+      "id": 1683,
+      "default_bytes": 4569,
+      "compact_bytes": 3226,
+      "full_bytes": 4569,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1685,
+      "default_bytes": 4587,
+      "compact_bytes": 3262,
+      "full_bytes": 4587,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1695,
+      "default_bytes": 3866,
+      "compact_bytes": 2890,
+      "full_bytes": 3866,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1762,
+      "default_bytes": 15950,
+      "compact_bytes": 3828,
+      "full_bytes": 15950,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1763,
+      "default_bytes": 16200,
+      "compact_bytes": 3953,
+      "full_bytes": 16200,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1766,
+      "default_bytes": 15546,
+      "compact_bytes": 3522,
+      "full_bytes": 15546,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1767,
+      "default_bytes": 15796,
+      "compact_bytes": 3647,
+      "full_bytes": 15796,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1768,
+      "default_bytes": 16048,
+      "compact_bytes": 3877,
+      "full_bytes": 16048,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1771,
+      "default_bytes": 17620,
+      "compact_bytes": 4663,
+      "full_bytes": 17620,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1778,
+      "default_bytes": 4549,
+      "compact_bytes": 3272,
+      "full_bytes": 4549,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1779,
+      "default_bytes": 16215,
+      "compact_bytes": 3983,
+      "full_bytes": 16215,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1786,
+      "default_bytes": 4020,
+      "compact_bytes": 3003,
+      "full_bytes": 4020,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1787,
+      "default_bytes": 4405,
+      "compact_bytes": 3200,
+      "full_bytes": 4405,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1788,
+      "default_bytes": 4023,
+      "compact_bytes": 3009,
+      "full_bytes": 4023,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1789,
+      "default_bytes": 15965,
+      "compact_bytes": 3858,
+      "full_bytes": 15965,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1792,
+      "default_bytes": 5414,
+      "compact_bytes": 3685,
+      "full_bytes": 5414,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1793,
+      "default_bytes": 16048,
+      "compact_bytes": 3877,
+      "full_bytes": 16048,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1800,
+      "default_bytes": 5414,
+      "compact_bytes": 3685,
+      "full_bytes": 5414,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1804,
+      "default_bytes": 16048,
+      "compact_bytes": 3877,
+      "full_bytes": 16048,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1805,
+      "default_bytes": 16812,
+      "compact_bytes": 4262,
+      "full_bytes": 16812,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1809,
+      "default_bytes": 4536,
+      "compact_bytes": 3246,
+      "full_bytes": 4536,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1810,
+      "default_bytes": 4392,
+      "compact_bytes": 3174,
+      "full_bytes": 4392,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1812,
+      "default_bytes": 3855,
+      "compact_bytes": 3099,
+      "full_bytes": 3855,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1814,
+      "default_bytes": 4196,
+      "compact_bytes": 3076,
+      "full_bytes": 4196,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1815,
+      "default_bytes": 4478,
+      "compact_bytes": 3217,
+      "full_bytes": 4478,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1817,
+      "default_bytes": 3894,
+      "compact_bytes": 2925,
+      "full_bytes": 3894,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1821,
+      "default_bytes": 4536,
+      "compact_bytes": 3246,
+      "full_bytes": 4536,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1822,
+      "default_bytes": 4010,
+      "compact_bytes": 2983,
+      "full_bytes": 4010,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1823,
+      "default_bytes": 16812,
+      "compact_bytes": 4262,
+      "full_bytes": 16812,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1828,
+      "default_bytes": 4167,
+      "compact_bytes": 3284,
+      "full_bytes": 4167,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1830,
+      "default_bytes": 16831,
+      "compact_bytes": 4300,
+      "full_bytes": 16831,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1832,
+      "default_bytes": 6299,
+      "compact_bytes": 4362,
+      "full_bytes": 6299,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1833,
+      "default_bytes": 5015,
+      "compact_bytes": 3720,
+      "full_bytes": 5015,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1834,
+      "default_bytes": 5211,
+      "compact_bytes": 3818,
+      "full_bytes": 5211,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1835,
+      "default_bytes": 6291,
+      "compact_bytes": 4346,
+      "full_bytes": 6291,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1836,
+      "default_bytes": 5007,
+      "compact_bytes": 3704,
+      "full_bytes": 5007,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1837,
+      "default_bytes": 4387,
+      "compact_bytes": 3394,
+      "full_bytes": 4387,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1838,
+      "default_bytes": 3934,
+      "compact_bytes": 3169,
+      "full_bytes": 3934,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1841,
+      "default_bytes": 5370,
+      "compact_bytes": 3267,
+      "full_bytes": 5370,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1844,
+      "default_bytes": 6588,
+      "compact_bytes": 3876,
+      "full_bytes": 6588,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1845,
+      "default_bytes": 5404,
+      "compact_bytes": 3284,
+      "full_bytes": 5404,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1847,
+      "default_bytes": 5122,
+      "compact_bytes": 3143,
+      "full_bytes": 5122,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1850,
+      "default_bytes": 16086,
+      "compact_bytes": 3896,
+      "full_bytes": 16086,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1860,
+      "default_bytes": 4040,
+      "compact_bytes": 3255,
+      "full_bytes": 4040,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1863,
+      "default_bytes": 4415,
+      "compact_bytes": 3187,
+      "full_bytes": 4415,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1864,
+      "default_bytes": 4297,
+      "compact_bytes": 3128,
+      "full_bytes": 4297,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1867,
+      "default_bytes": 7734,
+      "compact_bytes": 5102,
+      "full_bytes": 7734,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1868,
+      "default_bytes": 15906,
+      "compact_bytes": 3806,
+      "full_bytes": 15906,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1869,
+      "default_bytes": 16224,
+      "compact_bytes": 3965,
+      "full_bytes": 16224,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1870,
+      "default_bytes": 15288,
+      "compact_bytes": 3393,
+      "full_bytes": 15288,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1871,
+      "default_bytes": 15502,
+      "compact_bytes": 3500,
+      "full_bytes": 15502,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1872,
+      "default_bytes": 5496,
+      "compact_bytes": 3750,
+      "full_bytes": 5496,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1874,
+      "default_bytes": 12326,
+      "compact_bytes": 2968,
+      "full_bytes": 12326,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1875,
+      "default_bytes": 17210,
+      "compact_bytes": 4458,
+      "full_bytes": 17210,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1876,
+      "default_bytes": 16224,
+      "compact_bytes": 3965,
+      "full_bytes": 16224,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1879,
+      "default_bytes": 15921,
+      "compact_bytes": 3836,
+      "full_bytes": 15921,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1880,
+      "default_bytes": 17210,
+      "compact_bytes": 4458,
+      "full_bytes": 17210,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1881,
+      "default_bytes": 16914,
+      "compact_bytes": 4206,
+      "full_bytes": 16914,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1884,
+      "default_bytes": 4100,
+      "compact_bytes": 3044,
+      "full_bytes": 4100,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1887,
+      "default_bytes": 17240,
+      "compact_bytes": 4385,
+      "full_bytes": 17240,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1893,
+      "default_bytes": 16224,
+      "compact_bytes": 3965,
+      "full_bytes": 16224,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1897,
+      "default_bytes": 17250,
+      "compact_bytes": 4405,
+      "full_bytes": 17250,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1898,
+      "default_bytes": 15862,
+      "compact_bytes": 3711,
+      "full_bytes": 15862,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1900,
+      "default_bytes": 6009,
+      "compact_bytes": 4079,
+      "full_bytes": 6009,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1902,
+      "default_bytes": 16978,
+      "compact_bytes": 4342,
+      "full_bytes": 16978,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1910,
+      "default_bytes": 16272,
+      "compact_bytes": 3989,
+      "full_bytes": 16272,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1911,
+      "default_bytes": 15258,
+      "compact_bytes": 3378,
+      "full_bytes": 15258,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1914,
+      "default_bytes": 3889,
+      "compact_bytes": 3098,
+      "full_bytes": 3889,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1915,
+      "default_bytes": 4550,
+      "compact_bytes": 3430,
+      "full_bytes": 4550,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1916,
+      "default_bytes": 3672,
+      "compact_bytes": 2991,
+      "full_bytes": 3672,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1917,
+      "default_bytes": 15459,
+      "compact_bytes": 3581,
+      "full_bytes": 15459,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1919,
+      "default_bytes": 16287,
+      "compact_bytes": 4019,
+      "full_bytes": 16287,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1921,
+      "default_bytes": 4847,
+      "compact_bytes": 3430,
+      "full_bytes": 4847,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1925,
+      "default_bytes": 16218,
+      "compact_bytes": 3989,
+      "full_bytes": 16218,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1926,
+      "default_bytes": 16272,
+      "compact_bytes": 3989,
+      "full_bytes": 16272,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1927,
+      "default_bytes": 4829,
+      "compact_bytes": 3394,
+      "full_bytes": 4829,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1932,
+      "default_bytes": 4536,
+      "compact_bytes": 3246,
+      "full_bytes": 4536,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1933,
+      "default_bytes": 4580,
+      "compact_bytes": 3216,
+      "full_bytes": 4580,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1934,
+      "default_bytes": 7726,
+      "compact_bytes": 5086,
+      "full_bytes": 7726,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1935,
+      "default_bytes": 4241,
+      "compact_bytes": 3048,
+      "full_bytes": 4241,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1936,
+      "default_bytes": 4760,
+      "compact_bytes": 3306,
+      "full_bytes": 4760,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1938,
+      "default_bytes": 4071,
+      "compact_bytes": 3260,
+      "full_bytes": 4071,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    },
+    {
+      "id": 1939,
+      "default_bytes": 4192,
+      "compact_bytes": 3319,
+      "full_bytes": 4192,
+      "omitted_fields": [
+        "item",
+        "law.revisions",
+        "law.work_versions"
+      ],
+      "content_preserved": true
+    }
+  ]
+}
