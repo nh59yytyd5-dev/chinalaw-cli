@@ -700,7 +700,10 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
             "Return one local article by law name/id and article number. "
             "If not found, inspect diagnosis before citing. Private norm "
             "fallback hits are excluded unless the server is started with "
-            "--allow-private-norms. Risk: read."
+            "--allow-private-norms. detail=compact keeps complete text, provenance, "
+            "selected/current versions and diagnosis; omits duplicate item and version lists. "
+            "view.full gives the full-history lookup. "
+            "Default full preserves all fields. Risk: read."
         ),
         "cli_equivalent": "chinalaw article <law> <number> --format json",
         "risk": "read",
@@ -710,6 +713,7 @@ MCP_TOOL_SPECS: list[dict[str, Any]] = [
                 "law": {"type": "string", "minLength": 1},
                 "number": {"type": "string", "minLength": 1},
                 "as_of": {"type": "string"},
+                "detail": {"type": "string", "enum": ["full", "compact"], "default": "full"},
             },
             "required": ["law", "number"],
             "additionalProperties": False,

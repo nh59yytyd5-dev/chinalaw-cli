@@ -101,3 +101,8 @@ node --test scripts/ux_eval/token_analysis.test.cjs
 
 本轮 [用量数据与说明](../../docs/research/2026-10-05-mcp-token-evidence/README.md) 和
 [历次证据索引](../../docs/research/README.md) 提供已有统计、归档位置与校验清单。
+
+单条 compact 的确定性验收使用 `compare_article_views.py`：输入原始基线、默认/简洁
+配对轨迹、按 `view.full` 实际请求的完整恢复轨迹，严格比较结果与错误标志，另存逐次
+脱敏指标。脚本参数与数据布局见文件说明；[本轮结果](../../docs/research/2026-10-05-article-compact.md)
+包含实际 552 次 Docker MCP 调用、字节差和复算命令。

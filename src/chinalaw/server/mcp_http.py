@@ -14,6 +14,7 @@ from pydantic import AnyHttpUrl
 from chinalaw import __version__, service
 from chinalaw.admin import catalog
 from chinalaw.admin.errors import LibraryError, private_access_denied
+from chinalaw.article_views import ArticleDetail, article_view
 from chinalaw.db import read_only_operation
 from chinalaw.server.auth_store import PRIVATE_SCOPE, PUBLIC_SCOPE, READ_SCOPES
 from chinalaw.server.config import ServerConfig
@@ -243,17 +244,26 @@ def make_mcp(
             lambda: applicable(date, topic, law, domain),
         )
 
-    def article(law: str, number: str, as_of: str | None) -> dict:
-        return _article_payload(config.db_path, law, number, as_of,
-                                include_private=_private_allowed())
+    def article(law: str, number: str, as_of: str | None, detail: ArticleDetail) -> dict:
+        payload = _article_payload(config.db_path, law, number, as_of,
+                                   include_private=_private_allowed())
+        return article_view(payload, law=law, number=number, as_of=as_of, detail=detail)
 
     @server.tool(annotations=READ_ONLY)
-    def chinalaw_article(law: str, number: str, as_of: str | None = None) -> dict:
-        """Read one complete article with provenance, optionally at a historical date."""
+    def chinalaw_article(
+        law: str, number: str, as_of: str | None = None, detail: ArticleDetail = "full",
+    ) -> dict:
+        """Read a complete article with provenance, optionally at a historical date.
+
+        detail=compact omits the duplicate item and full version lists, retaining
+        complete text, selected/current versions and diagnostics. view.full gives
+        the same lookup with full history. Default full preserves all fields.
+        """
+        params = {"law": law, "number": number, "as_of": as_of}
+        if detail != "full":
+            params["detail"] = detail
         return logged(
-            "article",
-            {"law": law, "number": number, "as_of": as_of},
-            lambda: article(law, number, as_of),
+            "article", params, lambda: article(law, number, as_of, detail),
         )
 
     def list_documents(kind: str, query: str, page: int, page_size: int) -> dict:

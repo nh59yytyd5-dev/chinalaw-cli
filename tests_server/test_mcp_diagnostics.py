@@ -4,12 +4,13 @@ import json
 
 import pytest
 
-from chinalaw.server.auth_store import PUBLIC_SCOPE
+from chinalaw.server.auth_store import PRIVATE_SCOPE, PUBLIC_SCOPE
 
 
 @pytest.fixture
-def call_mcp(owner_api):
-    token = owner_api.app.state.auth.issue_query_token("diagnostics", [PUBLIC_SCOPE])["token"]
+def call_mcp(owner_api, request):
+    scopes = getattr(request, "param", [PUBLIC_SCOPE])
+    token = owner_api.app.state.auth.issue_query_token("diagnostics", scopes)["token"]
     headers = {"Authorization": "Bearer " + token, "Accept": "application/json, text/event-stream"}
     init = owner_api.post(
         "/mcp",
@@ -182,3 +183,107 @@ def test_rest_law_scope(owner_api):
     assert result.status_code == 200
     assert result.json()["counts"]["total"] == 0
     assert result.json()["law_filter"]["unresolved"]
+
+
+@pytest.fixture
+def article_versions(owner_api):
+    from chinalaw import loader
+    from chinalaw.db import connect
+
+    with connect(owner_api.app.state.config.db_path) as conn:
+        for year, text in [("2020", "旧版本完整条文。\n第二段。"), ("2025", "新版本完整条文。")]:
+            loader.load_law_from_dict(conn, {
+                "id": "view-test", "title": "视图测试文件", "level": "other", "status": "unknown",
+                "source_url": f"https://example.test/{year}", "source_name": "synthetic-test",
+                "released_at": f"{year}-01-01", "effective_at": f"{year}-02-01",
+                "source_checked_at": f"{year}-03-01T00:00:00+00:00",
+                "articles": [{"number": "1", "text": text}],
+            })
+    return owner_api.app.state.config.db_path
+
+
+@pytest.mark.parametrize("as_of", [None, "2021-01-01"])
+def test_compact_full_roundtrip_preserves_versions_on_both_transports(
+    call_mcp, article_versions, as_of,
+):
+    from chinalaw import mcp, service
+
+    arguments = {"law": "view-test", "number": "1"}
+    if as_of:
+        arguments["as_of"] = as_of
+    original = call_mcp("article", **arguments)["structuredContent"]
+    compact_result = call_mcp("article", **arguments, detail="compact")
+    compact = compact_result["structuredContent"]
+    assert json.loads(compact_result["content"][0]["text"]) == compact
+    assert compact["article"]["text"] == ("旧版本完整条文。\n第二段。" if as_of else "新版本完整条文。")
+    for key in ["selected_revision", "current_revision", "source_url", "effective_status_as_of"]:
+        assert compact["law"][key] == original["law"][key]
+    if as_of:
+        assert compact["law"]["selected_revision"] != compact["law"]["current_revision"]
+    assert "item" not in compact and "revisions" not in compact["law"]
+    restored = call_mcp("article", **compact["view"]["full"]["arguments"])["structuredContent"]
+    assert restored == original
+    # A later full call and the public service still retain all history and aliases.
+    assert service.get_article(article_versions, "view-test", "1")["law"]["revisions"]
+    stdio = mcp.handle_request({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "chinalaw_article", "arguments": {**arguments, "detail": "compact"}},
+    }, db_path=article_versions)["result"]["structuredContent"]
+    assert stdio.pop("kind") == "article_result"
+    assert stdio.pop("found") is True
+    assert stdio == compact
+
+
+@pytest.mark.parametrize("arguments", [
+    {"law": "public-test", "number": "999"},
+    {"law": "missing-test", "number": "1"},
+    {"law": "public-test", "number": "1", "as_of": "invalid-date"},
+])
+def test_compact_preserves_missing_diagnosis(call_mcp, owner_api, arguments):
+    original = call_mcp("article", **arguments)["structuredContent"]
+    compact = call_mcp("article", **arguments, detail="compact")["structuredContent"]
+    assert compact["found"] is False
+    assert compact["error"] == original["error"]
+    view = compact.pop("view")
+    expected = json.loads(json.dumps(original))
+    for field in view["omitted_fields"]:
+        assert field.startswith("law.")
+        expected["law"].pop(field.split(".")[1])
+    assert compact == expected
+    assert owner_api.app.state.query_log.export()[-1]["params"]["detail"] == "compact"
+
+
+def test_compact_keeps_corrupt_snapshot_diagnostic(call_mcp, article_versions):
+    from chinalaw.db import connect
+
+    with connect(article_versions) as conn:
+        conn.execute("UPDATE revisions SET snapshot_json = '{broken' WHERE released_at = '2020-01-01'")
+    args = {"law": "view-test", "number": "1", "as_of": "2021-01-01"}
+    original = call_mcp("article", **args)["structuredContent"]
+    compact = call_mcp("article", **args, detail="compact")["structuredContent"]
+    assert compact["found"] is False
+    assert compact["error"] == original["error"] == "revision_snapshot_corrupt"
+    assert compact["diagnostic"] == original["diagnostic"]
+
+
+@pytest.mark.parametrize("call_mcp", [[PUBLIC_SCOPE], [PUBLIC_SCOPE, PRIVATE_SCOPE]], indirect=True)
+def test_compact_obeys_private_scope(call_mcp, owner_api, request):
+    original = call_mcp("article", law="private-test", number="1")["structuredContent"]
+    compact = call_mcp("article", law="private-test", number="1", detail="compact")["structuredContent"]
+    allowed = PRIVATE_SCOPE in request.node.callspec.params["call_mcp"]
+    if allowed:
+        assert compact["via"] == "norm_fallback"
+        assert compact["article"] == original["article"]
+        assert "item" not in compact
+    else:
+        assert compact["found"] is False
+        assert "私域独有关键词正文" not in json.dumps(compact, ensure_ascii=False)
+
+
+def test_http_rejects_unknown_article_detail(call_mcp, monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Invalid detail must not query the library")
+
+    monkeypatch.setattr("chinalaw.server.mcp_http.service.get_article", forbidden)
+    result = call_mcp("article", law="public-test", number="1", detail="invalid")
+    assert result["isError"]
