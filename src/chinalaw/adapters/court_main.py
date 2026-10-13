@@ -105,6 +105,10 @@ EFFECTIVE_DATE_RE = re.compile(
     r"自(?P<year>\d{4})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日起施行"
 )
 BOOK_TITLE_RE = re.compile(r"《(?P<title>[^》]{4,120})》")
+# 修改决定的末句；其后附载的是另一份文书（重新公布的被修改文书）。
+REPUBLISHED_SENTENCE_RE = re.compile(
+    r"根据本决定[，,]?\s*《(?P<title>[^》]{4,120})》[^。\n]{0,80}?重新公布。"
+)
 NORMATIVE_TITLE_TOKENS = (
     "解释",
     "规定",
@@ -552,6 +556,27 @@ def _single_body_article(text: str) -> list[dict]:
     return cleaning.single_body_article(text)
 
 
+def _split_amendment_decision(title: str, text: str) -> tuple[str, str] | None:
+    """Separate an amendment decision from the re-promulgated document appended to it.
+
+    Pages such as "关于修改《……解释》的决定" end the decision with "根据本决定，
+    《……》作相应修改……重新公布。" and then print the amended document in full.
+    Returns ``(decision_text, republished_title)``; the decision text starts at its
+    promulgation sentence (dropping the press release) and ends with that sentence,
+    matching how flk stores amendment decisions as a single body.
+    """
+
+    if "修改" not in title or not title.endswith("决定"):
+        return None
+    match = REPUBLISHED_SENTENCE_RE.search(text)
+    if match is None or not text[match.end():].strip():
+        return None
+    head = text[: match.end()]
+    anchor = head.rfind("现予公布")
+    start = head.rfind("\n", 0, anchor) + 1 if anchor >= 0 else 0
+    return head[start:].strip(), match.group("title")
+
+
 def _policy_item_articles(level: str, text: str) -> list[dict]:
     if level not in {"judicial_policy", "judicial_meeting_minutes"}:
         return []
@@ -729,16 +754,28 @@ class CourtMainAdapter:
         title = _infer_document_title(detail.get("title") or "", raw_text)
         level = _infer_level(title, raw_text)
         issuing_body = _infer_issuing_body(title, raw_text)
-        document_number = cleaning.extract_document_number_from_preamble(raw_text)
+        decision = _split_amendment_decision(title, raw_text)
+        text = decision[0] if decision else raw_text
+        document_number = cleaning.extract_document_number_from_preamble(text)
         released_at = _date_part(detail.get("published_at")) or (search_row or {}).get(
             "released_at"
         )
-        effective_at = _infer_effective_at(raw_text)
-        text = raw_text
-        articles = cleaning.parse_articles_from_text(text)
-        item_articles = _policy_item_articles(level, text)
+        effective_at = _infer_effective_at(text)
 
-        if item_articles:
+        body_articles: list[dict] | None = None
+        if decision:
+            body_articles = _single_body_article(text)
+        else:
+            articles = cleaning.parse_articles_from_text(text)
+            item_articles = _policy_item_articles(level, text)
+            if item_articles:
+                body_articles = item_articles
+            elif _should_emit_single_body_article(
+                title, text, articles
+            ) or _should_emit_policy_body_article(level, articles):
+                body_articles = _single_body_article(text)
+
+        if body_articles is not None:
             payload = cleaning.canonicalize(
                 {
                     "id": f"court_main:{detail['detail_id']}",
@@ -756,34 +793,24 @@ class CourtMainAdapter:
                     "source_name": "www.court.gov.cn",
                     "source_checked_at": detail.get("checked_at"),
                     "source_hash": self._hash_text(text),
-                    "articles": item_articles,
+                    "articles": body_articles,
                 },
                 source_kind="external_json",
             )
-        elif _should_emit_single_body_article(
-            title, text, articles
-        ) or _should_emit_policy_body_article(level, articles):
-            payload = cleaning.canonicalize(
-                {
-                    "id": f"court_main:{detail['detail_id']}",
-                    "title": title,
-                    "short_title": _infer_short_title(title),
-                    "aliases": [],
-                    "level": level,
-                    "status": "unknown",
-                    "issuing_body": issuing_body,
-                    "document_number": document_number,
-                    "released_at": released_at,
-                    "effective_at": effective_at,
-                    "repealed_at": None,
-                    "source_url": detail.get("url"),
-                    "source_name": "www.court.gov.cn",
-                    "source_checked_at": detail.get("checked_at"),
-                    "source_hash": self._hash_text(text),
-                    "articles": _single_body_article(text),
-                },
-                source_kind="external_json",
-            )
+            if decision:
+                # Transient fetch diagnostic; stripped before canonical writes.
+                payload["warnings"] = [
+                    {
+                        "severity": "warning",
+                        "code": "republished_text_not_imported",
+                        "republished_title": decision[1],
+                        "message": (
+                            f"the page also prints 《{decision[1]}》 as re-promulgated "
+                            "under this decision; that document was not imported "
+                            "with the decision and must be verified separately"
+                        ),
+                    }
+                ]
         else:
             payload = cleaning.canonicalize(
                 text,

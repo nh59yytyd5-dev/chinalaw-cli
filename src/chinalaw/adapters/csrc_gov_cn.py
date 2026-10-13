@@ -429,9 +429,41 @@ def _looks_like_rule_pdf(attachment: dict, *, law_title: str) -> bool:
     title = attachment.get("title") or ""
     compact = _compact_title(title)
     law_compact = _compact_title(law_title)
-    if any(token in compact for token in ("修订说明", "起草说明", "征求意见", "反馈情况")):
+    if any(
+        token in compact
+        for token in ("修订说明", "起草说明", "立法说明", "编制说明", "征求意见", "反馈情况")
+    ):
         return False
     return bool(law_compact and law_compact in compact)
+
+
+def _no_article_message(detail_id: str, detail: Mapping) -> str:
+    """Explain a zero-article page and list the official attachments to read instead.
+
+    Announcement pages often carry the operative text only in attachments, and a
+    single attachment may bundle several documents that fetch cannot split yet.
+    """
+
+    lines = [f"csrc_gov_cn detail {detail_id} produced no article clauses"]
+    selected = detail.get("selected_attachment") or {}
+    if detail.get("attachment_error"):
+        lines.append(f"PDF attachment extraction failed: {detail['attachment_error']}")
+    elif selected:
+        lines.append(
+            f"attachment {selected.get('title')!r} was read but has no 第X条 article structure"
+        )
+    others = [
+        item
+        for item in detail.get("attachments") or []
+        if item.get("url") != selected.get("url")
+    ]
+    if others:
+        lines.append(
+            "other official attachments were not read because their titles do not name "
+            "this document; they may bundle several documents, which fetch cannot split yet:"
+        )
+        lines.extend(f"- {item.get('title')}: {item.get('url')}" for item in others)
+    return "\n".join(lines)
 
 
 def _pdf_bytes_to_text(pdf_bytes: bytes) -> str:
@@ -735,6 +767,10 @@ class CsrcGovCnAdapter:
             released_at if _takes_effect_on_publication(metadata_text) else None
         )
         document_number = _infer_document_number(metadata_text)
+        # The canonical contract rejects zero-article payloads with a generic
+        # message; check first so callers learn where the official text lives.
+        if not cleaning.parse_articles_from_text(raw_text):
+            raise ValueError(_no_article_message(detail_id, detail))
         payload = cleaning.canonicalize(
             raw_text,
             source_kind="markdown",
@@ -752,11 +788,6 @@ class CsrcGovCnAdapter:
             source_checked_at=detail.get("checked_at"),
             source_hash=self._hash_text(raw_text),
         )
-        if not payload.get("articles"):
-            message = f"csrc_gov_cn detail {detail_id} produced no article clauses"
-            if detail.get("attachment_error"):
-                message += f"; PDF attachment extraction failed: {detail['attachment_error']}"
-            raise ValueError(message)
         return payload
 
     @staticmethod
