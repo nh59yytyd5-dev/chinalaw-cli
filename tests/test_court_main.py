@@ -114,6 +114,42 @@ class CourtMainAdapterTests(unittest.TestCase):
 </html>
 """
 
+    AMENDMENT_DECISION_DETAIL_FIXTURE = """
+<html>
+<head>
+  <title>“两高”发布《关于修改〈最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释〉的决定》 - 中华人民共和国最高人民法院</title>
+</head>
+<body>
+<div class="title">“两高”发布《关于修改〈最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释〉的决定》</div>
+<ul class="info">
+  <li>来源：最高人民法院新闻局</li>
+  <li>发布时间：2026-07-24 15:03:50</li>
+</ul>
+<div class="txt_txt" id="zoom">
+  <p>依法惩治示例犯罪 维护投资者合法权益</p>
+  <p>2026年7月24日，最高人民法院、最高人民检察院联合发布《修改决定》，自2026年7月27日起施行。</p>
+  <p>《最高人民法院、最高人民检察院关于修改〈最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释〉的决定》已于2025年12月13日通过，现予公布，自2026年7月27日起施行。</p>
+  <p>最高人民法院 最高人民检察院</p>
+  <p>2026年7月24日</p>
+  <p>法释〔2026〕13号</p>
+  <p>关于修改《最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释》的决定</p>
+  <p>根据司法实践情况，现决定对《解释》作如下修改：</p>
+  <p>一、将第六条修改为：“在敏感期内从事示例交易，具有下列情形之一的，应当认定为情节严重：</p>
+  <p>“（一）成交额在二百万元以上的；</p>
+  <p>“（二）具有其他严重情节的。”</p>
+  <p>二、将第四条调整至第九条之后，相应调整相关条文序号。</p>
+  <p>本决定自2026年7月27日起施行。</p>
+  <p>根据本决定，《最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释》作相应修改后，重新公布。</p>
+  <p>最高人民法院 最高人民检察院</p>
+  <p>关于办理示例刑事案件适用法律若干问题的解释</p>
+  <p>第一条 下列人员应当认定为示例知情人员。</p>
+  <p>第六条 本解释所称“敏感期”是指信息自形成至公开的期间。</p>
+</div>
+<div class="txt_etr">分享区</div>
+</body>
+</html>
+"""
+
     def _search_result(self) -> court_main.FetchResult:
         return court_main.FetchResult(
             url="https://www.court.gov.cn/search.html?content=%E7%A4%BA%E4%BE%8B",
@@ -288,6 +324,46 @@ class CourtMainAdapterTests(unittest.TestCase):
         self.assertEqual(payload["articles"][2]["number_display"], "第18项")
         self.assertEqual(payload["articles"][2]["part"], "二、关于破产案件的审理")
         self.assertIn("破产受理条件", payload["articles"][2]["text"])
+
+    def test_amendment_decision_excludes_appended_republished_document(self) -> None:
+        adapter = court_main.CourtMainAdapter()
+        page = court_main.FetchResult(
+            url="https://www.court.gov.cn/zixun/xiangqing/506981.html",
+            status_code=200,
+            headers={},
+            text=self.AMENDMENT_DECISION_DETAIL_FIXTURE,
+        )
+        with patch.object(court_main, "_fetch_text", return_value=page):
+            payload = adapter.build_law_payload("zixun/xiangqing/506981")
+
+        # Title, number, dates and body must all belong to the decision itself.
+        self.assertEqual(
+            payload["title"],
+            "最高人民法院、最高人民检察院关于修改〈最高人民法院、最高人民检察院"
+            "关于办理示例刑事案件适用法律若干问题的解释〉的决定",
+        )
+        self.assertEqual(payload["document_number"], "法释〔2026〕13号")
+        self.assertEqual(payload["released_at"], "2026-07-24")
+        self.assertEqual(payload["effective_at"], "2026-07-27")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["正文"])
+        body = payload["articles"][0]["text"]
+        self.assertTrue(body.startswith("《最高人民法院、最高人民检察院关于修改"))
+        self.assertIn("一、将第六条修改为", body)
+        self.assertTrue(body.endswith("作相应修改后，重新公布。"))
+        self.assertNotIn("依法惩治示例犯罪", body)
+        self.assertNotIn("本解释所称“敏感期”", body)
+        self.assertEqual(
+            [(item["code"], item["republished_title"]) for item in payload["warnings"]],
+            [(
+                "republished_text_not_imported",
+                "最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释",
+            )],
+        )
+
+    def test_amendment_decision_without_appended_text_is_not_split(self) -> None:
+        text = "关于修改《示例规定》的决定\n一、删去第三条。\n根据本决定，《示例规定》作相应修改，重新公布。"
+        self.assertIsNone(court_main._split_amendment_decision("关于修改《示例规定》的决定", text))
+        self.assertIsNone(court_main._split_amendment_decision("示例规定", text + "\n第一条 示例。"))
 
     def test_infer_document_title_preserves_direct_normative_title(self) -> None:
         title = "最高人民法院关于适用《中华人民共和国刑事诉讼法》的解释"

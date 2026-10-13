@@ -1509,6 +1509,11 @@ JSON 输出 schema（成功 / 主流程）：
 未启用 `CHINALAW_USE_ALIAS_AGENT` 时不会出现该字段。可恢复错误不得中断主 fetch，
 其它编程错误必须向上抛出。
 
+`court_main` 抓取“关于修改……的决定”且页面在“根据本决定……重新公布。”之后附载被修改文书全文时，
+只导入决定本身（单条 `正文`，标题、文号、施行日期均取自决定），附载全文不挂在决定名下，并附
+`{"severity": "warning", "code": "republished_text_not_imported", "republished_title": "string", "message": "string"}`
+（v0.7.3，#34）。`law.warnings` 为运行时诊断，写库与 `--to-fixture` 前剥离。
+
 JSON 输出 schema（list-matches 模式）：
 
 ```json
