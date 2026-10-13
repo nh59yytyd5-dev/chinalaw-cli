@@ -844,6 +844,23 @@ def _add_status_and_time_parsers(sub) -> None:
     _add_format_arg(p_verify_source)
 
 
+def _add_law_parser(sub) -> None:
+    p_law = sub.add_parser("law", help="公开法规单行维护（删除重复行等）")
+    law_sub = p_law.add_subparsers(dest="law_command", metavar="<law_command>")
+
+    p_law_delete = law_sub.add_parser(
+        "delete",
+        help="删除单行公开法规及其条文、版本快照与索引（无交互确认，慎用；被引用时拒绝）",
+    )
+    p_law_delete.add_argument("law_id", help="公开法规精确 id（不解析名称 / 别名）")
+    p_law_delete.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只报告将删除的行数与阻止删除的引用，不写库",
+    )
+    _add_format_arg(p_law_delete)
+
+
 def _add_norm_parser(sub) -> None:
     p_norm = sub.add_parser("norm", help="私域规范导入、导出与查看")
     norm_sub = p_norm.add_subparsers(dest="norm_command", metavar="<norm_command>")
@@ -1211,6 +1228,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_doctor_parser(sub)
     _add_rebuild_clean_parser(sub)
     _add_status_and_time_parsers(sub)
+    _add_law_parser(sub)
     _add_norm_parser(sub)
     _add_commentary_parser(sub)
     _add_pack_parser(sub)
@@ -2026,6 +2044,22 @@ def _handle_verify_source(
     return 0 if report.get("ok") else 2
 
 
+def _handle_law(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
+    if args.law_command == "delete":
+        result = loader.delete_law(db_path, args.law_id, dry_run=args.dry_run)
+        if result is None:
+            _emit(
+                {"kind": "law_delete", "ok": False, "found": False, "id": args.law_id},
+                fmt,
+                lambda _: formatters.law_delete_to_markdown(None),
+            )
+            return 1
+        _emit(result, fmt, formatters.law_delete_to_markdown)
+        return 0 if result["ok"] else 1
+    parser.print_help()
+    return 0
+
+
 def _handle_norm(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
     if args.norm_command == "list":
         norms = normsources.list_sources(db_path)
@@ -2483,6 +2517,7 @@ _COMMAND_HANDLERS = {
     "applicable": _handle_applicable,
     "probe": _handle_probe,
     "verify-source": _handle_verify_source,
+    "law": _handle_law,
     "norm": _handle_norm,
     "commentary": _handle_commentary,
     "pack": _handle_pack,
