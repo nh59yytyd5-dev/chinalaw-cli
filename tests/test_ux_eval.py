@@ -2,12 +2,14 @@
 
 import importlib.util
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 
+@unittest.skipUnless(hasattr(os, "getuid"), "ux_eval harness maps host uid/gid into Docker (POSIX only)")
 class UxEvalRunTests(unittest.TestCase):
     def test_unavailable_balance_prevents_container_launch(self):
         path = Path(__file__).resolve().parents[1] / "scripts/ux_eval/run.py"
