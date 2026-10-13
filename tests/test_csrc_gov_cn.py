@@ -105,6 +105,29 @@ class CsrcGovCnAdapterTests(unittest.TestCase):
 </html>
 """
 
+    DECISION_ATTACHMENTS_FIXTURE = """
+<html>
+<head>
+<meta name="ArticleTitle" content="关于修改、废止部分证券期货规范性文件的决定"/>
+<meta name="PubDate" content="2025-03-28 17:00:00"/>
+<title>关于修改、废止部分证券期货规范性文件的决定_中国证券监督管理委员会</title>
+</head>
+<body>
+<div class="detail-news">
+  <p>中国证券监督管理委员会公告</p>
+  <p>〔2025〕5号</p>
+  <p>现公布《关于修改、废止部分证券期货规范性文件的决定》，自公布之日起施行。</p>
+  <div id="files">
+    <a href="7547906/files/附件1：《关于修改、废止部分证券期货规范性文件的决定》.pdf">附件1：《关于修改、废止部分证券期货规范性文件的决定》.pdf</a>
+    <a href="7547906/files/附件1-1：中国证监会决定修改的规范性文件.pdf">附件1-1：中国证监会决定修改的规范性文件.pdf</a>
+    <a href="7547906/files/附件1-2：中国证监会决定废止的规范性文件.pdf">附件1-2：中国证监会决定废止的规范性文件.pdf</a>
+    <a href="7547906/files/附件2：《关于修改、废止部分证券期货规范性文件的决定》立法说明.pdf">附件2：《关于修改、废止部分证券期货规范性文件的决定》立法说明.pdf</a>
+  </div>
+</div>
+</body>
+</html>
+"""
+
     def _search_result(self) -> csrc_gov_cn.FetchResult:
         return csrc_gov_cn.FetchResult(
             url="https://www.csrc.gov.cn/guestweb4/s",
@@ -277,6 +300,52 @@ class CsrcGovCnAdapterTests(unittest.TestCase):
         self.assertEqual([item["number"] for item in payload["articles"]], ["1", "2", "17"])
         self.assertIn("附件1", fetch_bytes.call_args.args[0])
         self.assertNotIn("修订说明", fetch_bytes.call_args.args[0])
+
+    def test_zero_article_decision_lists_official_attachments(self) -> None:
+        adapter = csrc_gov_cn.CsrcGovCnAdapter()
+        detail_page = csrc_gov_cn.FetchResult(
+            url="https://www.csrc.gov.cn/csrc/c101954/c7547906/content.shtml",
+            status_code=200,
+            headers={},
+            text=self.DECISION_ATTACHMENTS_FIXTURE,
+        )
+        decision_text = "\n".join(
+            [
+                "关于修改、废止部分证券期货规范性文件的决定",
+                "一、对65部规范性文件的部分条款予以修改。（附件1）",
+                "二、对2部规范性文件予以废止。（附件2）",
+                "本决定自公布之日起施行。",
+            ]
+        )
+        with (
+            patch.object(csrc_gov_cn, "_fetch_text", return_value=detail_page),
+            patch.object(csrc_gov_cn, "_fetch_bytes", return_value=self._pdf_binary_result()) as fetch_bytes,
+            patch.object(csrc_gov_cn, "_pdf_bytes_to_text", return_value=decision_text),
+            self.assertRaises(ValueError) as raised,
+        ):
+            adapter.build_law_payload("csrc/c101954/c7547906")
+
+        message = str(raised.exception)
+        self.assertIn("produced no article clauses", message)
+        self.assertIn("was read but has no 第X条 article structure", message)
+        self.assertIn(
+            "https://www.csrc.gov.cn/csrc/c101954/c7547906/7547906/files/"
+            "附件1-1：中国证监会决定修改的规范性文件.pdf",
+            message,
+        )
+        self.assertIn("附件1-2：中国证监会决定废止的规范性文件.pdf", message)
+        fetch_bytes.assert_called_once()
+        self.assertNotIn("立法说明", fetch_bytes.call_args.args[0])
+
+    def test_explanatory_attachments_are_not_rule_text(self) -> None:
+        title = "关于修改、废止部分证券期货规范性文件的决定"
+        for suffix in ("修订说明", "起草说明", "立法说明", "编制说明"):
+            with self.subTest(suffix=suffix):
+                attachment = {"title": f"附件2：《{title}》{suffix}.pdf"}
+                self.assertFalse(csrc_gov_cn._looks_like_rule_pdf(attachment, law_title=title))
+        self.assertTrue(
+            csrc_gov_cn._looks_like_rule_pdf({"title": f"附件1：《{title}》.pdf"}, law_title=title)
+        )
 
     def test_pdf_text_cleanup_removes_page_numbers_and_preserves_article_heads(self) -> None:
         raw = "\n".join(
