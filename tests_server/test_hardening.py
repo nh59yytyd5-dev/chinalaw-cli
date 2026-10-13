@@ -2,22 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
+import socket
 import sqlite3
 import threading
 import time
 from unittest.mock import patch
 
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 
 from chinalaw.admin import backups, drafts
 from chinalaw.admin.errors import LibraryError
 from chinalaw.admin.gate import MaintenanceGate
+from chinalaw.db import connect, migrate
 from chinalaw.server import auth_store as auth_module
 from chinalaw.server import cli
 from chinalaw.server.app import create_app
 from chinalaw.server.auth_store import PUBLIC_SCOPE, AuthStore
+from chinalaw.server.config import ServerConfig
 from chinalaw.server.oauth import MAX_PENDING_PER_CLIENT
+from chinalaw.server.query_log import QueryLog
 from tests_server.conftest import PASSWORD
 from tests_server.test_oauth_mcp import authorization, consent_code
 
@@ -92,6 +98,64 @@ def test_server_mode_trusts_forwarded_client_only_from_loopback(api, tmp_path):
     assert calls[0]["proxy_headers"] is True
     assert calls[0]["forwarded_allow_ips"] == "127.0.0.1,::1"
     assert calls[1]["proxy_headers"] is False
+    # Open MCP streams must not hold shutdown until the service manager kills the process.
+    assert all(call["timeout_graceful_shutdown"] == cli.SHUTDOWN_GRACE_SECONDS for call in calls)
+
+
+def test_shutdown_grace_bounds_a_response_that_never_finishes(tmp_path, monkeypatch):
+    # A live stop once waited 90 s on a connection that never closed, until SIGKILL.
+    monkeypatch.setattr(cli, "SHUTDOWN_GRACE_SECONDS", 1)
+    log_closed = threading.Event()
+    close = QueryLog.close
+
+    def record_close(self):
+        close(self)
+        log_closed.set()
+
+    monkeypatch.setattr(QueryLog, "close", record_close)
+    with connect(tmp_path / "library.db") as conn:
+        migrate(conn)
+    config = ServerConfig(tmp_path / "library.db", tmp_path / "state", start_worker=False)
+    app = create_app(config, auth_store=AuthStore(config.auth_path, config.resource_url))
+
+    async def with_stuck_response(scope, receive, send):
+        if scope["type"] == "http" and scope["path"] == "/stuck":
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"open", "more_body": True})
+            await asyncio.Event().wait()  # never completes on its own
+        else:
+            await app(scope, receive, send)
+
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    server = uvicorn.Server(
+        uvicorn.Config(with_stuck_response, log_level="critical", **cli._uvicorn_options(config))
+    )
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+    thread.start()
+    client = None
+    try:
+        deadline = time.monotonic() + 5
+        while not server.started and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert server.started
+        client = socket.create_connection(sock.getsockname(), timeout=5)
+        client.sendall(b"GET /stuck HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+        received = b""
+        while b"open" not in received:
+            received += client.recv(1024)
+        stopping = time.monotonic()
+        server.should_exit = True
+        thread.join(timeout=10)
+        assert not thread.is_alive(), "shutdown waited on the unfinished response"
+        assert time.monotonic() - stopping < 5
+        assert log_closed.is_set(), "lifespan cleanup did not run"
+    finally:
+        server.force_exit = True
+        thread.join(timeout=5)
+        if client is not None:
+            client.close()
+        sock.close()
 
 
 def test_exclusive_waits_for_activity_to_finish():
