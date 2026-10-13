@@ -20,6 +20,10 @@ from chinalaw.admin.lease import ProcessLease
 from chinalaw.db import DEFAULT_DB_PATH, connect, connect_readonly, current_version, migrate
 from chinalaw.schema import SCHEMA_VERSION
 
+# Open MCP streams never end on their own. Without a bound, SIGTERM waits for them until
+# the service manager kills the process, and the lifespan cleanup never runs.
+SHUTDOWN_GRACE_SECONDS = 10
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="chinalaw-server", description="人工资料库管理服务")
@@ -153,20 +157,22 @@ def _serve(args) -> int:
         opener = threading.Timer(1, webbrowser.open, args=(url,))
         opener.daemon = True
         opener.start()
-    if config.local_mode:
-        uvicorn.run(app, host=config.host, port=config.port, workers=1, proxy_headers=False)
-    else:
-        # Behind a same-host reverse proxy, trust only loopback for X-Forwarded-For so
-        # login rate limits count the real client instead of the proxy address.
-        uvicorn.run(
-            app,
-            host=config.host,
-            port=config.port,
-            workers=1,
-            proxy_headers=True,
-            forwarded_allow_ips="127.0.0.1,::1",
-        )
+    uvicorn.run(app, **_uvicorn_options(config))
     return 0
+
+
+def _uvicorn_options(config) -> dict:
+    options = {
+        "host": config.host,
+        "port": config.port,
+        "workers": 1,
+        "timeout_graceful_shutdown": SHUTDOWN_GRACE_SECONDS,
+    }
+    if config.local_mode:
+        return {**options, "proxy_headers": False}
+    # Behind a same-host reverse proxy, trust only loopback for X-Forwarded-For so
+    # login rate limits count the real client instead of the proxy address.
+    return {**options, "proxy_headers": True, "forwarded_allow_ips": "127.0.0.1,::1"}
 
 
 def _state_dir(args) -> Path:
