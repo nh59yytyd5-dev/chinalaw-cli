@@ -37,7 +37,9 @@ def test_verified_mapping_prefers_exact_public_id(tmp_path):
         )
     result = service.applicable(db, as_of="2026-01-01")
     assert result["matches"][0]["primary_law_id"] == "official"
-    assert result["coverage"] == {"rules_loaded": 1, "topics": ["测试"], "exhaustive": False}
+    assert result["coverage"] == {
+        "rules_loaded": 1, "topics": ["测试"], "domains": ["all"], "exhaustive": False,
+    }
 
 
 def test_reviewed_seeds_have_bounds_and_official_sources(tmp_path):

@@ -80,6 +80,53 @@ chinalaw-remote-check --env-file /absolute/remote.env --query 保证期间 --law
 | chinalaw_document | 分页全文；公开法规 id 可用法规名、别名或 ID |
 | chinalaw_applicable | 已录入的时间效力检索指引，覆盖不完整，不输出选法结论 |
 
+读条可显式使用简洁视图（先检查 tools/list 的 schema 是否包含 `detail`）：
+
+```json
+{"name":"chinalaw_article","arguments":{"law":"民法典","number":"143","detail":"compact"}}
+```
+
+`detail` 默认 `full`，返回与原接口一致。`compact` 保留完整 `article`、所选/当前版本、
+状态、来源和诊断，只省略与 article 相同的 `item` 及 law 中的 `revisions/work_versions`
+列表；缺失条文的 null 和错误信息保留。`view.omitted_fields` 明列实际省略的字段，
+`view.full.tool/arguments` 给出恢复完整结果的调用，保留原 law、number 与显式 as_of。
+需要查看完整修订列表时执行该调用，不把简洁视图中的省略理解为“没有其他版本”。
+HTTP 与 stdio 支持同样的 detail 语义；CLI、REST 和批量工具不受此选项影响。
+
+推荐调用策略直接写在 MCP 的工具描述中，客户端读取 tools/list 即可获得，不依赖
+安装或同步本项目的 skill：**常规读条（含历史日期）显式优先 detail=compact**，它已经
+包含完整正文；需要完整修订/版本清单或旧兼容字段时再选择 full。参数缺省仍为 full，
+这是旧调用的兼容行为，并非对新 agent 的优先推荐。
+
+搜索也可选择定位视图（先确认工具 schema 包含 `view`）：
+
+```json
+{"name":"chinalaw_search","arguments":{"query":"保证期间","kind":"article","view":"brief"}}
+```
+
+默认 `view=full` 保持原响应。`brief` 保留全部候选、顺序、标题、条号、来源、效力和
+版本标记，只将 `article_hits/norm_clause_hits` 的 text 换成明确的 `excerpt` 对象：
+`text` 是最多 240 个 Unicode 字符的连续原文，`start_char/end_char` 是从 0 开始、
+右端不含的字符位置，`total_chars` 是原文长度，`truncated` 表示是否只展示了部分正文。
+没有头尾拼接或生成式摘要。`truncated=false` 时整条正文已展示，无须为补全文再读一次。
+
+工具说明推荐**搜索定位显式优先 view=brief**；只对实际需要的截断条文执行 read，
+需要同时读取或比较多个命中的完整正文时再使用 full。客户端需刷新工具列表才会收到
+新的说明；实际参数仍由客户端/agent 选择，服务不会将省略参数的旧调用强制改成简洁视图。
+
+需要完整条文时按命中的 `read.tool/arguments` 调用。使用返回的法规 ID、条号与
+`text_version.sha256`（正文 UTF-8 的 SHA-256）核对身份和内容；不匹配时重新检索，
+不能把变更后的正文当成原摘录来源。`text_version.basis=stored_record` 指普通关键词
+命中的存储记录，read 按明确 ID 读取；搜索 as_of 用于排名/效力判断，不把它擅自传入
+article 后换成别的修订。`basis=as_of` 指明确历史条号命中，read 保留原日期。
+`basis=private_record` 是获准读取的私域条款。
+
+私域条款的 ID 可能与公开法规相同，部分特殊条号也无法直接读条；此时 read 复用完整
+搜索，并用 `result_path=[命中组,下标]` 指向结果，保留原检索范围和权限。它可能返回
+多个候选，不能把整个回复当成单条正文。`view.full` 可恢复整次完整搜索；零命中指导、
+权限错误和未解析范围保持原样。law_hits/norm_source_hits 原本就是文件定位元数据，
+不虚构正文摘录；HTTP 客户端可用原有 document 工具按文件 ID 分页读全文。
+
 法规内搜索示例（对应 CLI `search 保证期间 --in 民法典`）：
 
 ```json
@@ -90,6 +137,22 @@ in_laws 接受字符串或列表（最多 20 个名称/ID，每项最多 200 字
 
 HTTP 暂无 CLI 的章节限定 `--in-part`、批量取条、history/diff/trace、抓取导入和写操作。批量离线工作使用本地库。最终引用使用 article 核验，不能把 search 的正文引用条号当成指定条文。
 
+`kind=law` 指库中的公开资料，包含司法解释等公开文件，不是仅指法律这一效力层级。
+`kind=article` 检索公开条文；`kind=norm` 指私人导入资料，需要额外私域权限。
+`kind=all` 检索当前凭据获准访问的内容。不要为检索司法解释而选择 `norm`。
+
+零命中时可查看 `guidance.code/message/next_steps`。`next_steps` 是尚未执行的建议，
+其中 `tool=search/resolve` 对应 `chinalaw_search/chinalaw_resolve`，`arguments` 可直接使用。
+搜索建议保留原日期、版本、法规范围及筛选条件；未解析范围会先建议 resolve，不能把它
+改成全库结果。建议不会证明相关资料已收录。`search(kind="law" 或 "all")` 可直接匹配
+`法释〔2024〕10号` 这类文号元数据；标题和文号同时给出时，两者都须匹配。
+`resolve` 也支持单独的文号；`via=document_number_match` 表示唯一的文号匹配。
+同一文号对应多个文件时返回候选，请选明确 ID 后读取，不能任选其中一个。
+
+`resolve.via=like_fallback` 仅表示名称子串命中，须核对 `official_title`；命中修改决定
+不能自动证明它就是所问的完整法规。`document` 的 `offset` 从 0 开始，`limit` 按条目数
+计数；按 `next_offset` 续读，`next_offset=null` 表示结束，`returned` 是本页条目数。
+
 ## 不要混淆三种“没找到”
 
 1. **接入失败**：没有工具、401、超时、响应解析失败。先修客户端，不能据此判断数据覆盖。
@@ -97,3 +160,14 @@ HTTP 暂无 CLI 的章节限定 `--in-part`、批量取条、history/diff/trace�
 3. **时间效力主题未匹配**：`applicable` 的 topic 是文字筛选，不是语义问题理解。先看 `coverage.topics`；“公司对外担保”可分别查询 topic="担保" 和 topic="公司治理"，结合事实日期读取相关指引。两条指引不自动组成该问题的完整答案。`rules_loaded=12` 只说明有 12 条规则，零命中不说明没有过渡规定；不要为了命中把案例问题硬标成一条已审核规则。
 
 MCP 业务错误的 `isError=true` 与 `structuredContent.error/message/status/details` 见 [CONTRACT.md](CONTRACT.md)。其中 `status=403` 是工具业务状态，HTTP 可以仍为 200。
+
+`article.found=false` 表示条文未找到，即使同一次返回包含法规元数据也不能当成功读条。
+`article_count` 是条目总数，不一定等于最大条号。`applicable.coverage.domains` 给出本库
+实际标签，domain 按字面筛选；未知标签可能只命中 all 规则，注意对应 warning。
+具体 domain 会并入标记为 all 的规则；`domain="all"` 只取 all 标签，要检索该日全部
+领域的规则应不传 domain。
+`applicable` 顶层 law 是定位元数据，历史条文仍须用 article 的 as_of 获取。
+
+对于默认会对工具结果做头尾裁剪的客户端，过长 JSON 可能在裁剪后误拼不同文件的标题、
+正文和来源。应保留完整结构化结果，或按条目分页读取；看到 Omitted/truncated 提示时，
+先重新取单个文件核验，再判断数据是否有误。本项目 Docker/DSH 评测 profile 已关闭这类裁剪。
