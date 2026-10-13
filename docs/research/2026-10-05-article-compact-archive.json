@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "batch": "20261005-article-compact-v1",
+  "private_archive_root": "~/chinalaw-evidence",
+  "created_at": "2026-10-05T13:26:21.708610+00:00",
+  "datasets": [
+    {
+      "dataset": "ux-compact-20261005v1",
+      "archive": "ux-compact-20261005v1.tar.gz",
+      "files": 241,
+      "source_bytes": 366536053,
+      "archive_bytes": 116814557,
+      "sha256": "5ee395226c7fc719d0ddca66e697f2351479a3fde72842c336a5af86590b0f95",
+      "verified": true
+    }
+  ],
+  "provenance": {
+    "baseline_commit": "59dcfb3e92395dea0a3ab6753356966769656798",
+    "candidate_source_sha256": "c7a30bb99fe0fe6b88e72de0b9373ec40c892bc39b551fb483bef4ffd76f9b25",
+    "image_id": "sha256:eaa44e689310a04bece52ef7291128ca49d63b0f22966e26f4b2a9f6142ffd28",
+    "model_calls": 0,
+    "provider_tokens": null,
+    "validation": {
+      "passed": 1100,
+      "skipped": 32,
+      "subtests": 1739
+    },
+    "metrics_sha256": "9ca96a7824a23e26f6d22006f0513f46295e9f133b53b6a692ba42f112680e42"
+  },
+  "source_location": "var/ux-compact-20261005v1",
+  "storage": "Independent private copy on the same machine; not an off-host backup."
+}

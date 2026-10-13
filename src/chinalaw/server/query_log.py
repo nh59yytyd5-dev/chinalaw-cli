@@ -46,7 +46,7 @@ _OUTCOME_KEYS = {
     "resolve": ("matched", "via", "id"),
     "article": ("kind", "found", "law_id", "reason", "error"),
     "list": ("total",),
-    "document": ("total", "has_more"),
+    "document": ("total", "has_more", "returned", "next_offset"),
 }
 
 
@@ -54,6 +54,14 @@ def summarize(tool: str, result: Any) -> dict:
     if not isinstance(result, dict):
         return {"found": result is not None}
     outcome = {key: result[key] for key in _OUTCOME_KEYS.get(tool, ()) if key in result}
+    if tool == "search":
+        fuzzy = result.get("fuzzy") or {}
+        outcome["fuzzy_count"] = fuzzy.get("count", 0)
+        outcome["unresolved_scope_count"] = len(
+            (result.get("law_filter") or {}).get("unresolved", [])
+        )
+        if result.get("guidance"):
+            outcome["guidance_code"] = result["guidance"]["code"]
     if tool == "article" and isinstance(result.get("article"), dict):
         law = result.get("law") if isinstance(result.get("law"), dict) else {}
         outcome.update(found=True, law_id=law.get("id"), number=result["article"].get("number"))

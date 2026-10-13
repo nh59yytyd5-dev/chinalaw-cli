@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any, BinaryIO, TextIO
 
 from chinalaw import __version__, ensure, metadata, service
+from chinalaw.article_views import article_view
 from chinalaw.db import DEFAULT_DB_PATH
+from chinalaw.search_views import search_view
 
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {"name": "chinalaw-mcp", "version": __version__}
@@ -253,6 +255,13 @@ def _call_tool(
             db_path=db_path,
             allow_private_norms=allow_private_norms,
         )
+        if name == "chinalaw_article":
+            payload = article_view(
+                payload, law=arguments["law"], number=arguments["number"],
+                as_of=arguments.get("as_of"), detail=arguments.get("detail", "full"),
+            )
+        elif name == "chinalaw_search":
+            payload = search_view(payload, arguments=arguments, view=arguments.get("view", "full"))
         return _tool_result(payload, is_error=False)
     except ValueError as exc:
         payload = {

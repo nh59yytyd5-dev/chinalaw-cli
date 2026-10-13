@@ -13,8 +13,10 @@ from pydantic import AnyHttpUrl
 
 from chinalaw import __version__, service
 from chinalaw.admin import catalog
-from chinalaw.admin.errors import LibraryError
+from chinalaw.admin.errors import LibraryError, private_access_denied
+from chinalaw.article_views import ArticleDetail, article_view
 from chinalaw.db import read_only_operation
+from chinalaw.search_views import SearchView, search_view
 from chinalaw.server.auth_store import PRIVATE_SCOPE, PUBLIC_SCOPE, READ_SCOPES
 from chinalaw.server.config import ServerConfig
 from chinalaw.server.oauth import OwnerOAuth
@@ -74,6 +76,44 @@ def _logged(query_log, tool: str, params: dict, call):
         )
 
 
+def _article_payload(db_path, law: str, number: str, as_of: str | None,
+                     *, include_private: bool) -> dict:
+    if not 1 <= len(law) <= 200 or not 1 <= len(number) <= 60:
+        raise LibraryError("invalid_arguments", "law or article number is too long")
+    with read_only_operation():
+        if as_of:
+            result = service.get_article_as_of(
+                db_path, law, number, as_of, include_norm=include_private
+            )
+        else:
+            result = service.get_article(
+                db_path, law, number, include_norm=include_private
+            )
+        if result and result.get("article") is not None:
+            return result
+        if result and result.get("error"):
+            return {**result, "found": False}
+        if result and isinstance(result.get("law"), dict):
+            return {
+                **result, "kind": "article_missing", "found": False,
+                "error": "article_not_found",
+                "reason": "article_null_as_of" if as_of else "article_null",
+                "hint": (
+                    "法规或规范已定位，但该条号在所请求的版本中未找到。请核对条号与版本；"
+                    "条文总数不等于最大条号，历史条文不能用当前文本替代。"
+                ),
+            }
+        diagnosis = service.diagnose_article_miss(db_path, law, number, as_of=as_of)
+        return {
+            "kind": "article_missing",
+            "found": False,
+            "error": "invalid_as_of" if diagnosis["reason"] == "invalid_as_of"
+            else "article_not_found",
+            "law": law,
+            **diagnosis,
+        }
+
+
 def make_mcp(
     config: ServerConfig, oauth: OwnerOAuth, query_log: QueryLog | None = None,
     search_executor: SearchExecutor | None = None,
@@ -114,7 +154,12 @@ def make_mcp(
 
     @server.tool(annotations=READ_ONLY)
     def chinalaw_resolve(name: str) -> dict:
-        """Resolve a public law name/alias to the local record and source metadata."""
+        """Resolve a public law name/alias or document number to source metadata.
+
+        Check official_title: via=like_fallback is only a title substring match,
+        which may name an amendment decision rather than the requested full law.
+        A shared document number returns candidates for explicit ID selection.
+        """
         return logged("resolve", {"name": name}, lambda: resolve(name))
 
     @server.tool(annotations=READ_ONLY)
@@ -128,12 +173,29 @@ def make_mcp(
         region: str | None = None,
         versions: str = "folded",
         in_laws: list[str] | str | None = None,
+        view: SearchView = "full",
     ) -> dict:
-        """Exact-first search; sparse article hits add literal fragments marked fuzzy.
+        """Find provisions: prefer view=brief for search and discovery; set it explicitly.
 
+        Brief keeps candidates and source/version metadata. If an excerpt has
+        truncated=false, its provision text is already complete; no extra read
+        is needed just to obtain the same text. For needed truncated provisions,
+        follow that hit's read tool/arguments. Choose view=full when complete
+        text of multiple hits is needed together. Omitted view defaults to full
+        only for backward compatibility, not as the recommended discovery mode.
+
+        Exact-first search; sparse hits add literal fragments marked fuzzy.
         Fuzzy fragments must all occur in one article. Empty results suggest
         retrying with statutory wording. Bare article numbers are content searches;
         use chinalaw_article(law, number) for a particular article.
+
+        kind=law searches PUBLIC document titles, including judicial interpretations;
+        kind=article searches public provisions. kind=norm means PRIVATE imported
+        documents, not all normative sources. kind=all searches authorized content.
+        kind=law/all also matches exact document-number metadata (e.g. 法释〔2024〕10号).
+        A title plus document number must match both; verify the returned metadata.
+        A zero-hit result may include guidance.next_steps with explicit arguments;
+        suggested searches retain the original filters and are not already executed.
 
         Private hits appear only with private-read authorization. Public hits
         are judged on ``as_of`` (YYYY-MM-DD, default today in Beijing): laws in
@@ -144,6 +206,11 @@ def make_mcp(
         citation such as 民法典第五百零四条 returns that article first.
         in_laws limits public search to law names/IDs (string or list, up to 20).
         Unresolved scopes are reported and never fall back to global search.
+
+        view=brief preserves candidates/metadata, replacing provision text with
+        literal excerpts (max 240 Unicode characters). excerpt.truncated marks
+        partial text; use each hit's read tool/arguments for full text and check
+        text_version.sha256. view.full repeats this search with all text.
         """
         options = {
             "as_of": as_of,
@@ -155,11 +222,15 @@ def make_mcp(
         }
         given = {key: value for key, value in options.items() if value and value != "folded"}
         params = {"query": query, "kind": kind, "limit": limit, **given}
+        if view != "full":
+            params["view"] = view
 
         return await executor.run_logged(
-            lambda: catalog.search_library(
-                config.db_path, query, kind=kind, limit=limit,
-                include_private=_private_allowed(), **options,
+            lambda: search_view(
+                catalog.search_library(
+                    config.db_path, query, kind=kind, limit=limit,
+                    include_private=_private_allowed(), **options,
+                ), arguments=params, view=view,
             ),
             lambda call: logged("search", params, call),
         )
@@ -181,6 +252,10 @@ def make_mcp(
 
         Curated transition rules, e.g. 民法典 and 公司法 2023 time-effect
         provisions and 刑法 retroactivity. Filter by topic, law or domain.
+        Domain labels are listed in coverage.domains. A specific domain also
+        includes rows tagged all; domain=all selects only that tag. Omit domain
+        to query every domain at the date.
+        The top-level law is reference metadata, not the law version at that date.
         """
         return logged(
             "applicable",
@@ -188,38 +263,33 @@ def make_mcp(
             lambda: applicable(date, topic, law, domain),
         )
 
-    def article(law: str, number: str, as_of: str | None) -> dict:
-        include_private = _private_allowed()
-        if not 1 <= len(law) <= 200 or not 1 <= len(number) <= 60:
-            raise LibraryError("invalid_arguments", "law or article number is too long")
-        with read_only_operation():
-            if as_of:
-                result = service.get_article_as_of(
-                    config.db_path, law, number, as_of, include_norm=include_private
-                )
-            else:
-                result = service.get_article(
-                    config.db_path, law, number, include_norm=include_private
-                )
-            return result or {
-                "kind": "article_missing",
-                "error": "article_not_found",
-                "law": law,
-                **service.diagnose_article_miss(config.db_path, law, number, as_of=as_of),
-            }
+    def article(law: str, number: str, as_of: str | None, detail: ArticleDetail) -> dict:
+        payload = _article_payload(config.db_path, law, number, as_of,
+                                   include_private=_private_allowed())
+        return article_view(payload, law=law, number=number, as_of=as_of, detail=detail)
 
     @server.tool(annotations=READ_ONLY)
-    def chinalaw_article(law: str, number: str, as_of: str | None = None) -> dict:
-        """Read one complete article with provenance, optionally at a historical date."""
+    def chinalaw_article(
+        law: str, number: str, as_of: str | None = None, detail: ArticleDetail = "full",
+    ) -> dict:
+        """Read a complete article: prefer detail=compact for ordinary reading; set it explicitly.
+
+        Compact already includes the complete article text, provenance,
+        selected/current versions and diagnostics. It also supports historical
+        dates via as_of. Choose detail=full only when the full revision/version
+        lists or compatibility fields are needed; view.full supplies that call.
+        Omitted detail defaults to full only for backward compatibility.
+        """
+        params = {"law": law, "number": number, "as_of": as_of}
+        if detail != "full":
+            params["detail"] = detail
         return logged(
-            "article",
-            {"law": law, "number": number, "as_of": as_of},
-            lambda: article(law, number, as_of),
+            "article", params, lambda: article(law, number, as_of, detail),
         )
 
     def list_documents(kind: str, query: str, page: int, page_size: int) -> dict:
         if kind == "norm" and not _private_allowed():
-            raise LibraryError("private_access_denied", "未获私域规范访问权限。", status=403)
+            raise private_access_denied()
         _private_allowed()
         return catalog.list_documents(
             config.db_path, kind=kind, query=query, page=page, page_size=page_size
@@ -229,7 +299,12 @@ def make_mcp(
     def chinalaw_list(
         kind: str = "law", query: str = "", page: int = 1, page_size: int = 20
     ) -> dict:
-        """List documents in this library, with stable pagination and provenance."""
+        """List documents in this library, with stable pagination and provenance.
+
+        kind=law lists all PUBLIC document types, including judicial interpretations.
+        kind=norm lists PRIVATE imported documents and requires private permission.
+        query filters titles, not article text; use search for content keywords.
+        """
         return logged(
             "list",
             {"kind": kind, "query": query, "page": page, "page_size": page_size},
@@ -239,7 +314,7 @@ def make_mcp(
     def document(kind: str, id: str, offset: int, limit: int) -> dict:
         private = _private_allowed()
         if kind == "norm" and not private:
-            raise LibraryError("private_access_denied", "未获私域规范访问权限。", status=403)
+            raise private_access_denied()
         if offset < 0 or not 1 <= limit <= 100:
             raise LibraryError(
                 "invalid_arguments", "offset must be non-negative and limit must be 1–100"
@@ -251,13 +326,20 @@ def make_mcp(
         clauses = result["document"].pop(member)
         result["document"][member] = clauses[offset : offset + limit]
         result.update(
-            total=len(clauses), offset=offset, limit=limit, has_more=offset + limit < len(clauses)
+            total=len(clauses), offset=offset, limit=limit, has_more=offset + limit < len(clauses),
+            returned=len(result["document"][member]),
+            next_offset=offset + limit if offset + limit < len(clauses) else None,
         )
         return result
 
     @server.tool(annotations=READ_ONLY)
     def chinalaw_document(kind: str, id: str, offset: int = 0, limit: int = 50) -> dict:
-        """Paginated full text. Law id accepts ID/name/alias; norm requires ID."""
+        """Paginated full text. Law id accepts ID/name/alias; norm requires ID.
+
+        kind=law covers PUBLIC documents; norm is PRIVATE imported material.
+        offset is zero-based and limit counts entries, not characters. Continue
+        at next_offset; null means finished. Do not restart at offset=0 to read more.
+        """
         return logged(
             "document",
             {"kind": kind, "id": id, "offset": offset, "limit": limit},
