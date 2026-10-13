@@ -587,6 +587,34 @@ COMMAND_SPECS: dict[str, dict[str, Any]] = {
         ],
         output_kind="source_verify_result",
     ),
+    "law": _command(
+        "law <delete>",
+        summary="Maintain single public-law rows, e.g. delete a duplicate row by exact id.",
+        risk="local-write",
+        side_effect=(
+            "delete removes the law, its articles, revisions, categories and search "
+            "indexes from the local database; --dry-run is read-only"
+        ),
+        positional=[
+            _arg("law_command", required=True),
+            _arg(
+                "law_id",
+                required=True,
+                description="Exact public-law id; names and aliases are not resolved.",
+            ),
+        ],
+        flags=[_arg("--dry-run"), _arg("--format", choices=["json", "md"])],
+        output_kind="law_delete",
+        exit_codes={
+            "0": "deleted, or dry-run report produced",
+            "1": "id not found, or refused because other records reference the law",
+            "2": "usage error",
+        },
+        common_misuse=[
+            "Do not delete a law to hide a status or text problem; fix or re-fetch it instead.",
+            "Sync or fetch from the same source can import the row again.",
+        ],
+    ),
     "norm": _command(
         "norm <list|show|clause|import|ingest|export|delete|history|diff>",
         summary="Manage private norm sources and clauses.",

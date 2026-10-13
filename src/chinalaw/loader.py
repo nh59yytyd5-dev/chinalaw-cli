@@ -38,6 +38,7 @@ from chinalaw.db import connect, migrate, set_meta
 from chinalaw.document_numbers import index_document_number
 from chinalaw.search_indexes import (
     delete_article_search_indexes,
+    delete_law_search_index,
     insert_article_search_index,
     reindex_law_articles,
     replace_law_search_indexes,
@@ -462,6 +463,76 @@ def load_law_from_dict(conn: sqlite3.Connection, payload: dict) -> int:
         count += 1
 
     return count
+
+
+# Rows elsewhere that name a public law without a cascading foreign key. Deleting
+# a referenced law would leave them dangling, so ``delete_law`` refuses instead.
+_LAW_REFERENCES = (
+    ("article_commentaries", "law_id"),
+    ("norm_pack_items", "law_id"),
+    ("law_relations", "from_law_id"),
+    ("law_relations", "to_law_id"),
+    ("applicability_rules", "primary_law_id"),
+    ("applicability_rules", "fallback_law_id"),
+)
+# Rows removed together with the law (foreign-key cascade or explicit delete).
+_LAW_OWNED_ROWS = (
+    "articles",
+    "revisions",
+    "law_categories",
+    "law_alias_index",
+    "document_number_index",
+)
+
+
+def delete_law(db_path: Path | str, law_id: str, *, dry_run: bool = False) -> dict | None:
+    """删除单行公开法规及其条文、版本快照、分类与检索索引。
+
+    只按精确 id 匹配，不解析名称或别名。被释义、规范包、关联关系或时间效力
+    规则引用时拒绝删除（``ok=False``，列出引用）。无交互确认（与
+    ``normsources.delete_source`` 一致）；调用方负责确认。未命中返回 None。
+    删除顺序：条文 / 法规 FTS → ``document_number_index`` → ``DELETE FROM laws``
+    （ON DELETE CASCADE 连带清理其余 ``_LAW_OWNED_ROWS`` 与 FTS 映射行）。
+    """
+
+    with connect(db_path) as conn:
+        migrate(conn)
+        row = conn.execute("SELECT id, title FROM laws WHERE id = ?", (law_id,)).fetchone()
+        if row is None:
+            return None
+        rows = {
+            table: int(
+                conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE law_id = ?", (law_id,)
+                ).fetchone()[0]
+            )
+            for table in _LAW_OWNED_ROWS
+        }
+        references = []
+        for table, column in _LAW_REFERENCES:
+            count = int(
+                conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE {column} = ?", (law_id,)
+                ).fetchone()[0]
+            )
+            if count:
+                references.append({"table": table, "column": column, "count": count})
+        result = {
+            "kind": "law_delete",
+            "id": row["id"],
+            "title": row["title"],
+            "dry_run": dry_run,
+            "rows": rows,
+            "references": references,
+        }
+        if references:
+            return {**result, "ok": False, "error": "law_referenced"}
+        if not dry_run:
+            delete_article_search_indexes(conn, law_id)
+            delete_law_search_index(conn, law_id)
+            conn.execute("DELETE FROM document_number_index WHERE law_id = ?", (law_id,))
+            conn.execute("DELETE FROM laws WHERE id = ?", (law_id,))
+        return {**result, "ok": True}
 
 
 def load_files(db_path: Path | str, paths: Iterable[Path]) -> dict:

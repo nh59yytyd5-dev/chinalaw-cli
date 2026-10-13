@@ -1696,6 +1696,24 @@ def norm_source_import_to_markdown(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def law_delete_to_markdown(payload: dict | None) -> str:
+    if payload is None:
+        return "_未找到该公开法规 id（law delete 只接受精确 id）。_\n"
+    name = f"{payload.get('title')}（`{payload.get('id')}`）"
+    references = payload.get("references") or []
+    if references:
+        lines = [f"拒绝删除公开法规：{name}，仍被以下记录引用："]
+        lines.extend(
+            f"- {item.get('table')}.{item.get('column')}：{item.get('count')} 行"
+            for item in references
+        )
+        return "\n".join(lines) + "\n"
+    verb = "将删除（dry-run，未写库）" if payload.get("dry_run") else "已删除"
+    lines = [f"{verb}公开法规：{name}"]
+    lines.extend(f"- {table}：{count} 行" for table, count in (payload.get("rows") or {}).items())
+    return "\n".join(lines) + "\n"
+
+
 def norm_source_delete_to_markdown(payload: dict) -> str:
     if payload is None:
         return "_未找到该私域规范。_\n"
