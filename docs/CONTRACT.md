@@ -973,6 +973,23 @@ Markdown 输出选项：
 
 `laws` 是 `list` 的 agent-first 显式别名，用于列出本地法规 `id/title/short_title/status` 等字段，避免 agent 为了发现 law_id 直接连接 SQLite 或猜 schema 字段。
 
+### 4.4.1 `law delete <law_id> [--dry-run]`（v0.7.3，#31）
+
+删除单行公开法规，用于清理同一文书在不同来源重复入库的行。只接受精确 `law_id`，
+不解析名称或别名；无交互确认，与 `norm delete` 一致。
+
+输出：`{kind: "law_delete", ok, id, title, dry_run, rows, references}`。`rows` 为
+`articles` / `revisions` / `law_categories` / `law_alias_index` /
+`document_number_index` 中属于该行的行数（`dry_run` 时为将删除的行数）。
+
+- 删除在单个事务内完成：先删条文与法规 FTS 索引和 `document_number_index`，再删
+  `laws` 主行，由外键级联清理条文、版本快照、分类、别名索引与 FTS 映射行。
+- 被 `article_commentaries`、`norm_pack_items`、`law_relations`（双向）或
+  `applicability_rules`（主 / 备选）引用时拒绝删除：`ok: false`、
+  `error: "law_referenced"`，`references[]` 列出 `{table, column, count}`，exit 1。
+- 未命中 exit 1（`found: false`）；`--dry-run` 只报告，不写库，exit 0。
+- 删除不阻止以后 `fetch` / `sync` 从同一来源再次导入该行。
+
 ### 4.5 `sync`
 
 `--fixtures` / `--from-dir <dir>` 模式属于协议（手工准备 + 一次性导入）。

@@ -189,6 +189,19 @@ def replace_law_search_indexes(
     )
 
 
+def delete_law_search_index(conn: sqlite3.Connection, law_id: str) -> None:
+    """删除单部公开法规在 ``laws_fts`` 中的索引行（``law delete`` 用）。"""
+    _delete_mapped_fts_rows(
+        conn,
+        fts_table="laws_fts",
+        map_table="laws_fts_rows",
+        map_key="law_id",
+        value=law_id,
+        legacy_column="law_id",
+        expected_count=1,
+    )
+
+
 def delete_article_search_indexes(conn: sqlite3.Connection, law_id: str) -> None:
     expected = int(
         conn.execute(
