@@ -92,8 +92,8 @@ chinalaw corpus show general --format md
 # 4. 按当前工作流缺口逐部补。遇到 FLK 反爬挑战立即停止，不要循环重试。
 chinalaw ensure 劳动合同法 --format md
 
-# 5. 加载 applicability seed
-chinalaw sync --applicability
+# 5. applicability seed 已随第 2 步的 sync --fixtures 载入；自定义规则目录再用
+chinalaw sync --applicability --applicability-dir <dir>
 
 # 6. 自检
 chinalaw status --format md
@@ -169,8 +169,7 @@ chinalaw status   # 验证
 ```bash
 # 重置：先保留可恢复备份，再重新初始化
 mv ~/.chinalaw/chinalaw.db ~/.chinalaw/chinalaw.db.backup.$(date +%Y%m%d%H%M%S)
-chinalaw sync --fixtures
-chinalaw sync --applicability
+chinalaw sync --fixtures          # 同时载入随包时间效力规则
 
 # 迁移到新机器：拷贝 ~/.chinalaw/ 整个目录
 rsync -av ~/.chinalaw/ new-machine:~/.chinalaw/

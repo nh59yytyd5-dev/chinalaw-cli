@@ -72,7 +72,7 @@ cd chinalaw-cli
 ## 快速开始
 
 ```bash
-chinalaw init                                    # 加载内置公开规范基线并做健康检查
+chinalaw init                                    # 加载内置公开规范基线与时间效力规则，并做健康检查
 chinalaw resolve 民法典 --format json             # 俗称 / 简称解析到正式记录
 chinalaw search 合同效力 --kind article --limit 5 --format md
 chinalaw article 民法典 第一百四十三条 --format md

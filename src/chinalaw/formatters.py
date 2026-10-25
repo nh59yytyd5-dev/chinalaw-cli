@@ -1861,9 +1861,17 @@ def sync_to_markdown(payload: dict) -> str:
             + "\n".join(f"- {topic}" for topic in payload.get("topics", []))
             + "\n"
         )
+    rules = payload.get("applicability") or {}
+    rules_line = (
+        f"时间效力规则：{rules.get('relations_loaded', 0)} 条关系 / "
+        f"{rules.get('rules_loaded', 0)} 条规则\n"
+        if rules
+        else ""
+    )
     return (
         f"同步完成：{payload['laws_loaded']} 部法规 / "
         f"{payload['articles_loaded']} 条条文\n"
+        + rules_line
         + "\n".join(f"- {t}" for t in payload.get("titles", []))
         + "\n"
     )
@@ -1880,6 +1888,7 @@ def init_to_markdown(payload: dict) -> str:
         f"- 数据库：`{payload.get('db_path')}`",
         f"- 加载法规：{sync.get('laws_loaded', 0)} 部",
         f"- 加载条文：{sync.get('articles_loaded', 0)} 条",
+        f"- 时间效力规则：{(payload.get('applicability_sync') or {}).get('rules_loaded', 0)} 条",
         f"- doctor errors：{doctor_report.get('error_count', 0)}",
         f"- doctor warnings：{doctor_report.get('warning_count', 0)}",
     ]

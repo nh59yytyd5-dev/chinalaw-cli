@@ -310,7 +310,7 @@ CREATE TABLE meta (
 
 - `schema_version`：当前 SQLite schema 版本（整数串）。
 - `last_sync_at`：最近一次 `sync` 命令完成时间。
-- `last_applicability_sync_at`：最近一次 `sync --applicability` 完成时间。
+- `last_applicability_sync_at`：最近一次载入时间效力规则（`init`、`sync --fixtures` 或 `sync --applicability`）的完成时间。
 - `search_tokenizer_version`（v16）：条文索引的切分规则版本（当前 `bigram-1`）。规则改变须伴随 schema 迁移重建条文索引。
 - `source:<source>:last_page` / `next_page` / `last_mode` / `last_incremental_to`：sync 进度元数据。
 
@@ -545,7 +545,7 @@ JSON 输出：
   "db_path": "string",
   "checks": [
     {
-      "name": "cli_version|path|db_exists|schema_version|fixtures_loaded|freshness|seed_or_stub|skills_installed|mcp_available|source_smoke",
+      "name": "cli_version|path|db_exists|schema_version|fixtures_loaded|applicability_loaded|freshness|seed_or_stub|skills_installed|mcp_available|source_smoke",
       "status": "pass|warn|fail|skip",
       "message": "string",
       "hint": "string|null",
@@ -585,10 +585,13 @@ JSON 输出：
     "titles": ["string"],
     "fixtures_dir": "string"
   },
+  "applicability_sync": "applicability_import|null",
   "doctor": "doctor_report",
   "next_commands": ["string"]
 }
 ```
+
+`applicability_sync` 是随包时间效力规则的载入结果（结构同 `sync --applicability`，见 §4.5）；内置法规未加载出来时为 `null`。
 
 退出码：`ok=true` 返回 `0`；`doctor` 失败或内置数据未实际加载出至少一部法规和
 一条条文时返回 `1`；参数错误返回 `2`。内置数据不可用时额外返回：
@@ -993,6 +996,7 @@ Markdown 输出选项：
 ### 4.5 `sync`
 
 `--fixtures` / `--from-dir <dir>` 模式属于协议（手工准备 + 一次性导入）。
+`--fixtures` 同时载入随包的时间效力规则，结果放在输出的 `applicability` 字段（结构同下）。
 `--applicability [--applicability-dir <dir>]` 加载时间效力 / 规范关系 JSON，输出：
 
 ```json
