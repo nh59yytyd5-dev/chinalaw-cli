@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from chinalaw import corpus, service
+from chinalaw import corpus, netio, service
 from chinalaw import ensure as ensure_mod
 from chinalaw.cli import app, build_parser
 from chinalaw.loader import FIXTURES_DIR
@@ -265,6 +265,39 @@ class RecommendedCorpusTests(unittest.TestCase):
         self.assertEqual(report["items"][0]["reason"], "source_rate_limited")
         self.assertEqual(report["items"][1]["status"], "skipped")
         self.assertEqual(report["items"][1]["reason"], "source_rate_limited")
+
+    def test_profile_ensure_reports_unregistered_source_host(self) -> None:
+        resolved = {
+            "requested_profiles": ["demo"],
+            "included_profiles": ["demo"],
+            "entries": [
+                {
+                    "id": "demo-law-1",
+                    "title": "示例甲法",
+                    "primary_source": "flk_npc",
+                    "source_status": "supported",
+                    "profile": "demo",
+                    "priority": "P2",
+                },
+            ],
+        }
+        error = ensure_mod.fetch_mod.FetchSourceError("build_law_payload failed for id=x")
+        error.__cause__ = netio.SourceHostNotAllowedError(
+            "host 'files.example.test' is not allowed for source 'flk_npc'"
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as td,
+            patch("chinalaw.ensure.corpus.resolve_profiles", return_value=resolved),
+            patch("chinalaw.ensure.service.get_law", return_value=None),
+            patch("chinalaw.ensure.fetch_mod.fetch_law", side_effect=error),
+        ):
+            report = ensure_mod.ensure_corpus_profiles(Path(td) / "t.db", ["demo"], interval=0)
+
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["items"][0]["status"], "failed")
+        self.assertEqual(report["items"][0]["reason"], "source_host_not_allowed")
+        self.assertIn("白名单", report["items"][0]["retry_hint"])
 
     def test_profile_ensure_loads_builtin_fixture_before_fetching(self) -> None:
         with tempfile.TemporaryDirectory() as td, patch(

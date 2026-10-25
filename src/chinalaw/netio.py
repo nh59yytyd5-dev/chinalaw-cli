@@ -29,6 +29,10 @@ class NetworkPolicyError(ValueError):
     """A URL or redirect violates a source allowlist."""
 
 
+class SourceHostNotAllowedError(NetworkPolicyError):
+    """A URL or redirect points at a host outside the source allowlist."""
+
+
 @dataclass(frozen=True)
 class SourcePolicy:
     source: str
@@ -40,6 +44,7 @@ class SourcePolicy:
     timeout: float = 15
     resolve_hosts: bool = True
     allowed_ports: tuple[int, ...] | None = (443,)
+    exact_hosts: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -65,6 +70,13 @@ _SOURCE_HOSTS: dict[str, tuple[tuple[str, ...], bool]] = {
     "sac_net_cn": (("sac.net.cn",), True),
 }
 
+# Third-party storage hosts match exactly even when the source allows
+# subdomains: a sibling subdomain there can be another tenant's bucket.
+_SOURCE_EXACT_HOSTS: dict[str, tuple[str, ...]] = {
+    # 国家法律法规数据库下载接口签发的正文附件（docx）存放主机（#43）。
+    "flk_npc": ("flkoss.obs-bj2.cucloud.cn",),
+}
+
 
 def source_policy(
     source: str,
@@ -87,6 +99,7 @@ def source_policy(
         allowed_hosts=frozenset(hosts),
         allow_subdomains=allow_subdomains,
         resolve_hosts=resolve_hosts,
+        exact_hosts=frozenset(_SOURCE_EXACT_HOSTS.get(normalized, ())),
     )
     return replace(policy, timeout=timeout) if timeout is not None else policy
 
@@ -112,6 +125,8 @@ def policy_for_endpoint(
 
 
 def _host_allowed(host: str, policy: SourcePolicy) -> bool:
+    if host in policy.exact_hosts:
+        return True
     for allowed in policy.allowed_hosts:
         if host == allowed:
             return True
@@ -146,7 +161,7 @@ def validate_url(
     if host == "localhost" or host.endswith((".localhost", ".local")):
         raise NetworkPolicyError(f"local hostname is not allowed for {policy.source}: {url}")
     if not _host_allowed(host, policy):
-        raise NetworkPolicyError(
+        raise SourceHostNotAllowedError(
             f"host {host!r} is not allowed for source {policy.source!r}"
         )
     try:
@@ -240,6 +255,7 @@ __all__ = [
     "NetworkResponse",
     "PolicyRedirectHandler",
     "ResourceLimitError",
+    "SourceHostNotAllowedError",
     "SourcePolicy",
     "build_policy_opener",
     "policy_for_endpoint",
