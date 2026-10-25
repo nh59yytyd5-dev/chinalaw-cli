@@ -20,7 +20,7 @@ import re
 
 # 派生规则的版本。派生别名在入库时写进 ``law_alias_index``；改动下面的规则后
 # 递增本值，写模式 ``migrate()`` 会据此重建该索引，旧规则下入库的行随之补齐。
-ALIAS_RULES_VERSION = 2
+ALIAS_RULES_VERSION = 3
 
 _SMALL_ARABIC_TO_CHINESE = {
     "1": "一",
@@ -136,6 +136,7 @@ _LITIGATION_LAW_TITLE_RE = re.compile(
 _VERSIONED_TITLE_RE = re.compile(
     r"^(?P<base>.+?)[（(](?:19|20)\d{2}年?(?:修正文本|修正|修订|修改)?[）)]$"
 )
+_AMENDMENT_DECISION_RE = re.compile(r"关于(?:修改|修正|修订|废止).+的决定$")
 
 _TIME_EFFECT_RE = re.compile(
     r"关于适用《(?:中华人民共和国)?(?P<base>[^》]+?)》时间效力的若干规定"
@@ -291,6 +292,12 @@ def common_law_aliases(title: str | None) -> list[str]:
         return []
 
     aliases = _statute_title_aliases(text)
+    version_match = _VERSIONED_TITLE_RE.match(text)
+    base_title = version_match.group("base").strip() if version_match else text
+    # A quoted interpretation is not the decision itself. Otherwise substring
+    # rules turn its short name into an exact match for the amending decision.
+    if _AMENDMENT_DECISION_RE.search(base_title):
+        return aliases
     issuer = _identify_issuer(text)
     if issuer is None:
         return aliases
