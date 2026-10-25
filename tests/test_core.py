@@ -922,6 +922,82 @@ class LoaderAndServiceTests(unittest.TestCase):
         self.assertIsNotNone(payload["article"])
         self.assertEqual(payload["law"]["short_title"], "总则编解释")
 
+    def test_resolves_alias_for_concrete_application_interpretation_title(self):
+        """老式标题写作「具体应用法律若干问题的解释」，同样派生「X纠纷解释」
+        「X解释」两种简称（#46：城镇房屋租赁合同解释）。"""
+        from chinalaw.aliases import common_law_aliases
+
+        title = "最高人民法院关于审理城镇房屋租赁合同纠纷案件具体应用法律若干问题的解释"
+        derived = common_law_aliases(title)
+        self.assertIn("城镇房屋租赁合同纠纷解释", derived)
+        self.assertIn("城镇房屋租赁合同解释", derived)
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                migrate(conn)
+                loader.load_law_from_dict(
+                    conn,
+                    {
+                        "id": "spc-urban-housing-lease-interpretation",
+                        "title": title,
+                        "short_title": None,
+                        "aliases": [],
+                        "level": "judicial_interpretation",
+                        "status": "current",
+                        "source_url": "https://example.com/housing-lease",
+                        "source_name": "example",
+                        "source_checked_at": "2026-05-01T00:00:00+00:00",
+                        "articles": [
+                            {"number": "1", "number_display": "第一条", "text": "示例解释条文。"},
+                        ],
+                    },
+                )
+
+            payload = service.resolve(db_path, "城镇房屋租赁合同解释")
+
+        self.assertTrue(payload["matched"])
+        self.assertEqual(payload["id"], "spc-urban-housing-lease-interpretation")
+
+    def test_migrate_refreshes_alias_index_built_under_older_alias_rules(self):
+        """派生别名存在 law_alias_index 里；规则升级后，旧规则下入库的行要在
+        下次写模式打开时补上新别名，不必重写法规本身（#46）。"""
+        from chinalaw.aliases import ALIAS_RULES_VERSION
+
+        title = "最高人民法院关于审理城镇房屋租赁合同纠纷案件具体应用法律若干问题的解释"
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            with connect(db_path) as conn:
+                migrate(conn)
+                loader.load_law_from_dict(
+                    conn,
+                    {
+                        "id": "spc-urban-housing-lease-interpretation",
+                        "title": title,
+                        "short_title": None,
+                        "aliases": [],
+                        "level": "judicial_interpretation",
+                        "status": "current",
+                        "source_url": "https://example.com/housing-lease",
+                        "source_name": "example",
+                        "source_checked_at": "2026-05-01T00:00:00+00:00",
+                        "articles": [
+                            {"number": "1", "number_display": "第一条", "text": "示例解释条文。"},
+                        ],
+                    },
+                )
+                # 模拟按旧规则建的索引：没有派生别名，也没有规则版本记录。
+                conn.execute("DELETE FROM law_alias_index WHERE kind = 'derived'")
+                conn.execute("DELETE FROM meta WHERE key = 'alias_rules_version'")
+
+            payload = service.resolve(db_path, "城镇房屋租赁合同解释")
+            with connect(db_path) as conn:
+                version = get_meta(conn, "alias_rules_version")
+
+        self.assertTrue(payload["matched"])
+        self.assertEqual(payload["via"], "alias_derived")
+        self.assertEqual(version, str(ALIAS_RULES_VERSION))
+
     def test_article_markdown_prefers_short_title_heading(self):
         md = formatters.article_to_markdown(
             {

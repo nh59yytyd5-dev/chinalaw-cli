@@ -1939,6 +1939,32 @@ class EnsureLawTests(unittest.TestCase):
         self.assertEqual(report["items"][0]["error"], "FetchAmbiguousError")
         self.assertEqual(report["items"][0]["candidates"], candidates)
 
+    def test_ensure_reports_unregistered_source_host_instead_of_missing_law(self):
+        """官方源把地址签到未登记的主机时，失败原因指向白名单，而不是沿用
+        「本地缺这部法规」的 missing_law（#43）。"""
+        from chinalaw import netio
+
+        def fake_fetch(db_path, name, *, source, limit):
+            try:
+                raise netio.SourceHostNotAllowedError(
+                    "host 'files.example.test' is not allowed for source 'flk_npc'"
+                )
+            except netio.SourceHostNotAllowedError as exc:
+                raise fetch_mod.FetchSourceError(
+                    f"build_law_payload failed for id=law-1: {exc}"
+                ) from exc
+
+        with tempfile.TemporaryDirectory() as td, patch(
+            "chinalaw.ensure.fetch_mod.fetch_law", side_effect=fake_fetch
+        ):
+            report = ensure_mod.ensure_laws(Path(td) / "t.db", ["示例解释"], interval=0)
+
+        item = report["items"][0]
+        self.assertFalse(report["ok"])
+        self.assertEqual(item["status"], "failed")
+        self.assertEqual(item["reason"], "source_host_not_allowed")
+        self.assertIn("白名单", item["retry_hint"])
+
     def test_cli_parser_accepts_ensure_batch_options(self):
         from chinalaw.cli import build_parser
 

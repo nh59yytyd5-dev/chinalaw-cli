@@ -85,6 +85,22 @@ def replace_law_alias_index(
     )
 
 
+def rebuild_law_alias_index(conn: sqlite3.Connection) -> None:
+    """Recompute exact and derived aliases for every law, leaving FTS untouched."""
+
+    conn.execute("DELETE FROM law_alias_index")
+    for law in conn.execute(
+        "SELECT id, title, short_title, aliases FROM laws ORDER BY rowid"
+    ).fetchall():
+        replace_law_alias_index(
+            conn,
+            law_id=law["id"],
+            title=law["title"],
+            short_title=law["short_title"],
+            aliases=_decode_aliases(law["aliases"]),
+        )
+
+
 def _delete_legacy_fts_rows(
     conn: sqlite3.Connection,
     *,

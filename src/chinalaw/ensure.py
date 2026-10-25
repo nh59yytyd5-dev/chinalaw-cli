@@ -13,7 +13,7 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
-from chinalaw import cleaning, corpus, loader, service
+from chinalaw import cleaning, corpus, loader, netio, service
 from chinalaw import fetch as fetch_mod
 
 _KNOWN_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".md", ".json"}
@@ -30,6 +30,10 @@ _SOURCE_RATE_LIMIT_MARKERS = (
 )
 _SOURCE_RATE_LIMIT_RETRY_HINT = (
     "停止本轮同一来源批量补库；稍后重试，或改用单部 ensure/fetch 按需补全。"
+)
+_SOURCE_HOST_NOT_ALLOWED_HINT = (
+    "官方源返回的地址指向来源白名单之外的主机，请求在本地被拦截，不表示法规不存在；"
+    "核实该主机属于官方来源后，登记到 chinalaw.netio 的来源白名单再重试。"
 )
 
 
@@ -167,6 +171,9 @@ def ensure_laws(
                 item["candidates"] = candidates
             if existing:
                 item["law"] = _summarize_law(existing)
+            if _is_source_host_not_allowed_error(exc):
+                item["reason"] = "source_host_not_allowed"
+                item["retry_hint"] = _SOURCE_HOST_NOT_ALLOWED_HINT
             items.append(item)
             continue
 
@@ -389,6 +396,9 @@ def ensure_corpus_profiles(
                 source_rate_limited[source] = str(exc)
                 item["reason"] = "source_rate_limited"
                 item["retry_hint"] = _SOURCE_RATE_LIMIT_RETRY_HINT
+            elif _is_source_host_not_allowed_error(exc):
+                item["reason"] = "source_host_not_allowed"
+                item["retry_hint"] = _SOURCE_HOST_NOT_ALLOWED_HINT
             items.append(item)
             continue
 
@@ -458,6 +468,18 @@ def _append_name(target: list[str], raw: str | Path) -> None:
 def _is_source_rate_limited_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return any(marker in message for marker in _SOURCE_RATE_LIMIT_MARKERS)
+
+
+def _is_source_host_not_allowed_error(exc: BaseException) -> bool:
+    # fetch 把适配器异常包成 FetchSourceError，原始的白名单拦截留在异常链上。
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, netio.SourceHostNotAllowedError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def _resolve_existing_law(db_path: str | Path, entry: dict) -> dict | None:

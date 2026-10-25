@@ -310,7 +310,8 @@ CREATE TABLE meta (
 
 - `schema_version`：当前 SQLite schema 版本（整数串）。
 - `last_sync_at`：最近一次 `sync` 命令完成时间。
-- `last_applicability_sync_at`：最近一次 `sync --applicability` 完成时间。
+- `last_applicability_sync_at`：最近一次载入时间效力规则（`init`、`sync --fixtures` 或 `sync --applicability`）的完成时间。
+- `alias_rules_version`：派生别名规则版本。低于程序内置版本时，写模式打开数据库会重建 `law_alias_index`，让旧规则下入库的法规补上新的派生别名；只读访问不触发。
 - `search_tokenizer_version`（v16）：条文索引的切分规则版本（当前 `bigram-1`）。规则改变须伴随 schema 迁移重建条文索引。
 - `source:<source>:last_page` / `next_page` / `last_mode` / `last_incremental_to`：sync 进度元数据。
 
@@ -545,7 +546,7 @@ JSON 输出：
   "db_path": "string",
   "checks": [
     {
-      "name": "cli_version|path|db_exists|schema_version|fixtures_loaded|freshness|seed_or_stub|skills_installed|mcp_available|source_smoke",
+      "name": "cli_version|path|db_exists|schema_version|fixtures_loaded|applicability_loaded|freshness|seed_or_stub|skills_installed|mcp_available|source_smoke",
       "status": "pass|warn|fail|skip",
       "message": "string",
       "hint": "string|null",
@@ -585,10 +586,13 @@ JSON 输出：
     "titles": ["string"],
     "fixtures_dir": "string"
   },
+  "applicability_sync": "applicability_import|null",
   "doctor": "doctor_report",
   "next_commands": ["string"]
 }
 ```
+
+`applicability_sync` 是随包时间效力规则的载入结果（结构同 `sync --applicability`，见 §4.5）；内置法规未加载出来时为 `null`。
 
 退出码：`ok=true` 返回 `0`；`doctor` 失败或内置数据未实际加载出至少一部法规和
 一条条文时返回 `1`；参数错误返回 `2`。内置数据不可用时额外返回：
@@ -993,6 +997,7 @@ Markdown 输出选项：
 ### 4.5 `sync`
 
 `--fixtures` / `--from-dir <dir>` 模式属于协议（手工准备 + 一次性导入）。
+`--fixtures` 同时载入随包的时间效力规则，结果放在输出的 `applicability` 字段（结构同下）。
 `--applicability [--applicability-dir <dir>]` 加载时间效力 / 规范关系 JSON，输出：
 
 ```json
@@ -1667,7 +1672,7 @@ JSON 输出 schema：
       "source": "string|null",
       "fetch_status": "repealed|amended|current|pending_effective|null",
       "status": "present|loaded_fixture|fetched|skipped|resolved|failed",
-      "reason": "already_populated|builtin_fixture|missing_law|stub_law|seed_law|empty_articles|unsupported_source|manual_review|not_installable|missing_title|source_rate_limited",
+      "reason": "already_populated|builtin_fixture|missing_law|stub_law|seed_law|empty_articles|unsupported_source|manual_review|not_installable|missing_title|source_rate_limited|source_host_not_allowed",
       "law": "LawSummary|null",
       "fetch": "FetchSummary|null",
       "candidates": "Candidate[]|null",
@@ -1679,7 +1684,7 @@ JSON 输出 schema：
 }
 ```
 
-profile manifest 可为单个条目声明 `fetch_status`，用于把废止 / 已修改的历史法传给 `fetch --status`。当某一官方源返回反爬 / 限流信号时，`ensure --profile` 会停止本轮同源后续远程请求，将后续条目标记为 `source_rate_limited`，并返回 `ok=false`。
+profile manifest 可为单个条目声明 `fetch_status`，用于把废止 / 已修改的历史法传给 `fetch --status`。当某一官方源返回反爬 / 限流信号时，`ensure --profile` 会停止本轮同源后续远程请求，将后续条目标记为 `source_rate_limited`，并返回 `ok=false`。官方源返回的地址（或跳转）指向来源白名单之外的主机时，失败条目的 `reason` 为 `source_host_not_allowed` 并附 `retry_hint`：请求在本地被拦截，不表示法规不存在。
 
 退出码：`ok=true` 时 0；参数错误时 2；部分法规无法补全、fetch 返回 0 条文，或本轮触发官方源限流时 1。
 

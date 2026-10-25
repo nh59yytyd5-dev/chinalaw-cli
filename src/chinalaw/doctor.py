@@ -152,6 +152,7 @@ def _check_db(
         )
         _add(checks, "schema_version", "skip", "数据库不存在，跳过 schema 检查")
         _add(checks, "fixtures_loaded", "skip", "数据库不存在，跳过 fixture 检查")
+        _add(checks, "applicability_loaded", "skip", "数据库不存在，跳过时间效力规则检查")
         return
 
     _add(checks, "db_exists", "pass", f"数据库存在：{db}")
@@ -196,6 +197,18 @@ def _check_db(
             "warn",
             f"本地法规或条文为空：laws={law_count}, articles={article_count}",
             hint="运行 chinalaw sync --fixtures，或用 chinalaw ensure <law> 按需补库。",
+        )
+
+    rule_count = int(status.get("applicability_rules") or 0)
+    if rule_count:
+        _add(checks, "applicability_loaded", "pass", f"本地已有 {rule_count} 条时间效力规则")
+    else:
+        _add(
+            checks,
+            "applicability_loaded",
+            "warn",
+            "本地没有时间效力规则：applicable 的零命中不表示没有过渡规定",
+            hint="运行 chinalaw sync --applicability 载入随包规则。",
         )
 
     freshness_days = status.get("oldest_freshness_days")
