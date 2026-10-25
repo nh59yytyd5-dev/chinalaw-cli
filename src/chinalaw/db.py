@@ -183,7 +183,10 @@ def migrate(conn: sqlite3.Connection) -> int:
                 f"expected {SCHEMA_VERSION}. Back up and explicitly initialize/upgrade first."
             )
         return current
-    if current >= SCHEMA_VERSION:
+    if current > SCHEMA_VERSION:
+        return current
+    if current == SCHEMA_VERSION:
+        _refresh_alias_index(conn)
         return current
 
     owns_transaction = not conn.in_transaction
@@ -204,9 +207,44 @@ def migrate(conn: sqlite3.Connection) -> int:
             current += 1
 
         set_meta(conn, "schema_version", str(SCHEMA_VERSION))
+        _refresh_alias_index(conn)
         if owns_transaction:
             conn.commit()
         return SCHEMA_VERSION
+    except Exception:
+        if owns_transaction:
+            conn.rollback()
+        raise
+
+
+def _refresh_alias_index(conn: sqlite3.Connection) -> None:
+    """Rebuild ``law_alias_index`` once the derived alias rules have changed.
+
+    Derived aliases are computed at load time, so rows loaded under older
+    rules lack the newer ones until the index is rebuilt; see
+    :data:`chinalaw.aliases.ALIAS_RULES_VERSION`.
+    """
+    from chinalaw.aliases import ALIAS_RULES_VERSION
+    from chinalaw.search_indexes import rebuild_law_alias_index
+
+    def stale() -> bool:
+        try:
+            return int(get_meta(conn, "alias_rules_version") or 0) < ALIAS_RULES_VERSION
+        except ValueError:
+            return True
+
+    if not stale():
+        return
+    owns_transaction = not conn.in_transaction
+    if owns_transaction:
+        conn.execute("BEGIN IMMEDIATE")
+    try:
+        # Another process may have refreshed while this one waited for the lock.
+        if stale():
+            rebuild_law_alias_index(conn)
+            set_meta(conn, "alias_rules_version", str(ALIAS_RULES_VERSION))
+        if owns_transaction:
+            conn.commit()
     except Exception:
         if owns_transaction:
             conn.rollback()
