@@ -240,6 +240,18 @@ class AgentPlatformDoctorTests(unittest.TestCase):
         self.assertEqual("pass", checks["schema_version"]["status"])
         self.assertEqual("pass", checks["fixtures_loaded"]["status"])
 
+    def test_doctor_warns_when_applicability_rules_are_missing(self) -> None:
+        """没有时间效力规则时 applicable 的零命中不说明问题，doctor 要提示（#44）。"""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, loader.FIXTURES_DIR)
+
+            report = doctor.run_doctor(db_path)
+
+        checks = {item["name"]: item for item in report["checks"]}
+        self.assertEqual("warn", checks["applicability_loaded"]["status"])
+        self.assertIn("sync --applicability", checks["applicability_loaded"]["hint"])
+
     def test_cli_doctor_outputs_json(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "missing.db"
@@ -259,6 +271,32 @@ class AgentPlatformDoctorTests(unittest.TestCase):
         self.assertGreater(payload["fixture_sync"]["laws_loaded"], 0)
         self.assertEqual("doctor_report", payload["doctor"]["kind"])
         self.assertTrue(payload["doctor"]["ok"])
+
+    def test_cli_init_loads_bundled_applicability_rules(self) -> None:
+        """init 一并载入随包的时间效力规则，applicable 不再默认空转（#44）。"""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "chinalaw.db"
+            code, payload = _run_cli(["--db", str(db_path), "init", "--format", "json"])
+            status = service.status(db_path)
+
+        self.assertEqual(0, code)
+        self.assertGreater(payload["applicability_sync"]["rules_loaded"], 0)
+        self.assertGreater(status["applicability_rules"], 0)
+        checks = {item["name"]: item for item in payload["doctor"]["checks"]}
+        self.assertEqual("pass", checks["applicability_loaded"]["status"])
+
+    def test_cli_sync_fixtures_also_loads_bundled_applicability_rules(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "chinalaw.db"
+            code, payload = _run_cli(
+                ["--db", str(db_path), "sync", "--fixtures", "--format", "json"]
+            )
+            status = service.status(db_path)
+
+        self.assertEqual(0, code)
+        self.assertGreater(payload["laws_loaded"], 0)
+        self.assertGreater(payload["applicability"]["rules_loaded"], 0)
+        self.assertGreater(status["applicability_rules"], 0)
 
 
 class AgentPlatformNoticeTests(unittest.TestCase):

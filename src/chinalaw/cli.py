@@ -1616,20 +1616,25 @@ def _handle_list(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
 
 def _handle_init(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
     sync_result = loader.load_fixtures(db_path)
+    fixture_ready = bool(
+        int(sync_result.get("laws_loaded") or 0) > 0
+        and int(sync_result.get("articles_loaded") or 0) > 0
+    )
+    # 随包的时间效力规则与法规一并载入（#44）；须在法规之后，id 映射只认已入库的法规。
+    applicability_result = (
+        applicability.load_applicability_fixtures(db_path) if fixture_ready else None
+    )
     doctor_report = doctor.run_doctor(
         db_path,
         strict=args.strict,
         source_smoke=args.source_smoke,
-    )
-    fixture_ready = bool(
-        int(sync_result.get("laws_loaded") or 0) > 0
-        and int(sync_result.get("articles_loaded") or 0) > 0
     )
     result = {
         "kind": "init_result",
         "ok": fixture_ready and bool(doctor_report.get("ok")),
         "db_path": str(db_path),
         "fixture_sync": sync_result,
+        "applicability_sync": applicability_result,
         "doctor": doctor_report,
         "next_commands": [
             "chinalaw article 民法典 第一百四十三条 --format md",
@@ -1667,6 +1672,7 @@ def _handle_sync(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
         result = loader.load_fixtures(db_path)
         if not result.get("laws_loaded") or not result.get("articles_loaded"):
             raise ValueError(result.get("note") or "no bundled fixtures were loaded")
+        result["applicability"] = applicability.load_applicability_fixtures(db_path)
     elif args.source:
         result = sync_source(
             db_path,
