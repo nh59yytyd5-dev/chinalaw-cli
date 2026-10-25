@@ -311,6 +311,7 @@ CREATE TABLE meta (
 - `schema_version`：当前 SQLite schema 版本（整数串）。
 - `last_sync_at`：最近一次 `sync` 命令完成时间。
 - `last_applicability_sync_at`：最近一次载入时间效力规则（`init`、`sync --fixtures` 或 `sync --applicability`）的完成时间。
+- `alias_rules_version`：派生别名规则版本。低于程序内置版本时，写模式打开数据库会重建 `law_alias_index`，让旧规则下入库的法规补上新的派生别名；只读访问不触发。
 - `search_tokenizer_version`（v16）：条文索引的切分规则版本（当前 `bigram-1`）。规则改变须伴随 schema 迁移重建条文索引。
 - `source:<source>:last_page` / `next_page` / `last_mode` / `last_incremental_to`：sync 进度元数据。
 

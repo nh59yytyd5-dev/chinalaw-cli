@@ -18,6 +18,10 @@ from __future__ import annotations
 
 import re
 
+# 派生规则的版本。派生别名在入库时写进 ``law_alias_index``；改动下面的规则后
+# 递增本值，写模式 ``migrate()`` 会据此重建该索引，旧规则下入库的行随之补齐。
+ALIAS_RULES_VERSION = 2
+
 _SMALL_ARABIC_TO_CHINESE = {
     "1": "一",
     "2": "二",
@@ -139,7 +143,7 @@ _TIME_EFFECT_RE = re.compile(
 
 _TRIAL_CASE_APPLICABLE_RE = re.compile(
     r"关于审理(?P<topic>[一-鿿A-Za-z0-9、，,（）()《》〈〉“”\"'：:·]+?)"
-    r"案件(?:适用法律)?(?:若干)?问题的(?P<suffix>解释|规定)"
+    r"案件(?:适用法律|具体应用法律)?(?:若干)?问题的(?P<suffix>解释|规定)"
 )
 _SPC_TOPIC_PROVISIONS_RE = re.compile(
     r"关于(?P<topic>[一-鿿A-Za-z0-9、，,（）()《》〈〉“”\"'：:·]+?)的若干规定"
