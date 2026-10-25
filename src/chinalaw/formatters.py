@@ -337,6 +337,8 @@ def ensure_to_markdown(report: dict) -> str:
         lines.append(f"- {name} — {status} / {reason}")
         if item.get("message"):
             lines.append(f"  {item.get('message')}")
+        if item.get("retry_hint"):
+            lines.append(f"  建议：{item.get('retry_hint')}")
         fetch = item.get("fetch") or {}
         if fetch:
             matched_id = fetch.get("matched_id") or fetch.get("matched_bbbs")

@@ -5,7 +5,13 @@ import subprocess
 import unittest
 import zipfile
 
-from chinalaw.netio import NetworkPolicyError, SourcePolicy, validate_url
+from chinalaw.netio import (
+    NetworkPolicyError,
+    SourceHostNotAllowedError,
+    SourcePolicy,
+    source_policy,
+    validate_url,
+)
 from chinalaw.resource_limits import (
     ResourceLimitError,
     read_limited,
@@ -55,6 +61,25 @@ class NetworkPolicyTests(unittest.TestCase):
         ):
             with self.subTest(url=url), self.assertRaises(NetworkPolicyError):
                 validate_url(url, self.policy)
+
+    def test_flk_policy_allows_attachment_storage_host_exactly(self) -> None:
+        """flk 下载接口把正文 docx 签发到官方对象存储主机（#43）。只放行这一个
+        主机：它的子域和同一存储服务下的其他桶不属于 flk。"""
+
+        policy = source_policy("flk_npc", resolve_hosts=False)
+        for url in (
+            "https://flk.npc.gov.cn/law-search/download/pc?format=docx",
+            "https://flkoss.obs-bj2.cucloud.cn/prod/20250731/law.docx"
+            "?response-content-disposition=attachment",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(validate_url(url, policy), url)
+        for url in (
+            "https://evil.flkoss.obs-bj2.cucloud.cn/law.docx",
+            "https://other.obs-bj2.cucloud.cn/law.docx",
+        ):
+            with self.subTest(url=url), self.assertRaises(SourceHostNotAllowedError):
+                validate_url(url, policy)
 
     def test_rejects_local_and_private_literal_targets(self) -> None:
         policies = [

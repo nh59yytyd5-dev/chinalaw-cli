@@ -1667,7 +1667,7 @@ JSON 输出 schema：
       "source": "string|null",
       "fetch_status": "repealed|amended|current|pending_effective|null",
       "status": "present|loaded_fixture|fetched|skipped|resolved|failed",
-      "reason": "already_populated|builtin_fixture|missing_law|stub_law|seed_law|empty_articles|unsupported_source|manual_review|not_installable|missing_title|source_rate_limited",
+      "reason": "already_populated|builtin_fixture|missing_law|stub_law|seed_law|empty_articles|unsupported_source|manual_review|not_installable|missing_title|source_rate_limited|source_host_not_allowed",
       "law": "LawSummary|null",
       "fetch": "FetchSummary|null",
       "candidates": "Candidate[]|null",
@@ -1679,7 +1679,7 @@ JSON 输出 schema：
 }
 ```
 
-profile manifest 可为单个条目声明 `fetch_status`，用于把废止 / 已修改的历史法传给 `fetch --status`。当某一官方源返回反爬 / 限流信号时，`ensure --profile` 会停止本轮同源后续远程请求，将后续条目标记为 `source_rate_limited`，并返回 `ok=false`。
+profile manifest 可为单个条目声明 `fetch_status`，用于把废止 / 已修改的历史法传给 `fetch --status`。当某一官方源返回反爬 / 限流信号时，`ensure --profile` 会停止本轮同源后续远程请求，将后续条目标记为 `source_rate_limited`，并返回 `ok=false`。官方源返回的地址（或跳转）指向来源白名单之外的主机时，失败条目的 `reason` 为 `source_host_not_allowed` 并附 `retry_hint`：请求在本地被拦截，不表示法规不存在。
 
 退出码：`ok=true` 时 0；参数错误时 2；部分法规无法补全、fetch 返回 0 条文，或本轮触发官方源限流时 1。
 
