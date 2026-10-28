@@ -15,6 +15,7 @@ from unittest import mock
 
 from chinalaw import (
     PROJECT_URL,
+    PUBLIC_DATA_URL,
     USER_AGENT_TOKEN,
     __version__,
     cleaning,
@@ -95,6 +96,27 @@ class ReleaseMetadataTests(unittest.TestCase):
 
     def test_mcp_server_info_uses_package_version(self) -> None:
         self.assertEqual(__version__, mcp.SERVER_INFO["version"])
+
+    def test_release_facing_docs_name_the_package_version(self) -> None:
+        """发版时手工改的版本号要一起改；漏掉任何一处，文档就和发布页对不上。"""
+        package = json.loads((REPO_ROOT / "web" / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(__version__, package["version"])
+        wheel = f"chinalaw-{__version__}-py3-none-any.whl"
+        for relative in ("docs/MCP_CLIENT.md", "website/data.html"):
+            with self.subTest(document=relative):
+                self.assertIn(wheel, (REPO_ROOT / relative).read_text(encoding="utf-8"))
+        minor = ".".join(__version__.split(".")[:2])
+        security = (REPO_ROOT / "SECURITY.md").read_text(encoding="utf-8")
+        self.assertIn(f"当前 {minor}.x", security)
+
+    def test_site_pages_show_package_version_and_match_bundled_copy(self) -> None:
+        # website/ 是介绍页源文件，static/about/ 是随包副本（scripts/build-site.mjs 生成）。
+        static = REPO_ROOT / "src" / "chinalaw" / "server" / "static" / "about"
+        for page in sorted((REPO_ROOT / "website").glob("*.html")):
+            with self.subTest(page=page.name):
+                text = page.read_text(encoding="utf-8")
+                self.assertIn(f"v{__version__}", text)
+                self.assertEqual(text, (static / page.name).read_text(encoding="utf-8"))
 
     def test_registered_adapter_user_agents_use_release_token(self) -> None:
         self.assertEqual(
@@ -240,6 +262,37 @@ class AgentPlatformDoctorTests(unittest.TestCase):
         self.assertEqual("pass", checks["schema_version"]["status"])
         self.assertEqual("pass", checks["fixtures_loaded"]["status"])
 
+    def test_doctor_points_baseline_sized_library_to_public_snapshot(self) -> None:
+        """只装了随包基线的库要提示公开快照，免得被当成全部资料（#49）。"""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, loader.FIXTURES_DIR)
+            status = service.status(db_path)
+
+            report = doctor.run_doctor(db_path)
+
+        check = {item["name"]: item for item in report["checks"]}["fixtures_loaded"]
+        self.assertEqual("pass", check["status"])
+        self.assertIn(PUBLIC_DATA_URL, check["hint"])
+        self.assertEqual(
+            {key: status[key] for key in ("laws", "articles", "revisions")}, check["data"]
+        )
+
+    def test_doctor_skips_snapshot_hint_beyond_baseline_scale(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            loader.load_fixtures(db_path, loader.FIXTURES_DIR)
+            # 随包只剩一份文本时，49 部法规已远超基线规模。
+            fixtures = Path(td) / "fixtures"
+            fixtures.mkdir()
+            (fixtures / "only.json").write_text("{}", encoding="utf-8")
+            with mock.patch.object(doctor, "builtin_data_dir", return_value=fixtures):
+                report = doctor.run_doctor(db_path)
+
+        check = {item["name"]: item for item in report["checks"]}["fixtures_loaded"]
+        self.assertEqual("pass", check["status"])
+        self.assertNotIn("hint", check)
+
     def test_doctor_warns_when_applicability_rules_are_missing(self) -> None:
         """没有时间效力规则时 applicable 的零命中不说明问题，doctor 要提示（#44）。"""
         with tempfile.TemporaryDirectory() as td:
@@ -297,6 +350,31 @@ class AgentPlatformDoctorTests(unittest.TestCase):
         self.assertGreater(payload["laws_loaded"], 0)
         self.assertGreater(payload["applicability"]["rules_loaded"], 0)
         self.assertGreater(status["applicability_rules"], 0)
+
+    def test_init_and_sync_report_library_totals_beside_loaded_texts(self) -> None:
+        """载入计数按文本（历次版本各一份），库内计数按法规行，两者并列输出（#49）。"""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "chinalaw.db"
+            code, payload = _run_cli(["--db", str(db_path), "init", "--format", "json"])
+            status = service.status(db_path)
+            buffer = io.StringIO()
+            with contextlib.redirect_stdout(buffer):
+                sync_code = cli.app(["--db", str(db_path), "sync", "--fixtures", "--format", "md"])
+            sync_md = buffer.getvalue()
+
+        library = {key: status[key] for key in ("laws", "articles", "revisions")}
+        self.assertEqual(0, code)
+        self.assertEqual(library, payload["library"])
+        self.assertLess(library["laws"], payload["fixture_sync"]["laws_loaded"])
+        init_md = formatters.init_to_markdown(payload)
+        loaded = payload["fixture_sync"]["laws_loaded"]
+        self.assertIn(f"载入法规文本：{loaded} 份", init_md)
+        self.assertIn(f"库内现有：{library['laws']} 部法规", init_md)
+        self.assertIn(PUBLIC_DATA_URL, init_md)
+        self.assertNotIn(f"{loaded} 部", init_md)
+        self.assertEqual(0, sync_code)
+        self.assertIn(f"载入 {loaded} 份法规文本", sync_md)
+        self.assertIn(f"库内现有：{library['laws']} 部法规", sync_md)
 
 
 class AgentPlatformNoticeTests(unittest.TestCase):

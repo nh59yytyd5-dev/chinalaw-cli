@@ -314,6 +314,29 @@ class FetchThrottleTests(unittest.TestCase):
 
 
 class DocumentationContractTests(unittest.TestCase):
+    def test_docs_state_current_schema_version_and_baseline_counts(self) -> None:
+        """文档写死的 schema 版本与随包基线规模要跟着实现走（#49）。"""
+        repo_root = Path(__file__).resolve().parents[1]
+        architecture = (repo_root / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+        guide = (repo_root / "docs" / "DEVELOPMENT_GUIDE.md").read_text(encoding="utf-8")
+        self.assertIn(f"当前 schema 版本是 v{SCHEMA_VERSION}", architecture)
+        self.assertIn(f"当前 schema v{SCHEMA_VERSION} DDL", architecture)
+        self.assertIn(f"当前为 v{SCHEMA_VERSION}", guide)
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            result = loader.load_fixtures(db_path, loader.FIXTURES_DIR)
+            status = service.status(db_path)
+        texts = result["laws_loaded"]
+        counts = f"{status['laws']} 部法规、{status['articles']} 条条文、{status['revisions']} 份版本"
+        readme = (repo_root / "README.md").read_text(encoding="utf-8")
+        data_index = (repo_root / "docs" / "DATA_INDEX.md").read_text(encoding="utf-8")
+        self.assertIn(f"内置 {texts} 份", readme)
+        self.assertIn(f"入库为 {status['laws']} 部法规", readme)
+        self.assertIn(f"入库后为 {counts}", readme)
+        self.assertIn(f"包含 {texts} 个完整 fixture", data_index)
+        self.assertIn(counts, data_index.replace("\n", ""))
+
     def test_active_markdown_links_resolve(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         documents = [repo_root / "README.md", repo_root / "NOTICES.md"]
@@ -337,7 +360,7 @@ class DocumentationContractTests(unittest.TestCase):
             (repo_root / "data" / "source_coverage.json").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(USER_AGENT_TOKEN, f"chinalaw-cli/0.7.3 (+{PROJECT_URL})")
+        self.assertEqual(USER_AGENT_TOKEN, f"chinalaw-cli/0.7.4 (+{PROJECT_URL})")
         self.assertIn(PROJECT_URL, compliance)
         self.assertNotIn("github.com/chinalaw-cli/chinalaw-cli", compliance)
         self.assertNotIn("README 中维护者邮箱", compliance)
@@ -349,6 +372,7 @@ class DocumentationContractTests(unittest.TestCase):
     def test_skill_copies_match_current_cli_contract(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         skill_relatives = (
+            "chinalaw-using/SKILL.md",
             "chinalaw-fetching/SKILL.md",
             "chinalaw-maintaining/SKILL.md",
             "chinalaw-maintaining/scripts/doctor.sh",

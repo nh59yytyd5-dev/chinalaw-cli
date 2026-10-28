@@ -1,12 +1,20 @@
 # Changelog
 
-## Unreleased
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
+版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## 0.7.4 — 2026-10-28
 
 - `fetch` / `ensure` 恢复下载国家法律法规数据库正文：该源下载接口现把附件签发到 `flkoss.obs-bj2.cucloud.cn`，此前一律被来源白名单拦截；现精确放行该主机（不含子域）。`ensure` 遇到来源白名单拦截时 `reason` 报 `source_host_not_allowed` 并附处理建议，不再沿用表示“本地缺失”的 `missing_law`（#43）。
 - `init` 与 `sync --fixtures` 一并载入随包的时间效力规则，`applicable` 不再默认返回 `applicability_data_missing`；`doctor` 新增 `applicability_loaded` 检查（#44）。
 - 名称解析补齐“审理……案件具体应用法律若干问题的解释”这类标题的派生简称，如“城镇房屋租赁合同解释”。派生别名规则带版本号（meta `alias_rules_version`），写模式打开数据库（包括 `chinalaw-server init`）时自动重建派生别名索引，已入库的法规无须重新抓取（#46）。
 - 修改、修正、修订或废止决定不再从标题内引用的文书派生简称，避免库里只有决定时把它当成解释正文返回；规则升级会清理旧派生别名，保留显式录入的简称与别名（#47）。
 - `chinalaw-server serve` 停止时最多等待 10 秒让进行中的请求收尾，随后取消残留请求并照常执行关闭清理；不再因迟迟不结束的连接拖到服务管理器强制结束（#40）。
+- `init`、`sync --fixtures` 与 `sync --from-dir` 把载入的文本数和载入后库内的法规 / 条文 / 版本数并列给出（JSON 新增 `library`）；Markdown 不再把 74 份文本（含宪法、刑法历次版本）说成“74 部法规”，与 `status` / `doctor` 的 49 部对得上（#49）。
+- `doctor` 的 `fixtures_loaded` 附带库内计数；库规模与随包基线相当时，提示公开法规快照的下载与用法，避免把起步基线当成全部资料（#49）。
+- `chinalaw-server init --with-fixtures` 与 `chinalaw init` 一致，一并载入随包时间效力规则，自托管实例的 `applicable` 不再默认空转。
+- 文档同步到当前状态：README 的公开快照链接改指实际挂包的 v0.7.1 并写明 `--db` 用法，软件下载改指最新 release；README、DATA_INDEX、AGENT_WORKFLOWS、MCP_CLIENT、ADMIN_SERVER 与 skills 写明随包基线与公开快照的关系；修正 ARCHITECTURE / DEVELOPMENT_GUIDE 的 schema 版本（v17）与条文检索方式、SECURITY 的受支持版本、README 与网站首页的快照条文数和日期；CONTRACT 补齐 `doctor` 检查项、`status` 字段与计数口径；`.agents/skills` 的 chinalaw-using 重新与 `.claude/skills` 一致（#49）。
+- 新增文档一致性测试：发版时需改的版本号（web 包、MCP_CLIENT 与数据页的 wheel 名、SECURITY、介绍页及其随包副本）、schema 版本与随包基线计数，以及 chinalaw-using 两份 skill 副本。
 
 ## 0.7.3 — 2026-10-13
 
@@ -23,6 +31,10 @@
 - REST/MCP 重检索共享有界执行队列，默认执行 4、等待 16，可用命令行或环境变量调整；满载返回可重试的 search_busy 并保留审计。
 - 同秒令牌使用时间不重复写入；日志复用串行 WAL/FULL 写连接，保持逐条提交。
 - 新增隔离 REST/MCP 多令牌基准，报告 CPU、内存、吞吐和尾延迟，核验结果与日志完整性。
+- 按文本清理、形态判断、嵌套条目组装和结果校验拆分 outline 解析器，修复 C901 复杂度检查失败；保留阈值 21、解析结果和错误行为。
+- 通用查询性能优化：schema v17 为修订归属与施行日期增加索引，版本判断按批次只读日期，避免重复扫描、读取和排序完整修订快照；适用于本地及自托管部署。
+- 纯汉字/数字的子串检索跳过无效的全文大小写转换；近似搜索在同批候选中复用重复正文的匹配结果，减少归一化和结果构建开销，保持召回、排序及权限边界。
+- 新增只读查询基准脚本 `scripts/benchmark-search`，输出并发吞吐、CPU 使用量、延迟和结果哈希，便于在隔离副本上比较升级前后表现。
 
 ## 0.7.2 — 2026-10-01
 
@@ -37,17 +49,6 @@
 - document 支持公开法规名称/别名，裸条号 search 明确提示使用 article。
 - 12 条时间效力指引核对官方入库文本、补齐日期下界和版本 ID，公开包与托管服务加载同一组规则；返回实际覆盖信息。
 - 更新接入文档，修正 applicable 可用范围与加载命令。
-
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
-版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
-
-## [Unreleased]
-
-- 按文本清理、形态判断、嵌套条目组装和结果校验拆分 outline 解析器，修复 C901 复杂度检查失败；保留阈值 21、解析结果和错误行为。
-
-- 通用查询性能优化：schema v17 为修订归属与施行日期增加索引，版本判断按批次只读日期，避免重复扫描、读取和排序完整修订快照；适用于本地及自托管部署。
-- 纯汉字/数字的子串检索跳过无效的全文大小写转换；近似搜索在同批候选中复用重复正文的匹配结果，减少归一化和结果构建开销，保持召回、排序及权限边界。
-- 新增只读查询基准脚本 `scripts/benchmark-search`，输出并发吞吐、CPU 使用量、延迟和结果哈希，便于在隔离副本上比较升级前后表现。
 
 ## [0.7.0] - 2026-09-29
 

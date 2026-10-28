@@ -12,6 +12,7 @@
 | 推荐安装清单 | `data/recommended_corpus.json` | 按领域列出建议补全的规范。它是 manifest，不是权威文本。 |
 | 来源覆盖事实表 | `data/source_coverage.json` | 说明每个 source 的覆盖层级、命令能力、成熟度和公开 v0.2 迁移状态。它是规划/契约数据，不是法律权威文本。 |
 | 私域规范虚构示例 | `data/norms/*.json` | `norm import` 的文件格式示例（如 `acme-lending-policy.json`，机构与项目均为虚构）。只随仓库分发、不打进 wheel / sdist，也不受 `check-public-fixtures` 门禁约束；真实私域规范一律只入本机库，不得提交进仓库。 |
+| 公开法规快照 | GitHub Release 附件（当前为 v0.7.1，数据截止 2026-09-30） | 从审查后的公开 JSON 独立构建的 JSON / SQLite 包，2486 条法规记录、87962 条条文记录、2499 份版本，含 12 条时间效力指引。不在仓库、不随 wheel 分发，也不由 `init` 加载；用 `--db` 指向解压后的库，或 `sync --from-dir` 导入新库。说明模板与质量记录在 `data/public-release/`，下载入口见 https://law.newcombmath.com/about/data.html。 |
 
 CI / 发布前必须运行：
 
@@ -39,7 +40,11 @@ chinalaw sources show flk_npc --format json
 
 ## 2. 当前随包覆盖
 
-当前 `data/fixtures` 包含 74 个完整 fixture：
+当前 `data/fixtures` 包含 74 个完整 fixture，`init` / `sync --fixtures` 载入后为
+49 部法规、7519 条条文、74 份版本：宪法 11 份、刑法 16 份历次文本各归入同一部法规的版本；
+民事诉讼法 2017 / 2021 / 2023 三版沿用国家法律法规数据库的独立 id，各占一行（未声明
+`work_id`，按标题、`level`、`issuing_body` 相同归为同一作品，见 CONTRACT §2.1）。`status` 与
+`doctor` 报的就是这组数；`init` / `sync` 报的 `laws_loaded` 按载入的文本计（74）。
 
 | 范围 | 规范 |
 | --- | --- |
@@ -83,12 +88,11 @@ chinalaw sources show flk_npc --format json
 - 最高人民法院主站：`court_main`
 - 人工维护官方合并文本：仅限宪法、刑法等修正案体系特殊法律
 
-可按需补全但不随包批量同步的公开 v0.2 来源：
-
-- 国家行政法规库：`gov_xzfgk`。2026-05-24 直连 `verify-source` smoke 已通过
-  `行政法规制定程序条例`：候选 `LawID=1814`，清洗 48 条，第一条定位成功。
-  本源只承诺 `fetch/discover` 预览能力；`sync --source gov_xzfgk` 不在公开
-  v0.2 范围内。
+其余已实现来源只用于按需 `fetch` / `ensure`，不随包批量同步：`gov_xzfgk`、
+`court_gongbao`、`spp_gov_cn`、`csrc_gov_cn`、`nfra_gov_cn`，以及交易所、中国结算与
+证券业协会的规则来源（`bse_cn`、`sse_com_cn`、`szse_cn`、`chinaclear_cn`、`sac_net_cn`）。
+每个来源支持哪些命令以 `chinalaw sources show <source>` 为准；`sync --source` 目前只支持
+`flk_npc`，例如 `gov_xzfgk` 支持 `fetch` / `discover`，不支持 `sync --source gov_xzfgk`。
 
 补全路径：
 

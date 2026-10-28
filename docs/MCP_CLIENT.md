@@ -11,6 +11,8 @@
 
 `chinalaw-mcp` 是本地服务器，不是远端客户端或 HTTP 转发器。不要尝试给它传 `--remote`。远端未接好时可使用本地库，但必须说明数据来源不同。
 
+`chinalaw init` 建的默认库只是随包基线（几十部法规），规模远小于托管库。要在本地用全国公开法规，先下载[公开法规快照](https://law.newcombmath.com/about/data.html)，把 `--db` 指向解压后的 `library.db`。
+
 ## 凭据与客户端配置
 
 自托管时，由所有者在管理面板签发查询令牌，或通过客户端支持的 OAuth 流程授权。本站管理面板为 `/console`；托管访问需向维护者申请独立令牌，公开 Issue 只说明需求，不贴令牌。公开只读权限为 `chinalaw:public:read`。
@@ -47,7 +49,7 @@ URL 可填写基址或完整 `/mcp` 地址。文件不要提交到仓库；自�
 安装本版 wheel 的 server 可选组件（含官方 MCP SDK）后运行：
 
 ```sh
-python -m pip install './chinalaw-0.7.3-py3-none-any.whl[server]'
+python -m pip install './chinalaw-0.7.4-py3-none-any.whl[server]'
 chinalaw-remote-check
 # 也可显式指定凭据文件，并验证法规内搜索：
 chinalaw-remote-check --env-file /absolute/remote.env --query 保证期间 --law 民法典

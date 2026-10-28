@@ -27,9 +27,9 @@ source: current | flk.npc.gov.cn | https://flk.npc.gov.cn/detail?id=ff808081729d
 
 ## 公开数据与在线文档
 
-- [项目介绍](https://law.newcombmath.com/about/) · [MCP 接入文档](https://law.newcombmath.com/about/mcp.html)
-- [v0.7.2 软件下载](https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/tag/v0.7.2)：软件 wheel / sdist，以及独立的公开法规 JSON / SQLite 快照。
-- 本期公开快照：2486 条法规记录、87956 条条文记录，包含历史版本；数据截止 2026-09-30，不是全量中国规范或实时更新保证。
+- [项目介绍](https://law.newcombmath.com/about/) · [公开数据](https://law.newcombmath.com/about/data.html) · [MCP 接入文档](https://law.newcombmath.com/about/mcp.html)
+- 软件下载：[最新 release](https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/latest) 附 wheel / sdist 与 SHA256SUMS。
+- 公开法规快照：JSON / SQLite 两种包挂在 [v0.7.1 发布页](https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/tag/v0.7.1)，2486 条法规记录、87962 条条文记录、2499 份版本，数据截止 2026-09-30；此后的软件版本没有重新打包数据。记录数含历史版本，不是全量中国规范或实时更新保证。SQLite 包解压后即可 `chinalaw --db <解压目录>/library.db article 民法典 533`。
 - 默认推荐离线或自托管。托管 MCP 仅向少量用户发放独立公开库只读令牌，有速率/并发限制；不发布共享令牌。
 - 感谢原文备份仓库 [lawtext/legal-data-docx](https://github.com/lawtext/legal-data-docx)。官方出处、核查时间和来源哈希保留在数据包中；详见 [数据来源与权利说明](data/public-release/NOTICE.md)。
 
@@ -38,7 +38,7 @@ source: current | flk.npc.gov.cn | https://flk.npc.gov.cn/detail?id=ff808081729d
 
 - **本地优先**。资料库就是一个 SQLite 文件，默认在 `~/.chinalaw/chinalaw.db`；合同、案件材料和公司制度不出本机。
 - **条文级引用**。按法规名、俗称、条号或关键词直接定位到条，JSON 与 Markdown 两种输出。
-- **随包语料**。内置 74 份完整、可引用的公开规范文本，`chinalaw init` 一条命令装好，不需要联网。
+- **随包语料**。内置 74 份完整、可引用的公开规范文本（含宪法、刑法历次版本，入库为 49 部法规），`chinalaw init` 一条命令装好，不需要联网。这是起步基线；要成规模的全国公开法规，用上面的公开快照。
 - **缺失即报错**。本地没有的法规或条文返回明确诊断（`law_missing`、`article_null`、`needs_fetch`），不会让 agent 误以为引用成功。
 - **按需补全**。从 12 个官方公开来源抓取、清洗、入库，保留来源与哈希；节流和合规边界见 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)。
 - **私域规范**。公司制度、甲方要求、行业标准也能入库检索，输出始终标明它们不是国家法。
@@ -80,6 +80,8 @@ chinalaw articles 民法典 --numbers "143,464,509,577" --format json
 chinalaw outline 民法典 --limit 20 --format md
 chinalaw doctor --format md                      # 安装、数据库、MCP 与 skills 健康检查
 ```
+
+`init` 装的是随包基线，`status` / `doctor` 报的是本机这一库的规模。需要成规模的全国公开法规时，下载[公开法规快照](https://law.newcombmath.com/about/data.html)另建一库，用 `--db` 指向它（`chinalaw-mcp --db` 同理），不要覆盖自己的工作库。
 
 本地缺少某部法规或某条条文时按需补全：
 
@@ -148,7 +150,9 @@ chinalaw search 担保审批 --kind norm --format md
 
 ## 语料与来源
 
-内置 74 份完整公开规范文本：宪法与刑法的历次文本、民法典、民事 / 刑事 / 行政诉讼法、公司法、劳动合同法、个人信息保护法等，以及民法典配套解释和主要的诉讼、合同、劳动司法解释。完整清单见 [docs/DATA_INDEX.md](docs/DATA_INDEX.md)。
+内置 74 份完整公开规范文本：宪法与刑法的历次文本、民法典、民事 / 刑事 / 行政诉讼法、公司法、劳动合同法、个人信息保护法等，以及民法典配套解释和主要的诉讼、合同、劳动司法解释。入库后为 49 部法规、7519 条条文、74 份版本（宪法、刑法的历次文本是同一部法规的版本）。完整清单见 [docs/DATA_INDEX.md](docs/DATA_INDEX.md)。
+
+更大范围的全国公开法规另行发布为公开快照（见上文“公开数据与在线文档”），从审查后的公开 JSON 独立构建，与随包基线互不替代：基线保证离线可用，快照提供规模。
 
 已实现 12 个官方来源适配器：国家法律法规数据库（`flk_npc`）、国家行政法规库（`gov_xzfgk`）、最高人民法院公报与主站（`court_gongbao`、`court_main`）、最高人民检察院（`spp_gov_cn`）、证监会（`csrc_gov_cn`）、国家金融监督管理总局（`nfra_gov_cn`），以及沪深北交易所、中国结算和证券业协会的规则。抓取遵守 [docs/COMPLIANCE.md](docs/COMPLIANCE.md)：低频、只取公开文本、保留来源与哈希。
 
@@ -168,6 +172,7 @@ chinalaw sources show flk_npc --format json      # 每个来源支持的命令�
 | `outline <law>` | 章节目录与正文预览 |
 | `ensure <law>` / `fetch <law>` | 本地优先补全 / 从来源抓取入库 |
 | `history` / `diff` / `applicable` / `relation` | 版本历史与时间效力线索 |
+| `law delete <id>` | 按精确 id 删除单行公开法规（先 `--dry-run`） |
 | `norm ...` / `pack ...` | 私域规范 / 规范包管理 |
 | `audit <target>` / `cite-check <file>` | 审查文件中的法条引用是否可解析、文本是否一致 |
 | `doctor` / `status` | 本机健康检查与数据新鲜度 |

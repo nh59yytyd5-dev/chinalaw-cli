@@ -99,6 +99,12 @@ chinalaw sync --applicability --applicability-dir <dir>
 chinalaw status --format md
 ```
 
+第 2 步装出的是随包基线（入库后几十部法规），`status` 的计数不代表项目资料规模。
+需要成规模的全国公开法规时，先考虑公开法规快照，而不是 `ensure --profile` 逐部抓
+官方源：下载 SQLite 包解压后用 `chinalaw --db <解压目录>/library.db ...` 另建一库，
+或把 JSON 包 `sync --from-dir` 导入新库（下载与用法见
+https://law.newcombmath.com/about/data.html）。不要直接覆盖自己的工作库。
+
 ### SOP-2：定期保鲜（每周 / 每月）
 
 ```bash

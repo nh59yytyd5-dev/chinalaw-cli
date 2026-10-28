@@ -546,7 +546,7 @@ JSON 输出：
   "db_path": "string",
   "checks": [
     {
-      "name": "cli_version|path|db_exists|schema_version|fixtures_loaded|applicability_loaded|freshness|seed_or_stub|skills_installed|mcp_available|source_smoke",
+      "name": "cli_version|path|bundled_data|db_exists|db_status|schema_version|fixtures_loaded|applicability_loaded|freshness|seed_or_stub|skills_installed|mcp_available|source_smoke",
       "status": "pass|warn|fail|skip",
       "message": "string",
       "hint": "string|null",
@@ -560,6 +560,10 @@ JSON 输出：
 
 退出码：`ok=true` 返回 `0`；存在 fail 返回 `1`；`--strict` 下 warning 也会让
 `ok=false` 并返回 `1`。`doctor` 不自动修复、不自动联网、不在数据库不存在时创建数据库。
+
+`db_status` 只在数据库存在但状态读取失败时出现（`fail`）。`fixtures_loaded` 通过时，
+`data` 为 `{laws, articles, revisions}`（同 `status`）；库内法规行数不到随包 fixture 份数的
+两倍时，`hint` 提示该库只是随包基线规模，并指向公开法规快照的下载页。
 
 #### 4.0.4 `init`
 
@@ -586,11 +590,17 @@ JSON 输出：
     "titles": ["string"],
     "fixtures_dir": "string"
   },
+  "library": {"laws": "integer", "articles": "integer", "revisions": "integer"},
   "applicability_sync": "applicability_import|null",
   "doctor": "doctor_report",
   "next_commands": ["string"]
 }
 ```
+
+`fixture_sync.laws_loaded` / `articles_loaded` 按载入的法规文本计：历次版本各算一份，
+条文数含各版本条文。载入后库内的法规行数、条文数与版本数在 `library`（同 `status` 的
+`laws` / `articles` / `revisions`，见 §4.6）；内置法规未加载出来时为 `null`。两组数不相等是
+正常的，例如随包 74 份文本入库后为 49 部法规。
 
 `applicability_sync` 是随包时间效力规则的载入结果（结构同 `sync --applicability`，见 §4.5）；内置法规未加载出来时为 `null`。
 
@@ -996,7 +1006,9 @@ Markdown 输出选项：
 
 ### 4.5 `sync`
 
-`--fixtures` / `--from-dir <dir>` 模式属于协议（手工准备 + 一次性导入）。
+`--fixtures` / `--from-dir <dir>` 模式属于协议（手工准备 + 一次性导入）。两种模式输出
+`laws_loaded`、`articles_loaded`、`titles`（按载入的文本计，历次版本各算一份）和 `library`
+（载入后库内的 `{laws, articles, revisions}`，同 §4.6）。
 `--fixtures` 同时载入随包的时间效力规则，结果放在输出的 `applicability` 字段（结构同下）。
 `--applicability [--applicability-dir <dir>]` 加载时间效力 / 规范关系 JSON，输出：
 
@@ -1024,6 +1036,8 @@ Markdown 输出选项：
 {
   "db_path": "string",
   "schema_version": "integer",
+  "schema_current": "boolean",
+  "read_only": "boolean",
   "laws": "integer",
   "articles": "integer",
   "revisions": "integer",
@@ -1038,9 +1052,25 @@ Markdown 输出选项：
   "oldest_source_checked_at": "string|null",
   "oldest_freshness_days": "integer|null",
   "by_level": [{"level": "string", "count": "integer"}],
-  "by_status": [{"status": "string", "count": "integer"}]
+  "by_status": [{"status": "string", "count": "integer"}],
+  "by_articles_coverage": [{"coverage": "populated|seed|stub", "count": "integer"}],
+  "stub_laws": [{"id": "string", "title": "string", "short_title": "string|null"}],
+  "seed_laws": [{"id": "string", "title": "string", "short_title": "string|null"}],
+  "alias_agent": "enabled|disabled"
 }
 ```
+
+计数口径：
+
+- `laws`：`laws` 表行数。国家法律法规数据库给每个版本独立 id，这类版本各占一行（按
+  §2.1 的 `work_id` 规则归为同一作品）；宪法、刑法等仓库维护的历次合并文本共用一行，
+  旧版本只在 `revisions` 中。
+- `articles`：各行当前所载文本的条文数，不含 `revisions` 里旧版本快照的条文。
+- `revisions`：版本快照数。`init` / `sync` 的 `laws_loaded` 按载入的文本计，与此口径不同。
+- `schema_current`：`schema_version` 是否等于程序内置版本；`read_only`：本次读取是否未做迁移。
+- `stub_laws`：没有条文的非 `seed` 法规；`seed_laws`：`status=seed` 的法规；
+  `by_articles_coverage` 是 populated / seed / stub 三类的计数。
+- `alias_agent`：是否启用 `CHINALAW_USE_ALIAS_AGENT`。
 
 ### 4.7 `norm <subcommand>`
 
