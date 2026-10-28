@@ -1614,6 +1614,13 @@ def _handle_list(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
     return 0
 
 
+def _library_summary(db_path: Path) -> dict:
+    # laws_loaded / articles_loaded 按载入的文本计，历次版本各算一份；库内统计按法规行计。
+    # 两组数并列输出，读者才不会以为载入了 74 部、库里却只有 49 部（#49）。
+    status = service.status(db_path)
+    return {key: status[key] for key in ("laws", "articles", "revisions")}
+
+
 def _handle_init(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser) -> int:
     sync_result = loader.load_fixtures(db_path)
     fixture_ready = bool(
@@ -1634,6 +1641,7 @@ def _handle_init(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
         "ok": fixture_ready and bool(doctor_report.get("ok")),
         "db_path": str(db_path),
         "fixture_sync": sync_result,
+        "library": _library_summary(db_path) if fixture_ready else None,
         "applicability_sync": applicability_result,
         "doctor": doctor_report,
         "next_commands": [
@@ -1668,11 +1676,13 @@ def _handle_sync(args, db_path: Path, fmt: str, parser: argparse.ArgumentParser)
         if not paths:
             raise ValueError(f"sync --from-dir contains no JSON files: {directory}")
         result = loader.load_files(db_path, paths)
+        result["library"] = _library_summary(db_path)
     elif args.fixtures:
         result = loader.load_fixtures(db_path)
         if not result.get("laws_loaded") or not result.get("articles_loaded"):
             raise ValueError(result.get("note") or "no bundled fixtures were loaded")
         result["applicability"] = applicability.load_applicability_fixtures(db_path)
+        result["library"] = _library_summary(db_path)
     elif args.source:
         result = sync_source(
             db_path,

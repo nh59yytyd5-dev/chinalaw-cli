@@ -1868,12 +1868,21 @@ def sync_to_markdown(payload: dict) -> str:
         if rules
         else ""
     )
+    library = payload.get("library")
     return (
-        f"同步完成：{payload['laws_loaded']} 部法规 / "
-        f"{payload['articles_loaded']} 条条文\n"
+        f"同步完成：载入 {payload['laws_loaded']} 份法规文本 / "
+        f"{payload['articles_loaded']} 条条文（历次版本各计一份）\n"
+        + (f"{_library_text(library)}\n" if library else "")
         + rules_line
         + "\n".join(f"- {t}" for t in payload.get("titles", []))
         + "\n"
+    )
+
+
+def _library_text(library: dict) -> str:
+    return (
+        f"库内现有：{library.get('laws', 0)} 部法规 / {library.get('articles', 0)} 条条文 / "
+        f"{library.get('revisions', 0)} 份版本"
     )
 
 
@@ -1886,12 +1895,23 @@ def init_to_markdown(payload: dict) -> str:
         "",
         f"- 状态：{status}",
         f"- 数据库：`{payload.get('db_path')}`",
-        f"- 加载法规：{sync.get('laws_loaded', 0)} 部",
-        f"- 加载条文：{sync.get('articles_loaded', 0)} 条",
-        f"- 时间效力规则：{(payload.get('applicability_sync') or {}).get('rules_loaded', 0)} 条",
-        f"- doctor errors：{doctor_report.get('error_count', 0)}",
-        f"- doctor warnings：{doctor_report.get('warning_count', 0)}",
+        f"- 载入法规文本：{sync.get('laws_loaded', 0)} 份（历次版本各计一份）",
+        f"- 载入条文：{sync.get('articles_loaded', 0)} 条",
     ]
+    library = payload.get("library")
+    if library:
+        lines.append(f"- {_library_text(library)}")
+    rules_loaded = (payload.get("applicability_sync") or {}).get("rules_loaded", 0)
+    lines.extend(
+        [
+            f"- 时间效力规则：{rules_loaded} 条",
+            f"- doctor errors：{doctor_report.get('error_count', 0)}",
+            f"- doctor warnings：{doctor_report.get('warning_count', 0)}",
+        ]
+    )
+    for check in doctor_report.get("checks") or []:
+        if check.get("name") == "fixtures_loaded" and check.get("hint"):
+            lines.append(f"- 提示：{check['hint']}")
     error = payload.get("error") or {}
     if error:
         lines.append(f"- 错误：{error.get('code')}: {error.get('message')}")

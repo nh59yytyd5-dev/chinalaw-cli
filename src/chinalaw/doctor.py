@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from chinalaw import __version__, service, sources
+from chinalaw import PUBLIC_DATA_URL, __version__, service, sources
 from chinalaw.datapaths import (
     builtin_data_dir,
     builtin_data_search_message,
@@ -35,8 +35,13 @@ def run_doctor(
         f"chinalaw {__version__} on Python {sys.version_info.major}.{sys.version_info.minor}",
     )
     _check_path(checks)
-    _check_bundled_data(checks)
-    _check_db(checks, db, freshness_warn_days=freshness_warn_days)
+    fixture_count = _check_bundled_data(checks)
+    _check_db(
+        checks,
+        db,
+        freshness_warn_days=freshness_warn_days,
+        bundled_fixture_count=fixture_count,
+    )
     _check_skills(checks)
     _check_mcp(checks)
     if source_smoke:
@@ -115,7 +120,7 @@ def _check_path(checks: list[dict[str, Any]]) -> None:
     _add(checks, "path", "pass", f"PATH resolves chinalaw to {exe}", data=data)
 
 
-def _check_bundled_data(checks: list[dict[str, Any]]) -> None:
+def _check_bundled_data(checks: list[dict[str, Any]]) -> int:
     fixtures = builtin_data_dir("fixtures")
     fixture_count = len(list(fixtures.glob("*.json"))) if fixtures.is_dir() else 0
     if fixture_count:
@@ -126,13 +131,26 @@ def _check_bundled_data(checks: list[dict[str, Any]]) -> None:
             f"发现 {fixture_count} 个内置 fixture：{fixtures}",
             data={"fixtures_dir": str(fixtures), "fixture_count": fixture_count},
         )
-        return
+        return fixture_count
     _add(
         checks,
         "bundled_data",
         "fail",
         f"未找到可用的内置 fixtures：{fixtures}",
         hint=builtin_data_search_message("fixtures"),
+    )
+    return 0
+
+
+def _small_library_hint(law_count: int, bundled_fixture_count: int) -> str | None:
+    # 只装了随包基线（外加零星补抓）的库，用户常把它当成全部资料（#49）。
+    # 法规行数不到随包文本数的两倍，就视为基线规模。
+    if not bundled_fixture_count or law_count >= 2 * bundled_fixture_count:
+        return None
+    return (
+        "本地库与随包基线规模相当，只覆盖常用法典、程序法和主要司法解释；"
+        f"需要更大范围时，下载公开法规快照另建一库并用 --db 指向（{PUBLIC_DATA_URL}），"
+        "或按需 chinalaw ensure <law>。"
     )
 
 
@@ -141,6 +159,7 @@ def _check_db(
     db: Path,
     *,
     freshness_warn_days: int,
+    bundled_fixture_count: int = 0,
 ) -> None:
     if not db.exists():
         _add(
@@ -183,12 +202,15 @@ def _check_db(
 
     law_count = int(status.get("laws") or 0)
     article_count = int(status.get("articles") or 0)
+    revision_count = int(status.get("revisions") or 0)
     if law_count and article_count:
         _add(
             checks,
             "fixtures_loaded",
             "pass",
-            f"本地已有 {law_count} 部法规 / {article_count} 条条文",
+            f"本地已有 {law_count} 部法规 / {article_count} 条条文 / {revision_count} 份版本",
+            hint=_small_library_hint(law_count, bundled_fixture_count),
+            data={"laws": law_count, "articles": article_count, "revisions": revision_count},
         )
     else:
         _add(

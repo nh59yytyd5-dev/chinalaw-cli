@@ -5,6 +5,8 @@
 
 __version__ = "0.7.3"
 PROJECT_URL = "https://github.com/nh59yytyd5-dev/chinalaw-cli"
+# 公开法规快照的下载与用法页；快照随数据发布更新，这里不写死版本号。
+PUBLIC_DATA_URL = "https://law.newcombmath.com/about/data.html"
 USER_AGENT_TOKEN = f"chinalaw-cli/{__version__} (+{PROJECT_URL})"
 
-__all__ = ["PROJECT_URL", "USER_AGENT_TOKEN", "__version__"]
+__all__ = ["PROJECT_URL", "PUBLIC_DATA_URL", "USER_AGENT_TOKEN", "__version__"]
