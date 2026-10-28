@@ -118,8 +118,13 @@ see also: [`.claude/skills/README.md`](../.claude/skills/README.md) 总索引与
 ## 6. 安装规范语料
 
 `chinalaw init` 加载的随包基线覆盖常用法典、程序法和主要司法解释（清单见
-[`DATA_INDEX.md`](./DATA_INDEX.md)）。任务涉及基线之外的规范时按下面的顺序补库，
-不要直接改 SQLite：
+[`DATA_INDEX.md`](./DATA_INDEX.md)），入库后只有几十部法规。`status` / `doctor` 报的是
+本机这一库的规模，不是项目资料的全部。
+
+需要成规模的全国公开法规时，先用公开法规快照：下载 SQLite 包解压后用
+`chinalaw --db <解压目录>/library.db ...`（或 `chinalaw-mcp --db ...`）另建一库，或把 JSON 包
+`sync --from-dir` 导入新库；下载与用法见 https://law.newcombmath.com/about/data.html，
+不要覆盖自己的工作库。只缺个别规范时按下面的顺序补库，不要直接改 SQLite：
 
 1. 确认本机健康：`chinalaw doctor --format md`、`chinalaw status --format md`。
 2. 查看推荐语料 profile：`chinalaw corpus list --format md`；
@@ -155,8 +160,11 @@ see also: [`.claude/skills/README.md`](../.claude/skills/README.md) 总索引与
 - `FetchNotFoundError`：先 `chinalaw resolve <name>` 排除本地别名问题，仍失败再报告找不到。
 - `FetchSourceError`：`chinalaw verify-source <source> --format json` 判断是否上游改版；
   属于项目缺陷时创建 issue。
-- FLK 返回反爬 JavaScript 挑战：停止批量安装，改为单部 `ensure`，间隔一段时间后再试
-  （见 issue #97）。
+- `source_rate_limited`：官方源返回限流或反爬信号，`ensure --profile` 已停止本轮同源批量；
+  稍后重试，或改为单部 `ensure` / `fetch`。
+- `source_host_not_allowed`：官方源给出的下载地址不在来源白名单，请求在本地被拦截，
+  不表示法规不存在；把法规名和 `message` 中的主机反馈给维护者（创建 issue），不要绕过白名单。
+- FLK 返回反爬 JavaScript 挑战：停止批量安装，改为单部 `ensure`，间隔一段时间后再试。
 
 `needs_verification=true`、`law_stub`、`law_seed`、`article_null` 都表示不能直接引用，
 必须继续 fetch / verify-source，或明确告知用户本地数据不足。不要读取用户素材目录的正文

@@ -48,19 +48,19 @@ FastAPI/Uvicorn/MCP 等依赖只在 `server` 可选安装项中加载。
 | `src/chinalaw/loader.py` | JSON payload 幂等入库，维护 FTS |
 | `src/chinalaw/search_indexes.py` | 精确别名索引、FTS rowid 映射与重建 |
 | `src/chinalaw/db.py` | SQLite 连接、migration、meta |
-| `src/chinalaw/schema.py` | 当前 schema v14 DDL |
+| `src/chinalaw/schema.py` | 当前 schema v17 DDL |
 | `src/chinalaw/admin/` | 分页目录、内容指纹、冻结草稿、受管附件、任务、维护门控、备份恢复 |
 | `src/chinalaw/server/` | HTTP 路由、所有者会话、OAuth、MCP HTTP、请求边界、服务启动 |
 | `web/` | React/TypeScript 面板源码与 Playwright 测试 |
 | `src/chinalaw/server/static/` | 安装包内的离线静态界面与许可声明 |
-| `src/chinalaw/adapters/flk_npc.py` | 国家法律法规数据库 adapter |
+| `src/chinalaw/adapters/` | 12 个官方来源 adapter（`flk_npc` 国家法律法规数据库等；清单见 `data/source_coverage.json`） |
 | `src/chinalaw/normsources.py` | 私域规范导入、导出、切条、检索 |
 | `src/chinalaw/normpacks.py` | 本地规范包导入、导出、展示、校验 |
 | `src/chinalaw/formatters.py` | Markdown 输出 |
 
 ## 3. 当前数据模型
 
-当前 schema 版本是 v14。
+当前 schema 版本是 v17（v15 为 `laws` 增加 `work_id` / `status_checked_at`，v16 把条文索引换成二元组，v17 为版本归属与施行日期加索引）。
 
 核心表：
 
@@ -115,9 +115,9 @@ HTTP 路由不通过 shell 执行 CLI，也不接受任意服务器路径。
 
 公开法规检索：
 
-- 长查询走 SQLite FTS5 trigram。
-- 1-2 字短查询回退 SQL `LIKE`。
-- 法规解析支持 id、title、short_title、aliases。
+- 条文用 Python 切出的二元组建 FTS5 索引（`search_tokens.py`，v16 起）缩小候选，再逐条做子串核对；单个汉字、只有数字等无法用索引缩小的查询走全表扫描。
+- 法规标题与私域规范仍用 FTS5 trigram，不足 3 字的查询回退 SQL `LIKE`。
+- 法规解析支持 id、title、short_title、aliases 与文号。
 - 条号解析支持中文数字、阿拉伯数字和插入条款号。
 
 私域规范检索：

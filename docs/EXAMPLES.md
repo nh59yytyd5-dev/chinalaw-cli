@@ -5,10 +5,13 @@
 ## 1. 初始化
 
 ```bash
-PYTHONPATH=src python3 -m chinalaw sync --fixtures
-PYTHONPATH=src python3 -m chinalaw sync --applicability
+PYTHONPATH=src python3 -m chinalaw init --format md      # 随包基线 + 时间效力规则 + doctor
 PYTHONPATH=src python3 -m chinalaw status --format md
 ```
+
+`init` 与 `sync --fixtures` 都会一并载入随包时间效力规则；只有更早建的库或自定义规则目录才需要
+`sync --applicability [--applicability-dir <dir>]`。随包基线入库后只有几十部法规，需要成规模的全国
+公开法规时用公开快照另建一库（见 README“公开数据与在线文档”）。
 
 使用临时数据库：
 
@@ -186,8 +189,9 @@ PYTHONPATH=src python3 -m chinalaw trace 民事诉讼法 257 \
 
 `applicable` / `relation` 只提供 grounding 线索，不输出最终法律意见。
 
+时间效力规则随 `init` / `sync --fixtures` 载入，下面的命令直接可用：
+
 ```bash
-PYTHONPATH=src python3 -m chinalaw sync --applicability
 PYTHONPATH=src python3 -m chinalaw applicable --date 2022-01-01 --topic 合同效力 --domain litigation --format json
 PYTHONPATH=src python3 -m chinalaw applicable --date 2019-01-01 --topic 合同效力 --format md
 PYTHONPATH=src python3 -m chinalaw relation 民法典 --format md

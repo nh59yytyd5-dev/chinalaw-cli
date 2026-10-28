@@ -96,7 +96,7 @@ CLI 提供依据和线索，不输出最终法律意见。
 - 清洗后的文本进入同一结构。
 - agent 阅读规则和 warning 后组织分析。
 
-未来 `applicable` 应返回 grounding 信息，而不是最终结论。
+`applicable` 只返回 grounding 线索（带 `not_legal_conclusion` 标记），不返回最终结论。
 
 ## 9. 规范包
 
@@ -124,8 +124,8 @@ CLI 提供依据和线索，不输出最终法律意见。
 - 工作流复用
 - agent 调用纪律
 
-本项目可以提供轻量 MCP adapter，但它只是本地 CLI 内核的另一种调用壳：
-不承载远程数据库、不绕过 cleaning / provenance、不把大量文档预塞进上下文。
+本项目提供的 MCP（本地 stdio 与自托管 HTTP）只是同一内核的另一种调用壳：
+HTTP 端点只读，资料仍由所有者维护的库提供；不绕过 cleaning / provenance、不把大量文档预塞进上下文。
 
 ## 11. 北极星
 

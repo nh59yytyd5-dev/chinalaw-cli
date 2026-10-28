@@ -49,7 +49,7 @@ Cursor 等主流 agent 框架识别（OpenCode 在
 | [`chinalaw-checking/SKILL.md`](./chinalaw-checking/SKILL.md) | 中国法规引用核对（AI 草稿 / 合同 / 起诉状） | craft 横切 |
 | [`chinalaw-searching/SKILL.md`](./chinalaw-searching/SKILL.md) | 中国法规检索方法（6 大方法 + 4 walkthrough） | craft 横切 |
 | [`chinalaw-maintaining/SKILL.md`](./chinalaw-maintaining/SKILL.md) | 本地数据库维护与备份 | craft 横切 |
-| [`chinalaw-fetching/SKILL.md`](./chinalaw-fetching/SKILL.md) | 多源爬取补全（flk_npc / court_gongbao / court_main / spp_gov_cn） | craft 横切 |
+| [`chinalaw-fetching/SKILL.md`](./chinalaw-fetching/SKILL.md) | 多源爬取补全（12 个已实现来源：flk_npc、court_gongbao / court_main、spp_gov_cn、证监会 / 金融监管总局、交易所与行业自律组织等） | craft 横切 |
 | [`legal-research/SKILL.md`](./legal-research/SKILL.md) | 通用法律检索、法律备忘录、法规梳理 | 场景流程 |
 | [`contract-review/SKILL.md`](./contract-review/SKILL.md) | 合同审查、合同风险清单、履行 / 违约 / 放款条件审查 | 场景流程 |
 

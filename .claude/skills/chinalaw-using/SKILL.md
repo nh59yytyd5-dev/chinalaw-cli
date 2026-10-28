@@ -79,13 +79,17 @@ norm / pack 写入。远端缺资料时工具返回诊断（`article_missing` �
 资料解释成"法规不存在"。
 
 MCP 工具不可见、返回 401 或超时，才降级到本地 CLI，并在输出里说明用的是本地库。
-两边内容可能不同步，引用时注明来源库。私域规范只有令牌带 private 权限才可见；
+两边内容可能不同步，引用时注明来源库。`chinalaw init` 装出的默认库只是随包基线
+（几十部常用法典、程序法与主要司法解释），不能拿它的 `status` 计数代表本项目的资料规模；
+需要全国公开法规时用公开快照另建一库再 `--db` 指向（下载与用法见
+https://law.newcombmath.com/about/data.html）。私域规范只有令牌带 private 权限才可见；
 HTTP MCP 的业务错误保留 `isError=true`，JSON 正文与 `structuredContent` 提供
 `error/message/status/details`；`private_access_denied`、`status=403` 表示没有私域权限，
 不是库里没有规范（传输层 HTTP 可能仍是 200）。内部异常不回传详细信息。
 `chinalaw_applicable(date, topic, law, domain)` 远端可用；看 `coverage.rules_loaded/topics`
 判断实例覆盖，`exhaustive=false`，零命中不证明没有过渡规定。v0.7.1 公开 SQLite 包已含规则；
-已有本地库可用 `chinalaw --db /absolute/library.db sync --applicability` 加载。
+`init` / `sync --fixtures` 建的库也会一并载入；更早建的本地库可用
+`chinalaw --db /absolute/library.db sync --applicability` 补载。
 裸条号 search 可能命中正文里的引用；指定法规并用 article 取原文。
 
 ## 命令前缀约定

@@ -97,6 +97,27 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_mcp_server_info_uses_package_version(self) -> None:
         self.assertEqual(__version__, mcp.SERVER_INFO["version"])
 
+    def test_release_facing_docs_name_the_package_version(self) -> None:
+        """发版时手工改的版本号要一起改；漏掉任何一处，文档就和发布页对不上。"""
+        package = json.loads((REPO_ROOT / "web" / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(__version__, package["version"])
+        wheel = f"chinalaw-{__version__}-py3-none-any.whl"
+        for relative in ("docs/MCP_CLIENT.md", "website/data.html"):
+            with self.subTest(document=relative):
+                self.assertIn(wheel, (REPO_ROOT / relative).read_text(encoding="utf-8"))
+        minor = ".".join(__version__.split(".")[:2])
+        security = (REPO_ROOT / "SECURITY.md").read_text(encoding="utf-8")
+        self.assertIn(f"当前 {minor}.x", security)
+
+    def test_site_pages_show_package_version_and_match_bundled_copy(self) -> None:
+        # website/ 是介绍页源文件，static/about/ 是随包副本（scripts/build-site.mjs 生成）。
+        static = REPO_ROOT / "src" / "chinalaw" / "server" / "static" / "about"
+        for page in sorted((REPO_ROOT / "website").glob("*.html")):
+            with self.subTest(page=page.name):
+                text = page.read_text(encoding="utf-8")
+                self.assertIn(f"v{__version__}", text)
+                self.assertEqual(text, (static / page.name).read_text(encoding="utf-8"))
+
     def test_registered_adapter_user_agents_use_release_token(self) -> None:
         self.assertEqual(
             f"chinalaw-cli/{__version__} (+{PROJECT_URL})",

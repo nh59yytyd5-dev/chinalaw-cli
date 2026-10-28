@@ -26,6 +26,7 @@
 | `DATA_INDEX.md` | 数据覆盖和补全路径 |
 | `COMPLIANCE.md` | 公开来源抓取的合规边界 |
 | `ADMIN_SERVER.md` | 管理面板与服务器的使用、部署和开发验收 |
+| `MCP_CLIENT.md` | MCP 客户端接入、凭据与连接检查 |
 | `AGENT_WORKFLOWS.md` | agent 调用顺序、输出纪律、语料安装与 skills 索引 |
 | `CONTRIBUTING.md` | 贡献流程与提交规范 |
 | issue / PR 设计记录 | 重要决策的 Context / Decision / Consequences |
@@ -78,8 +79,8 @@
 
 ## 5. Schema 规则
 
-当前 schema 以 `src/chinalaw/schema.py` 中的 `SCHEMA_VERSION` 为准；截至
-2026-09-13 为 v14。`docs/CONTRACT.md` 只记录外部可依赖的当前协议，不负责保留
+当前 schema 以 `src/chinalaw/schema.py` 中的 `SCHEMA_VERSION` 为准，
+当前为 v17。`docs/CONTRACT.md` 只记录外部可依赖的当前协议，不负责保留
 每次 migration 的历史细节。
 
 新增表、改字段、改约束前必须：
