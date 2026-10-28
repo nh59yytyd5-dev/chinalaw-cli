@@ -3,7 +3,7 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## Unreleased
+## 0.7.4 — 2026-10-28
 
 - `fetch` / `ensure` 恢复下载国家法律法规数据库正文：该源下载接口现把附件签发到 `flkoss.obs-bj2.cucloud.cn`，此前一律被来源白名单拦截；现精确放行该主机（不含子域）。`ensure` 遇到来源白名单拦截时 `reason` 报 `source_host_not_allowed` 并附处理建议，不再沿用表示“本地缺失”的 `missing_law`（#43）。
 - `init` 与 `sync --fixtures` 一并载入随包的时间效力规则，`applicable` 不再默认返回 `applicability_data_missing`；`doctor` 新增 `applicability_loaded` 检查（#44）。

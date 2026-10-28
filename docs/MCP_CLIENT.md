@@ -49,7 +49,7 @@ URL 可填写基址或完整 `/mcp` 地址。文件不要提交到仓库；自�
 安装本版 wheel 的 server 可选组件（含官方 MCP SDK）后运行：
 
 ```sh
-python -m pip install './chinalaw-0.7.3-py3-none-any.whl[server]'
+python -m pip install './chinalaw-0.7.4-py3-none-any.whl[server]'
 chinalaw-remote-check
 # 也可显式指定凭据文件，并验证法规内搜索：
 chinalaw-remote-check --env-file /absolute/remote.env --query 保证期间 --law 民法典

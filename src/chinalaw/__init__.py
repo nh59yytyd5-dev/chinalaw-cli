@@ -3,7 +3,7 @@
 为 AI agent 查阅中国法律法规而建的命令行工具。
 """
 
-__version__ = "0.7.3"
+__version__ = "0.7.4"
 PROJECT_URL = "https://github.com/nh59yytyd5-dev/chinalaw-cli"
 # 公开法规快照的下载与用法页；快照随数据发布更新，这里不写死版本号。
 PUBLIC_DATA_URL = "https://law.newcombmath.com/about/data.html"
