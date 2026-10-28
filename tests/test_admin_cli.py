@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from chinalaw import service
 from chinalaw.db import connect, current_version
 from chinalaw.schema import SCHEMA_VERSION
 from chinalaw.server.cli import initialize
@@ -54,6 +55,16 @@ class ServerCLITests(unittest.TestCase):
             self.assertTrue(Path(result["upgrade_backup"]).is_file())
             with connect(db) as conn:
                 self.assertEqual(current_version(conn), SCHEMA_VERSION)
+
+    def test_init_with_fixtures_also_loads_bundled_applicability_rules(self):
+        """与 chinalaw init 一致：托管实例的 applicable 不因初始化路径不同而空转（#44）。"""
+        with tempfile.TemporaryDirectory() as directory:
+            db = Path(directory) / "library.db"
+            result = initialize(db, with_fixtures=True)
+            status = service.status(db)
+        self.assertGreater(result["status"]["laws"], 0)
+        self.assertGreater(status["applicability_rules"], 0)
+        self.assertGreater(status["law_relations"], 0)
 
     def test_invalid_environment_port_has_argument_error(self):
         process = subprocess.run(

@@ -14,7 +14,7 @@ from contextlib import closing, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
-from chinalaw import __version__, loader, service
+from chinalaw import __version__, applicability, loader, service
 from chinalaw.admin.errors import LibraryError
 from chinalaw.admin.lease import ProcessLease
 from chinalaw.db import DEFAULT_DB_PATH, connect, connect_readonly, current_version, migrate
@@ -93,6 +93,8 @@ def initialize(db_path: Path, *, with_fixtures: bool = False) -> dict:
             migrate(conn)
         if with_fixtures:
             loader.load_fixtures(db_path)
+            # 与 chinalaw init 一致，随包时间效力规则跟着法规载入；须在法规之后（#44）。
+            applicability.load_applicability_fixtures(db_path)
     return {
         "kind": "library_initialized",
         "db_path": str(db_path),
@@ -107,7 +109,8 @@ def _print_init_summary(result: dict, args) -> None:
     print(f"资料库已就绪：{result['db_path']}")
     print(
         f"资料结构 v{result['schema_version']}；公开法规 {status['laws']} 部、"
-        f"条文 {status['articles']} 条、私域规范 {status['norm_sources']} 份。"
+        f"条文 {status['articles']} 条、时间效力规则 {status['applicability_rules']} 条、"
+        f"私域规范 {status['norm_sources']} 份。"
     )
     if result["upgrade_backup"]:
         print(f"升级前的数据库副本：{result['upgrade_backup']}")
