@@ -102,7 +102,7 @@ class ReleaseMetadataTests(unittest.TestCase):
         package = json.loads((REPO_ROOT / "web" / "package.json").read_text(encoding="utf-8"))
         self.assertEqual(__version__, package["version"])
         wheel = f"chinalaw-{__version__}-py3-none-any.whl"
-        for relative in ("docs/MCP_CLIENT.md", "website/data.html"):
+        for relative in ("README.md", "README.en.md", "docs/MCP_CLIENT.md", "website/data.html"):
             with self.subTest(document=relative):
                 self.assertIn(wheel, (REPO_ROOT / relative).read_text(encoding="utf-8"))
         minor = ".".join(__version__.split(".")[:2])
@@ -564,14 +564,15 @@ class AgentSetupScriptTests(unittest.TestCase):
     def test_setup_agent_script_is_documented_and_executable(self) -> None:
         script = REPO_ROOT / "scripts" / "setup-agent"
         windows_script = REPO_ROOT / "scripts" / "setup-agent.ps1"
-        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-
         self.assertTrue(script.exists())
         if os.name != "nt":
             self.assertTrue(script.stat().st_mode & 0o111)
         self.assertTrue(windows_script.exists())
-        self.assertIn("scripts/setup-agent", readme)
-        self.assertIn(".\\scripts\\setup-agent.ps1", readme)
+        for name in ("README.md", "README.en.md"):
+            with self.subTest(readme=name):
+                readme = (REPO_ROOT / name).read_text(encoding="utf-8")
+                self.assertIn("scripts/setup-agent", readme)
+                self.assertIn(".\\scripts\\setup-agent.ps1", readme)
 
     def test_update_local_skill_install_is_opt_in(self) -> None:
         # 0.5.1 起 skills 默认不安装（仓库副本仅作使用说明），--skills 显式开启。

@@ -74,6 +74,7 @@ include = [
   "/.claude/skills",
   "/scripts",
   "/README.md",
+  "/README.en.md",
   "/LICENSE",
   "/NOTICES.md",
   "/CHANGELOG.md",

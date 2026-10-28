@@ -330,16 +330,61 @@ class DocumentationContractTests(unittest.TestCase):
         texts = result["laws_loaded"]
         counts = f"{status['laws']} 部法规、{status['articles']} 条条文、{status['revisions']} 份版本"
         readme = (repo_root / "README.md").read_text(encoding="utf-8")
+        readme_en = (repo_root / "README.en.md").read_text(encoding="utf-8")
         data_index = (repo_root / "docs" / "DATA_INDEX.md").read_text(encoding="utf-8")
         self.assertIn(f"内置 {texts} 份", readme)
         self.assertIn(f"入库为 {status['laws']} 部法规", readme)
         self.assertIn(f"入库后为 {counts}", readme)
+        self.assertIn(f"the {texts} bundled public texts ({status['laws']} laws once loaded)", readme_en)
+        self.assertIn(
+            f"{status['laws']} laws, {status['articles']:,} articles and {status['revisions']} versions",
+            readme_en,
+        )
         self.assertIn(f"包含 {texts} 个完整 fixture", data_index)
         self.assertIn(counts, data_index.replace("\n", ""))
 
+    def test_readmes_state_public_snapshot_counts(self) -> None:
+        # 快照规模以随发布包维护的质量记录为准，两种语言的 README 都跟着它走。
+        repo_root = Path(__file__).resolve().parents[1]
+        quality = (repo_root / "data" / "public-release" / "QUALITY.md").read_text(encoding="utf-8")
+        laws, articles, revisions = (
+            int(n) for n in re.search(r"公开库(\d+)条法规记录、(\d+)条条文、(\d+)份修订", quality).groups()
+        )
+        readme = (repo_root / "README.md").read_text(encoding="utf-8")
+        readme_en = (repo_root / "README.en.md").read_text(encoding="utf-8")
+        self.assertIn(f"{laws} 条法规记录、{articles} 条条文记录、{revisions} 份版本", readme)
+        self.assertIn(
+            f"{laws:,} law records, {articles:,} article records and {revisions:,} versions", readme_en
+        )
+
+    def test_english_readme_mirrors_chinese_readme(self) -> None:
+        # 英文版是中文 README 的译本：互相链接，章节层次一致，示例命令逐行相同（注释除外）。
+        repo_root = Path(__file__).resolve().parents[1]
+        readme = (repo_root / "README.md").read_text(encoding="utf-8")
+        readme_en = (repo_root / "README.en.md").read_text(encoding="utf-8")
+        self.assertIn('href="README.en.md"', readme)
+        self.assertIn('href="README.md"', readme_en)
+
+        def outline(text: str) -> list[str]:
+            prose = re.sub(r"^```.*?^```", "", text, flags=re.M | re.S)
+            return [line.split(" ", 1)[0] for line in prose.splitlines() if re.match(r"#{2,3} ", line)]
+
+        def code_blocks(text: str) -> list[tuple[str, list[str]]]:
+            blocks = []
+            for language, body in re.findall(r"^```(\w*)\n(.*?)^```", text, flags=re.M | re.S):
+                if language == "text":  # 给 agent 的规则随语言翻译
+                    blocks.append((language, []))
+                    continue
+                lines = [line.split(" #", 1)[0].rstrip() for line in body.splitlines()]
+                blocks.append((language, [line for line in lines if line and not line.startswith("#")]))
+            return blocks
+
+        self.assertEqual(outline(readme), outline(readme_en))
+        self.assertEqual(code_blocks(readme), code_blocks(readme_en))
+
     def test_active_markdown_links_resolve(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        documents = [repo_root / "README.md", repo_root / "NOTICES.md"]
+        documents = [repo_root / "README.md", repo_root / "README.en.md", repo_root / "NOTICES.md"]
         documents.extend(sorted((repo_root / "docs").glob("*.md")))
         missing: list[str] = []
         for document in documents:
