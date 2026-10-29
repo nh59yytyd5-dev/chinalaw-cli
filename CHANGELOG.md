@@ -3,7 +3,9 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## 0.7.5 — 2026-10-29
+## Unreleased
+
+- 按文号查得到证监会文件（#69）。此前 `resolve`、`article`、`search` 不认“中国证券监督管理委员会公告〔2025〕5号”：“〔”前的机关代字超过 12 字，正文抽文号也只截得到后 12 字；简称“证监会公告〔2025〕5号”虽认作文号，却对不上库里存的全称。现在整段输入是文号时机关代字不再限 12 字；正文里抽文号仍以 12 字为限，证监会全称单列。证监会文号的全称与“中国证监会”“证监会”写法互通，用于名称解析、检索、`fetch` 的文号索引和修正本按文号归入原文书；入库仍存来源原文的写法，已入库的文件无须重抓。不带年份的“××令第N号”（如“证监会令第227号”）整段输入时也按文号解析与检索。
 
 - `chinalaw-mcp` 未传 `--db` 时读取 `CHINALAW_DB`，与 `chinalaw`、`chinalaw-server` 一致。此前它固定用 `~/.chinalaw/chinalaw.db`，已用该变量指向公开快照或其他库的用户会静默查到另一个库，得到 `law_missing` 或规模小得多的结果。三个入口改用同一选库规则：`--db` > `CHINALAW_DB` > 默认路径，空值视为未设，路径中的 `~` 一律展开（MCP 客户端配置的参数不经过 shell）；`chinalaw-server` 不再把空的 `CHINALAW_DB` 当成当前目录。`chinalaw` 与 `chinalaw-mcp` 的 `--help` 写明这一顺序（#52）。
 - 查询遇到不存在的库不再新建空库：`search`、`article`、`list`、`applicable` 等只读命令，以及 `law delete`、`rebuild-clean` 等只改动已有内容的命令，输出 `cli_command_error`，`error` 为 `LibraryMissingError`，退出码 `2`，提示检查 `--db` / `CHINALAW_DB` 或运行 `chinalaw init`。此前它们会先建一个空库再答“未找到”，`search`、`list` 甚至返回成功的空结果。`init`、`sync`、`fetch`、`ensure` 与 `norm import|ingest`、`commentary import`、`pack add|import` 仍可新建资料库。`chinalaw-mcp` 与 `chinalaw-server` 一样不新建资料库，库不存在时各工具（含 `chinalaw_ensure`）返回 `isError` 与 `LibraryMissingError`。`status` 遇到不存在的库时，`error` 由 `FileNotFoundError` 改为其子类 `LibraryMissingError`（#55）。

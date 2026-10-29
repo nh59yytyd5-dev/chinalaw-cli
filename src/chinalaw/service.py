@@ -18,6 +18,7 @@ from chinalaw.aliases import display_short_title, merge_law_aliases
 from chinalaw.db import connect, connect_readonly, current_version, migrate
 from chinalaw.document_numbers import (
     DOCUMENT_NUMBER_INLINE_RE,
+    document_number_variants,
     looks_like_document_number,
     normalize_document_number,
 )
@@ -1727,18 +1728,26 @@ def _search_articles(
 
 
 def _document_number_rows(conn, number: str, *, extra_where="", extra_params=()):
-    # Whitespace normalization matches the importer. The scan is over metadata
-    # only (not 94k article bodies) and preserves all documents sharing a number.
+    # Whitespace normalization matches the importer, and an issuer's full and
+    # short names match each other (#69). The scan is over metadata only (not
+    # 94k article bodies) and preserves all documents sharing a number.
     normalized = "replace(replace(replace(replace(l.document_number, ' ', ''), "
     normalized += "char(9), ''), char(10), ''), char(13), '')"
+    numbers = document_number_variants(number)
+    placeholders = ", ".join("?" for _ in numbers)
     return conn.execute(
-        f"SELECT l.*, 0.0 AS score FROM laws l WHERE {normalized} = ? "
+        f"SELECT l.*, 0.0 AS score FROM laws l WHERE {normalized} IN ({placeholders}) "
         f"{extra_where} ORDER BY l.id",
-        (normalize_document_number(number), *extra_params),
+        (*numbers, *extra_params),
     ).fetchall()
 
 
 def _document_number_query(query: str) -> tuple[str, list[str]] | None:
+    # A query that is one number takes every form resolve accepts, including
+    # long issuer codes and 令第N号 (#69); the inline form below needs a 〔year〕.
+    stripped = query.strip()
+    if looks_like_document_number(stripped) and not any(ch.isspace() for ch in stripped):
+        return normalize_document_number(stripped), []
     matches = list(DOCUMENT_NUMBER_INLINE_RE.finditer(query))
     if len(matches) != 1:
         return None

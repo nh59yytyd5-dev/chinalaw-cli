@@ -7,16 +7,30 @@ import sqlite3
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
+# 同一发文机关在文号里的不同写法：全称与常见简称（#69）。按文号查找时互通，
+# 入库仍保留来源原文的写法。
+ISSUER_ALIASES = {
+    "中国证券监督管理委员会": ("中国证监会", "证监会"),
+}
+
 # Covers common central / court / procuratorate forms such as:
-# 法释〔2023〕13号, 法发〔2019〕254号, 中办发〔2020〕5号, 高检发释字〔2017〕7号.
-DOCUMENT_NUMBER_RE = re.compile(r"^[一-鿿]{1,12}〔\d{4}〕\d+号$")
+# 法释〔2023〕13号, 法发〔2019〕254号, 中办发〔2020〕5号, 高检发释字〔2017〕7号,
+# and orders numbered without a year, such as 证监会令第227号 (#69). A whole
+# input cannot swallow surrounding prose, so its issuer code may be longer than
+# the 12 characters allowed inline: 中国证券监督管理委员会公告〔2025〕5号.
+DOCUMENT_NUMBER_RE = re.compile(r"^[一-鿿]{1,30}(?:〔\d{4}〕\d+号|令第\d+号)$")
 # 显式语义别名：``DOCUMENT_NUMBER_FULLMATCH_RE`` 用于"用户输入是不是单一文号"
 # 与 ``document_number_index`` key 校验等需要严格 fullmatch 的场景（已 ``^...$``
 # 锚定）。``DOCUMENT_NUMBER_INLINE_RE`` 不锚定 + ``\s*`` 容忍内部空白，用于从
 # 正文中抽出第一个文号子串。两个常量是 adapter 共享的权威定义；court_gongbao /
 # spp_gov_cn 不应再各自写本地正则。
 DOCUMENT_NUMBER_FULLMATCH_RE = DOCUMENT_NUMBER_RE
-DOCUMENT_NUMBER_INLINE_RE = re.compile(r"([一-鿿]{1,12}〔\d{4}〕\s*\d+\s*号)")
+# 行内的机关代字以 12 字为限，免得把前文吞进文号；全称超过 12 字的机关单列，
+# 否则“中国证券监督管理委员会公告〔2025〕5号”只抽得出后 12 字（#69）。
+_LONG_ISSUER_CODE = "(?:" + "|".join(ISSUER_ALIASES) + ")[一-鿿]{1,4}"
+DOCUMENT_NUMBER_INLINE_RE = re.compile(
+    "((?:" + _LONG_ISSUER_CODE + r"|[一-鿿]{1,12})〔\d{4}〕\s*\d+\s*号)"
+)
 COURT_DETAIL_RE = re.compile(r"/Details/([0-9A-Fa-f]{20,40})\.html")
 COURT_MAIN_DETAIL_RE = re.compile(r"/([a-z]+/xiangqing/\d+)\.html", re.IGNORECASE)
 GOV_XZFGK_DETAIL_RE = re.compile(r"[?&]LawID=(\d+)", re.IGNORECASE)
@@ -42,6 +56,26 @@ def normalize_document_number(text: str | None) -> str:
     """Fold whitespace so ``法释〔2023〕 13号`` equals ``法释〔2023〕13号``."""
 
     return re.sub(r"\s+", "", (text or "").strip())
+
+
+def document_number_variants(text: str | None) -> list[str]:
+    """The normalized number, then its spellings under the issuer's other names.
+
+    ``证监会公告〔2025〕5号`` and ``中国证券监督管理委员会公告〔2025〕5号`` are one
+    number (#69). Lookups match any spelling, so a short form finds a number
+    stored in full and the other way round.
+    """
+
+    number = normalize_document_number(text)
+    if not number:
+        return []
+    for full_name, short_names in ISSUER_ALIASES.items():
+        names = sorted((full_name, *short_names), key=len, reverse=True)
+        for name in names:
+            if number.startswith(name) and len(number) > len(name):
+                rest = number[len(name):]
+                return [number, *(other + rest for other in names if other != name)]
+    return [number]
 
 
 def extract_document_number(text: str | None) -> str | None:

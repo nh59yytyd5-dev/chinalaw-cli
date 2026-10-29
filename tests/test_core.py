@@ -3432,6 +3432,60 @@ class DocumentNumberIndexTests(unittest.TestCase):
             )
             self.assertIsNotNone(hint_flk)
 
+    def test_lookup_document_number_hint_matches_issuer_short_name(self):
+        """索引存证监会全称文号时，按简称写法也能命中（#69）。"""
+
+        from chinalaw.db import connect, migrate
+        from chinalaw.fetch import (
+            _index_document_number,
+            _lookup_document_number_hint,
+        )
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "doc.db"
+            with connect(db_path) as conn:
+                migrate(conn)
+                _index_document_number(
+                    conn,
+                    {
+                        "id": "csrc_gov_cn:csrc/c101954/c7550000/content",
+                        "title": "关于修改部分证券期货规范性文件的决定",
+                        "document_number": "中国证券监督管理委员会公告〔2025〕5号",
+                    },
+                    "csrc_gov_cn",
+                    "csrc/c101954/c7550000/content",
+                )
+            for name in ["证监会公告〔2025〕5号", "中国证监会公告〔2025〕5号"]:
+                with self.subTest(name=name):
+                    hint = _lookup_document_number_hint(db_path, name, "csrc_gov_cn")
+                    self.assertIsNotNone(hint)
+                    self.assertEqual(hint["id"], "csrc/c101954/c7550000/content")
+
+    def test_amended_text_aligns_across_issuer_name_spellings(self):
+        """修正本写简称文号时，仍归入库内写全称文号的原文书（#69）。"""
+
+        from chinalaw.db import connect, migrate
+        from chinalaw.fetch import _align_with_amended_document
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "doc.db"
+            with connect(db_path) as conn:
+                migrate(conn)
+                loader.load_law_from_dict(conn, {
+                    "id": "csrc-original", "title": "示例监管指引", "level": "other",
+                    "status": "current", "issuing_body": "中国证券监督管理委员会",
+                    "document_number": "中国证券监督管理委员会公告〔2018〕1号",
+                    "work_id": "synthetic:csrc-guideline",
+                    "source_url": "https://example.com/original", "source_name": "synthetic-test",
+                    "articles": [{"number": "1", "text": "原第一条。"}],
+                })
+            aligned, aligned_with = _align_with_amended_document(db_path, {
+                "id": "csrc-amended", "title": "示例监管指引", "level": "other",
+                "document_number": "证监会公告〔2018〕1号",
+            })
+            self.assertEqual(aligned_with, "csrc-original")
+            self.assertEqual(aligned["work_id"], "synthetic:csrc-guideline")
+
 
 class FetchLawDocumentNumberRoutingTests(unittest.TestCase):
     """``fetch_law("法释〔2023〕13号")`` 路径：命中文号索引时绕过远程 search_list。"""

@@ -13,7 +13,9 @@ from chinalaw.document_numbers import (
     DOCUMENT_NUMBER_FULLMATCH_RE,
     DOCUMENT_NUMBER_INLINE_RE,
     DOCUMENT_NUMBER_RE,
+    document_number_variants,
     extract_document_number,
+    looks_like_document_number,
 )
 
 
@@ -195,6 +197,47 @@ class ExtractDocumentNumberTests(unittest.TestCase):
             spp_gov_cn._extract_document_number("法释〔2024〕12号"),
             "法释〔2024〕12号",
         )
+
+    def test_csrc_announcement_number_is_read_in_full(self) -> None:
+        """证监会公告的机关代字 13 字，超出行内 12 字上限，仍须整个识别（#69）。"""
+
+        number = "中国证券监督管理委员会公告〔2025〕5号"
+        self.assertTrue(looks_like_document_number(number))
+        self.assertTrue(looks_like_document_number("中国证券监督管理委员会公告〔2025〕 5 号"))
+        for text in [number, f"现公布 {number} 如下", f"根据{number}"]:
+            with self.subTest(text=text):
+                self.assertEqual(extract_document_number(text), number)
+        self.assertEqual(
+            cleaning.extract_document_number_from_preamble(f"{number}\n第一条 为了规范……"),
+            number,
+        )
+
+    def test_order_number_without_year_is_a_whole_number_only(self) -> None:
+        """“××令第N号”整段输入算文号；正文抽取仍只认带〔年份〕的文号（#69）。"""
+
+        for number in ["证监会令第227号", "中国证券监督管理委员会令第227号", "国务院令第797号"]:
+            with self.subTest(number=number):
+                self.assertTrue(looks_like_document_number(number))
+        self.assertFalse(looks_like_document_number("主席令第十八号"))
+        self.assertIsNone(extract_document_number("根据《条例》（国务院令第797号）"))
+
+    def test_issuer_full_and_short_names_are_one_number(self) -> None:
+        """证监会文号的全称与简称写法互为变体，输入写法排在最前（#69）。"""
+
+        self.assertEqual(
+            document_number_variants("证监会公告〔2025〕 5号"),
+            [
+                "证监会公告〔2025〕5号",
+                "中国证券监督管理委员会公告〔2025〕5号",
+                "中国证监会公告〔2025〕5号",
+            ],
+        )
+        self.assertEqual(
+            document_number_variants("中国证券监督管理委员会令第227号"),
+            ["中国证券监督管理委员会令第227号", "中国证监会令第227号", "证监会令第227号"],
+        )
+        self.assertEqual(document_number_variants("法释〔2023〕13号"), ["法释〔2023〕13号"])
+        self.assertEqual(document_number_variants(None), [])
 
     def test_module_constants_exposed(self) -> None:
         """``document_numbers`` 暴露 fullmatch / inline 两个常量供下游显式选择。"""

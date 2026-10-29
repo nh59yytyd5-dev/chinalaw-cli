@@ -100,6 +100,47 @@ class SearchGuidanceTests(unittest.TestCase):
                 result = service.search(self.library, kind="law", **arguments)
                 self.assertEqual(result["counts"]["total"], 0)
 
+    def test_csrc_number_matches_in_full_and_short_form(self):
+        """库存全称时，全称、“中国证监会”“证监会”三种写法都能查到（#69）。"""
+
+        numbered_document(self.library, "csrc-decision", "关于修改部分证券期货规范性文件的决定",
+                          "中国证券监督管理委员会公告〔2025〕5号")
+        for number in ["中国证券监督管理委员会公告〔2025〕5号",
+                       "中国证监会公告〔2025〕5号", "证监会公告〔2025〕 5号"]:
+            with self.subTest(number=number):
+                resolved = service.resolve(self.library, number)
+                self.assertEqual((resolved["id"], resolved["via"]),
+                                 ("csrc-decision", "document_number_match"))
+                result = service.search(self.library, number, kind="law")
+                self.assertEqual([hit["id"] for hit in result["law_hits"]], ["csrc-decision"])
+                self.assertEqual(result["law_hits"][0]["match_mode"], "document_number")
+                self.assertEqual(
+                    service.get_article(self.library, number, "1")["law"]["id"], "csrc-decision"
+                )
+        titled = service.search(
+            self.library, "关于修改部分证券期货规范性文件的决定 中国证券监督管理委员会公告〔2025〕5号",
+            kind="law",
+        )
+        self.assertEqual(titled["counts"]["law"], 1)
+        other_title = service.search(
+            self.library, "无关名称 中国证券监督管理委员会公告〔2025〕5号", kind="law"
+        )
+        self.assertEqual(other_title["counts"]["total"], 0)
+
+    def test_order_number_without_year_matches(self):
+        """“证监会令第N号”可按全称或简称写法解析、检索（#69）。"""
+
+        numbered_document(self.library, "csrc-order", "示例管理办法", "证监会令第227号",
+                          level="department_rule")
+        for number in ["证监会令第227号", "中国证券监督管理委员会令第227号"]:
+            with self.subTest(number=number):
+                resolved = service.resolve(self.library, number)
+                self.assertEqual((resolved["id"], resolved["via"]),
+                                 ("csrc-order", "document_number_match"))
+                result = service.search(self.library, number, kind="law")
+                self.assertEqual([hit["id"] for hit in result["law_hits"]], ["csrc-order"])
+        self.assertFalse(service.resolve(self.library, "证监会令第228号")["matched"])
+
     def test_shared_document_number_requires_selection(self):
         for suffix in ["甲", "乙"]:
             numbered_document(self.library, suffix, f"同文号文件{suffix}", "法发〔2024〕12号")

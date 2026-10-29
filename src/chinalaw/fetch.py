@@ -30,6 +30,9 @@ from chinalaw.aliases import append_unique, merge_law_aliases
 from chinalaw.cleaning import CLEANING_SCHEMA_VERSION
 from chinalaw.db import connect, connect_readonly, migrate, set_meta
 from chinalaw.document_numbers import (
+    document_number_variants as _document_number_variants,
+)
+from chinalaw.document_numbers import (
     index_document_number as _index_document_number,
 )
 from chinalaw.document_numbers import (
@@ -526,17 +529,18 @@ def _align_with_amended_document(db_path: Path | str, payload: dict) -> tuple[di
     the id of the record it was aligned with, or ``None``.
     """
 
-    number = _normalize_document_number(payload.get("document_number"))
-    if not number or not Path(db_path).exists():
+    numbers = _document_number_variants(payload.get("document_number"))
+    if not numbers or not Path(db_path).exists():
         return payload, None
+    placeholders = ", ".join("?" for _ in numbers)
     try:
         with connect_readonly(db_path) as conn:
             rows = [
                 row
                 for row in conn.execute(
-                    "SELECT * FROM laws WHERE replace(document_number, ' ', '') = ? "
-                    "AND id != ? AND status != 'seed'",
-                    (number, payload["id"]),
+                    "SELECT * FROM laws WHERE replace(document_number, ' ', '') "
+                    f"IN ({placeholders}) AND id != ? AND status != 'seed'",
+                    (*numbers, payload["id"]),
                 )
                 if law_row_matches_payload(row, payload, strict=False)
             ]
@@ -914,7 +918,8 @@ def _lookup_document_number_hint(
     形态一致的 hint，让 fetch_law 主流程可以绕过远程标题搜索直接按 ``source_id``
     拉取详情。
 
-    匹配口径：精确匹配 ``(document_number, source)`` 元组。不同 source 的
+    匹配口径：精确匹配 ``(document_number, source)`` 元组，文号的全称与简称
+    写法互通（``document_number_variants``，#69），同写法优先。不同 source 的
     upstream id 不可互换，不能跨源复用。
     """
 
@@ -924,12 +929,15 @@ def _lookup_document_number_hint(
     if not db.exists():
         return None
     document_number = _normalize_document_number(name)
+    numbers = _document_number_variants(document_number)
+    placeholders = ", ".join("?" for _ in numbers)
     try:
         with connect_readonly(db_path) as conn:
             row = conn.execute(
                 "SELECT source_id, law_id, title FROM document_number_index "
-                "WHERE document_number = ? AND source = ? LIMIT 1",
-                (document_number, source),
+                f"WHERE document_number IN ({placeholders}) AND source = ? "
+                "ORDER BY document_number != ? LIMIT 1",
+                (*numbers, source, document_number),
             ).fetchone()
             if row is None:
                 return None
