@@ -225,6 +225,35 @@ class CourtMainAdapterTests(unittest.TestCase):
 </html>
 """
 
+    DECISION_ONLY_DETAIL_FIXTURE = """
+<html>
+<head>
+  <title>最高人民法院关于修改《最高人民法院关于适用〈示例诉讼法〉的解释》的决定 - 中华人民共和国最高人民法院</title>
+</head>
+<body>
+<div class="title">最高人民法院关于修改《最高人民法院关于适用〈示例诉讼法〉的解释》的决定</div>
+<ul class="info">
+  <li>发布时间：2022-04-02 10:00:00</li>
+</ul>
+<div class="txt_txt" id="zoom">
+  <p>最高法修改示例诉讼法司法解释</p>
+  <p>《最高人民法院关于修改〈最高人民法院关于适用《示例诉讼法》的解释〉的决定》已于2022年3月22日由最高人民法院审判委员会第1866次会议通过，现予公布，自2022年4月10日起施行。</p>
+  <p>最高人民法院</p>
+  <p>2022年4月1日</p>
+  <p>法释〔2022〕11号</p>
+  <p>最高人民法院</p>
+  <p>关于修改《最高人民法院关于适用〈示例诉讼法〉的解释》的决定</p>
+  <p>（2022年3月22日最高人民法院审判委员会第1866次会议通过，自2022年4月10日起施行）</p>
+  <p>最高人民法院审判委员会第1866次会议决定，对《最高人民法院关于适用〈示例诉讼法〉的解释》作如下修改：</p>
+  <p>一、将第十一条修改为：“示例新第十一条。”</p>
+  <p>二、删去第十二条。</p>
+  <p>本决定自2022年4月10日起施行。</p>
+  <p>根据本决定，《最高人民法院关于适用〈示例诉讼法〉的解释》作相应修改，重新公布。</p>
+</div>
+</body>
+</html>
+"""
+
     def _search_result(self) -> court_main.FetchResult:
         return court_main.FetchResult(
             url="https://www.court.gov.cn/search.html?content=%E7%A4%BA%E4%BE%8B",
@@ -516,6 +545,28 @@ class CourtMainAdapterTests(unittest.TestCase):
             [(item["relation_type"], item["to_law_id"], item["notes"]) for item in republished["relations"]],
             [("amendment_basis", "court_main:fabu/xiangqing/249031", "法释〔2020〕6号")],
         )
+
+    def test_decision_page_without_reprinted_text_is_one_body(self) -> None:
+        adapter = court_main.CourtMainAdapter()
+        page = court_main.FetchResult(
+            url="https://www.court.gov.cn/fabu/xiangqing/353731.html",
+            status_code=200,
+            headers={},
+            text=self.DECISION_ONLY_DETAIL_FIXTURE,
+        )
+        with patch.object(court_main, "_fetch_text", return_value=page):
+            payload = adapter.build_law_payload("fabu/xiangqing/353731")
+
+        # #64: items numbered 一、二、 are not articles; the decision is one body.
+        self.assertEqual(payload["document_number"], "法释〔2022〕11号")
+        self.assertEqual(payload["effective_at"], "2022-04-10")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["正文"])
+        body = payload["articles"][0]["text"]
+        self.assertTrue(body.startswith("《最高人民法院关于修改〈最高人民法院关于适用"))
+        self.assertTrue(body.endswith("作相应修改，重新公布。"))
+        self.assertNotIn("最高法修改示例诉讼法司法解释", body)
+        self.assertNotIn("republished", payload)
+        self.assertNotIn("warnings", payload)
 
     def test_wrapped_titles_lose_their_line_break_spaces(self) -> None:
         for raw, tidy in (

@@ -591,6 +591,18 @@ class AmendmentSplit(NamedTuple):
     batch: bool  # 决定修改多件文书，附载的是多件全文
 
 
+def _is_amendment_decision(title: str) -> bool:
+    return "修改" in title and title.endswith("决定")
+
+
+def _from_promulgation(text: str) -> str:
+    """A decision's text from its promulgation sentence on, without the press release."""
+
+    anchor = text.rfind("现予公布")
+    start = text.rfind("\n", 0, anchor) + 1 if anchor >= 0 else 0
+    return text[start:].strip()
+
+
 def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
     """Separate an amendment decision from the re-promulgated document appended to it.
 
@@ -605,7 +617,7 @@ def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
     them; ``batch`` is set and ``republished_text`` holds them together.
     """
 
-    if "修改" not in title or not title.endswith("决定"):
+    if not _is_amendment_decision(title):
         return None
     match = REPUBLISHED_SENTENCE_RE.search(text)
     if match is not None:
@@ -620,10 +632,7 @@ def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
             return None
         boundary, republished_title = heading
         cited, scope = book.group("title"), title[book.end():]
-    head = text[:boundary]
-    anchor = head.rfind("现予公布")
-    start = head.rfind("\n", 0, anchor) + 1 if anchor >= 0 else 0
-    decision_text = head[start:].strip()
+    decision_text = _from_promulgation(text[:boundary])
     batch = bool(REPUBLISHED_BATCH_RE.search(scope))
     number = None if batch else re.search(
         re.escape(f"《{cited}》")
@@ -861,7 +870,14 @@ class CourtMainAdapter:
         level = _infer_level(title, raw_text)
         issuing_body = _infer_issuing_body(title, raw_text)
         decision = _split_amendment_decision(title, raw_text)
-        text = decision.decision_text if decision else raw_text
+        amendment = _is_amendment_decision(title)
+        if decision:
+            text = decision.decision_text
+        elif amendment:
+            # A page that reprints nothing holds the decision alone (#64).
+            text = _from_promulgation(raw_text)
+        else:
+            text = raw_text
         document_number = cleaning.extract_document_number_from_preamble(text)
         released_at = _date_part(detail.get("published_at")) or (search_row or {}).get(
             "released_at"
@@ -869,7 +885,8 @@ class CourtMainAdapter:
         effective_at = _infer_effective_at(text)
 
         body_articles: list[dict] | None = None
-        if decision:
+        if amendment:
+            # Like flk, a decision's items (一、二、……) form one body.
             body_articles = _single_body_article(text)
         else:
             articles = cleaning.parse_articles_from_text(text)

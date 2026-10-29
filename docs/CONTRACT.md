@@ -1572,6 +1572,7 @@ id 为 `court_main:<detail_id>/republished`，文号取决定中“对《……�
 `relations` 含指向决定的 `amendment_basis`。库内已有同文号、同名的被修改文书时，修正本沿用其标题、`level`、`issuing_body` 与 `work_id`，
 与之归入同一作品，旧版本自修正本施行之日起按日期推算为 `amended`；库内没有时，修正本是该文书在库内的首个版本。
 页面没有这句话、决定之后直接接排修正后全文时（如法释〔2020〕6号），以全文标题为界照样拆分（#62）：该标题须是决定所引的文书名（可带发文机关一行），其后题注注明“根据……《……决定》修正”。
+页面只有决定本身、未附载全文时（如法释〔2022〕11号），决定同样按单条 `正文` 入库，正文从公布语起（#64）。
 该作品库内已有同日施行的版本（如 flk 另行收录的修正本）时，附载文本不入库、不写 fixture，免得同一版本存两份（#57）。
 结果新增可选字段 `republished`：
 `{"id", "title", "document_number", "effective_at", "version_label", "aligned_with": "string|null", "existing_version": "string|null", "article_count", "loaded", "skipped", "wrote_fixture"}`，
