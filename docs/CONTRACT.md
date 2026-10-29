@@ -296,6 +296,8 @@ CREATE TABLE applicability_rules (
 - `applicability_rules` 的日期窗口是 `effective_from <= --date <= effective_to`，边界可空。
 - 命中规则中的法规若未入库或仅为 stub，输出必须暴露 `needs_fetch` / warning。
 
+**修正本与修正依据**（#39）：修改决定“作相应修改后重新公布”的文本是被修改文书的修正本，作为该文书所在作品（§2.1 `work_id`）的新版本入库；修改决定本身是另一份文书。修正本的文号沿用被修改文书的文号，发布、施行日期取修改决定的，`version_label` 记“YYYY年修正”（年份取决定文号）；它与决定之间以 `relation_type = "amendment_basis"` 关联：`from_law_id` 为修正本，`to_law_id` 为修改决定，`notes` 为决定文号，`effective_at` 为决定施行日期。经多次修正的，每个决定一条，读取时按施行日期先后排列（§3 `amendment_basis`）。原版本无须改写：同一作品有了更晚施行的修正本，按 §3 的日期推算即为 `amended`。修正本不写入 `document_number_index`：文号仍指向被修改文书本身的来源页，`fetch <文号>` 不会被导向决定页。
+
 ### 2.8 `meta`
 
 ```sql
@@ -419,6 +421,7 @@ CREATE TABLE meta (
 | `effective_status_date` | 推算所依据的日期；不带 `as_of` 时为北京时间的今天 |
 | `effective_status_note` | 推算依据不足时的说明，例如上游标注已废止但缺少废止日期 |
 | `work_id` / `work_versions` | 所属作品及其全部版本（`id`、`effective_at`、`released_at`、`status`） |
+| `amendment_basis` | 仅修正本带此字段：修正依据，`[{"law_id", "title", "document_number", "effective_at"}]`，按施行日期先后，见 §2.7 |
 | `status_checked_at` | 见 §2.1 |
 
 推算规则：施行日期晚于该日为 `pending_effective`；同一作品中有更晚、且在该日已施行的版本为 `amended`；`repealed_at` 不晚于该日为 `repealed`；上游标注已废止但没有 `repealed_at` 时，今天为 `repealed`，过去的日期为 `unknown`。公开检索/解析/取条/目录返回的 `status`（条文命中为 `law_status`）与 `effective_status_as_of` 一致；`source_status` 保留入库标注，不能单独用来判断文本是否当前可引用。管理文档为保留编辑语义仍返回入库 `status`，界面使用 `effective_status_as_of` 展示。
@@ -772,7 +775,7 @@ JSON 输出 schema：
 | `short_title_match` | 精确命中 `laws.short_title` |
 | `alias_exact` | 精确命中 fixture / DB 的 `laws.aliases` |
 | `alias_derived` | 命中规则层派生 alias（如 issuer + 宿主法 + 后缀） |
-| `document_number_match` | 文号元数据唯一匹配；显式旧文号不改取现行版本，同文号多文件返回候选 |
+| `document_number_match` | 文号元数据唯一匹配；显式旧文号不改取现行版本，同文号多文件返回候选。同一作品的修正本与原版本共用文号（§2.7），不算多文件：取其中今天有效的版本，没有则取最晚的一个；不跳到另发文号的后续修订 |
 | `like_fallback` | 最后兜底的 `LIKE` 模糊匹配，调用方必须谨慎使用 |
 | `null` | 未命中 |
 
@@ -1553,7 +1556,8 @@ JSON 输出 schema（成功 / 主流程）：
   "skipped": "boolean",
   "dry_run": "boolean",
   "force": "boolean",
-  "wrote_fixture": "string|null"
+  "wrote_fixture": "string|null",
+  "republished": {...}              // 可选；court_main 修改决定页附载的修正本，见下
 }
 ```
 
@@ -1563,9 +1567,14 @@ JSON 输出 schema（成功 / 主流程）：
 其它编程错误必须向上抛出。
 
 `court_main` 抓取“关于修改……的决定”且页面在“根据本决定……重新公布。”之后附载被修改文书全文时，
-只导入决定本身（单条 `正文`，标题、文号、施行日期均取自决定），附载全文不挂在决定名下，并附
-`{"severity": "warning", "code": "republished_text_not_imported", "republished_title": "string", "message": "string"}`
-（v0.7.3，#34）。`law.warnings` 为运行时诊断，写库与 `--to-fixture` 前剥离。
+决定本身照旧单条 `正文` 入库（标题、文号、施行日期均取自决定，v0.7.3，#34）；附载全文作为被修改文书的修正本另行入库（§2.7，#39）：
+id 为 `court_main:<detail_id>/republished`，文号取决定中“对《……》（法释〔2012〕6号）”所载被修改文书的文号，发布、施行日期取决定的，
+`relations` 含指向决定的 `amendment_basis`。库内已有同文号、同名的被修改文书时，修正本沿用其标题、`level`、`issuing_body` 与 `work_id`，
+与之归入同一作品，旧版本自修正本施行之日起按日期推算为 `amended`；库内没有时，修正本是该文书在库内的首个版本。
+结果新增可选字段 `republished`：
+`{"id", "title", "document_number", "effective_at", "version_label", "aligned_with": "string|null", "article_count", "loaded", "skipped", "wrote_fixture"}`，
+`aligned_with` 为归入作品时所依的库内记录；`--to-fixture <名>.json` 时修正本写到同目录的 `<名>.republished.json`。
+此前的临时告警 `republished_text_not_imported` 不再出现。`law.warnings` 为运行时诊断，写库与 `--to-fixture` 前剥离。
 
 JSON 输出 schema（list-matches 模式）：
 
@@ -2274,7 +2283,7 @@ chinalaw-mcp --db ~/.chinalaw/chinalaw.db --allow-private-norms
   "relations": [                          // 可选；提供时替换本法规此前经本字段写入的关系
     {"relation_type": "repealed_by", "to_law_id": "flk-civil-code-2020",
      "to_law_title": "中华人民共和国民法典", "effective_at": "2021-01-01", "notes": null}
-  ],
+  ],                                      // 修正本另带 amendment_basis（notes 记决定文号），见 §2.7
 
   "categories": [                         // 可选；分类树节点
     {"id": "flk:1", "name": "法律", "parent_id": null, "description": null}

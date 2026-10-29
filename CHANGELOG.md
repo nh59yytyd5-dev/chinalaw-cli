@@ -7,6 +7,7 @@
 
 - `chinalaw-mcp` 未传 `--db` 时读取 `CHINALAW_DB`，与 `chinalaw`、`chinalaw-server` 一致。此前它固定用 `~/.chinalaw/chinalaw.db`，已用该变量指向公开快照或其他库的用户会静默查到另一个库，得到 `law_missing` 或规模小得多的结果。三个入口改用同一选库规则：`--db` > `CHINALAW_DB` > 默认路径，空值视为未设，路径中的 `~` 一律展开（MCP 客户端配置的参数不经过 shell）；`chinalaw-server` 不再把空的 `CHINALAW_DB` 当成当前目录。`chinalaw` 与 `chinalaw-mcp` 的 `--help` 写明这一顺序（#52）。
 - 查询遇到不存在的库不再新建空库：`search`、`article`、`list`、`applicable` 等只读命令，以及 `law delete`、`rebuild-clean` 等只改动已有内容的命令，输出 `cli_command_error`，`error` 为 `LibraryMissingError`，退出码 `2`，提示检查 `--db` / `CHINALAW_DB` 或运行 `chinalaw init`。此前它们会先建一个空库再答“未找到”，`search`、`list` 甚至返回成功的空结果。`init`、`sync`、`fetch`、`ensure` 与 `norm import|ingest`、`commentary import`、`pack add|import` 仍可新建资料库。`chinalaw-mcp` 与 `chinalaw-server` 一样不新建资料库，库不存在时各工具（含 `chinalaw_ensure`）返回 `isError` 与 `LibraryMissingError`。`status` 遇到不存在的库时，`error` 由 `FileNotFoundError` 改为其子类 `LibraryMissingError`（#55）。
+- 修改决定“作相应修改后重新公布”的文本作为被修改文书的修正本入库，不再只存决定本身（#39）。修正本归入被修改文书所在作品，文号沿用被修改文书的，发布、施行日期取决定的，`version_label` 记“YYYY年修正”，并以新的关系类型 `amendment_basis` 记录修正依据（`notes` 为决定文号）；原版本自修正本施行之日起按日期推算为已修改。`get` / `article` / `history` 的法规对象对修正本新增 `amendment_basis`（按施行日期先后列出修改决定），Markdown 输出“修正依据”一行。`court_main` 抓取附载修正后全文的修改决定页时，附载文本作为修正本另行入库（id 为 `<决定 id>/republished`），库内已有同文号、同名的原文书时与之归入同一作品；`fetch` 结果新增 `republished`，`--to-fixture` 另写 `<名>.republished.json`，不再给出 `republished_text_not_imported` 告警。按文号解析时，同一作品的原版本与修正本共用文号不再视为歧义，取今天有效的版本；修正本不写入文号抓取索引，`fetch <文号>` 仍指向原文书来源页。
 
 ## 0.7.4 — 2026-10-28
 
