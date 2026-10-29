@@ -37,6 +37,19 @@ SQLITE_BUSY_TIMEOUT_MS = 30_000
 _SQLITE_LOCK_RETRY_INITIAL_SECONDS = 0.005
 _SQLITE_LOCK_RETRY_MAX_SECONDS = 0.1
 _READ_ONLY_OPERATION: ContextVar[bool] = ContextVar("chinalaw_read_only", default=False)
+_EXISTING_LIBRARY_ONLY: ContextVar[bool] = ContextVar(
+    "chinalaw_existing_library_only", default=False
+)
+
+
+class LibraryMissingError(FileNotFoundError):
+    """The library file does not exist, and this operation must not create it."""
+
+    def __init__(self, path: Path | str) -> None:
+        super().__init__(
+            f"资料库不存在：{path}。请确认 --db 或 CHINALAW_DB 指向已有的库；"
+            "新建资料库请运行 chinalaw init。"
+        )
 
 
 def resolve_db_path(explicit: str | Path | None = None) -> Path:
@@ -69,10 +82,29 @@ def read_only_operation() -> Iterator[None]:
         _READ_ONLY_OPERATION.reset(token)
 
 
+@contextmanager
+def existing_library_only() -> Iterator[None]:
+    """Open only libraries that already exist in this context; never create one.
+
+    Read commands and the stdio MCP server use this boundary, so a mistyped
+    ``--db`` / ``CHINALAW_DB`` raises :class:`LibraryMissingError` instead of
+    creating an empty library that answers "not found" (#55). Unlike
+    :func:`read_only_operation`, existing libraries still open writable and
+    migrate as before.
+    """
+    token = _EXISTING_LIBRARY_ONLY.set(True)
+    try:
+        yield
+    finally:
+        _EXISTING_LIBRARY_ONLY.reset(token)
+
+
 def open_connection(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     if _READ_ONLY_OPERATION.get():
         return open_readonly_connection(db_path)
     path = Path(db_path)
+    if _EXISTING_LIBRARY_ONLY.get() and not path.exists():
+        raise LibraryMissingError(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
     try:
@@ -124,7 +156,7 @@ def open_readonly_connection(db_path: Path | str) -> sqlite3.Connection:
 
     path = Path(db_path)
     if not path.exists():
-        raise FileNotFoundError(path)
+        raise LibraryMissingError(path)
     uri = f"{path.resolve().as_uri()}?mode=ro"
     conn = sqlite3.connect(
         uri,

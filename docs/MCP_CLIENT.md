@@ -6,7 +6,7 @@
 
 | 方式 | 配置 | 数据在哪里 |
 |---|---|---|
-| 本地 stdio | command=`chinalaw-mcp`，args=`["--db", "/absolute/library.db"]`；省略 `--db` 时读取 `CHINALAW_DB`，都没有时用 `~/.chinalaw/chinalaw.db` | 自己的 SQLite；不读取 remote.env，不连接托管服务器 |
+| 本地 stdio | command=`chinalaw-mcp`，args=`["--db", "/absolute/library.db"]`；省略 `--db` 时读取 `CHINALAW_DB`，都没有时用 `~/.chinalaw/chinalaw.db` | 自己的 SQLite，须已建好（不存在时工具返回 `LibraryMissingError`，不新建空库）；不读取 remote.env，不连接托管服务器 |
 | 远程 Streamable HTTP | URL=`https://law.newcombmath.com/mcp`，Authorization 请求头 | 已部署的只读资料库 |
 
 `chinalaw-mcp` 是本地服务器，不是远端客户端或 HTTP 转发器。不要尝试给它传 `--remote`。远端未接好时可使用本地库，但必须说明数据来源不同。

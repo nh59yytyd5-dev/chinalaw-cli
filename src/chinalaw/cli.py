@@ -7,7 +7,7 @@ import json
 import os
 import sqlite3
 import sys
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from pathlib import Path
 from urllib.error import URLError
 
@@ -38,7 +38,7 @@ from chinalaw import (
 )
 from chinalaw import fetch as fetch_mod
 from chinalaw.contracts import NORM_SOURCE_TYPE_VALUES
-from chinalaw.db import DEFAULT_DB_PATH, resolve_db_path
+from chinalaw.db import DEFAULT_DB_PATH, existing_library_only, resolve_db_path
 from chinalaw.sync import SYNC_SOURCES, sync_source
 
 _NOTICE_CONTEXT: dict[str, object] = {}
@@ -2545,6 +2545,23 @@ _COMMAND_HANDLERS = {
     "snapshot": _handle_snapshot,
 }
 
+# 只有往库里写入内容的命令会在库不存在时新建资料库（None 表示全部子命令）；
+# 其余命令遇到不存在的库报 LibraryMissingError，不建空库再答“未找到”（#55）。
+_LIBRARY_CREATING_COMMANDS: dict[str, frozenset[str] | None] = {
+    "init": None,
+    "sync": None,
+    "fetch": None,
+    "ensure": None,
+    "norm": frozenset({"import", "ingest"}),
+    "commentary": frozenset({"import"}),
+    "pack": frozenset({"add", "import"}),
+}
+
+
+def _may_create_library(args) -> bool:
+    allowed = _LIBRARY_CREATING_COMMANDS.get(args.command, frozenset())
+    return allowed is None or getattr(args, f"{args.command}_command", None) in allowed
+
 
 def app(argv: list[str] | None = None) -> int:
     _configure_text_stdio()
@@ -2570,7 +2587,8 @@ def app(argv: list[str] | None = None) -> int:
     handler = _COMMAND_HANDLERS.get(args.command)
     if handler is not None:
         try:
-            return handler(args, db_path, fmt, parser)
+            with nullcontext() if _may_create_library(args) else existing_library_only():
+                return handler(args, db_path, fmt, parser)
         except BrokenPipeError:
             _suppress_broken_pipe()
             return 0

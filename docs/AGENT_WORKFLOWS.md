@@ -152,6 +152,9 @@ see also: [`.claude/skills/README.md`](../.claude/skills/README.md) 总索引与
 
 失败处理：
 
+- `LibraryMissingError`：`--db` / `CHINALAW_DB` 指向的库文件不存在（CLI 退出码 `2`，MCP 返回
+  `isError`），不是法规缺失。向用户确认库路径，或经用户同意后 `chinalaw init`；不要用
+  `ensure` / `fetch` 在该路径另建一个库。
 - `unsupported_source`：当前 adapter 未实现，把法规名和来源反馈给用户，不要声称已安装。
 - `manual_review`：该条目的公开 fetch 路径尚未稳定；除非用户提供官方 URL 另行 fetch
   或人工入库，不得引用为已安装规范。

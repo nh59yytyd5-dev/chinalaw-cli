@@ -17,7 +17,12 @@ from typing import Any, BinaryIO, TextIO
 
 from chinalaw import __version__, ensure, metadata, service
 from chinalaw.article_views import article_view
-from chinalaw.db import DEFAULT_DB_PATH, resolve_db_path
+from chinalaw.db import (
+    DEFAULT_DB_PATH,
+    LibraryMissingError,
+    existing_library_only,
+    resolve_db_path,
+)
 from chinalaw.search_views import search_view
 
 PROTOCOL_VERSION = "2025-06-18"
@@ -249,12 +254,14 @@ def _call_tool(
     error_stream: TextIO | None = None,
 ) -> dict[str, Any]:
     try:
-        payload = _tool_payload(
-            name,
-            arguments,
-            db_path=db_path,
-            allow_private_norms=allow_private_norms,
-        )
+        # 与 chinalaw-server 一样，MCP 不新建资料库：库不存在时各工具（含 ensure）都报错（#55）。
+        with existing_library_only():
+            payload = _tool_payload(
+                name,
+                arguments,
+                db_path=db_path,
+                allow_private_norms=allow_private_norms,
+            )
         if name == "chinalaw_article":
             payload = article_view(
                 payload, law=arguments["law"], number=arguments["number"],
@@ -263,7 +270,7 @@ def _call_tool(
         elif name == "chinalaw_search":
             payload = search_view(payload, arguments=arguments, view=arguments.get("view", "full"))
         return _tool_result(payload, is_error=False)
-    except ValueError as exc:
+    except (ValueError, LibraryMissingError) as exc:
         payload = {
             "kind": "chinalaw_mcp_error",
             "error": exc.__class__.__name__,
