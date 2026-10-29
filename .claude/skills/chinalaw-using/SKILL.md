@@ -113,6 +113,9 @@ HTTP MCP 的业务错误保留 `isError=true`，JSON 正文与 `structuredConten
 - 默认 JSON（`--format json`），用于程序消费
 - `--format md` 用于人类复核
 - 退出码：`0` 成功 / `1` 失败 / `2` 命令使用错误
+- `error` 为 `LibraryMissingError`（CLI 退出码 `2`，MCP 返回 `isError`）表示 `--db` /
+  `CHINALAW_DB` 指向的库不存在，不是法规缺失：向用户确认库路径，或经用户同意后
+  `chinalaw init`；不要用 `ensure` / `fetch` 在该路径另建一个库
 - `applicable` / `pack validate` / 部分 `fetch` 路径在 warn 时也可能返回 `2`，
   agent 应据 payload 字段判断而非仅看退出码
 

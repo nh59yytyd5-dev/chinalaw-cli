@@ -209,6 +209,32 @@ class McpDatabasePathTests(unittest.TestCase):
             with self.subTest(label):
                 self.assertEqual(expected, self._served_db(argv, db_env))
 
+    def test_tools_report_missing_library_without_creating_it(self) -> None:
+        # #55：与 chinalaw-server 一样，库不存在时各工具（含 ensure）都报错，不建空库。
+        calls = [
+            ("chinalaw_article", {"law": "民法典", "number": "533"}),
+            ("chinalaw_search", {"query": "合同"}),
+            ("chinalaw_ensure", {"name": "民法典"}),
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "missing" / "library.db"
+            for name, arguments in calls:
+                with self.subTest(name):
+                    response = mcp.handle_request(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "method": "tools/call",
+                            "params": {"name": name, "arguments": arguments},
+                        },
+                        db_path=db_path,
+                    )
+
+                    result = response["result"]
+                    self.assertTrue(result["isError"])
+                    self.assertEqual("LibraryMissingError", result["structuredContent"]["error"])
+                    self.assertFalse(db_path.parent.exists())
+
     def test_real_module_reads_environment_without_creating_default_db(self) -> None:
         request = _line(
             {

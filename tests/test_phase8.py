@@ -128,8 +128,58 @@ class ReadOnlyHealthTests(unittest.TestCase):
 
             self.assertEqual(2, code)
             self.assertEqual("cli_command_error", payload["kind"])
-            self.assertEqual("FileNotFoundError", payload["error"])
+            self.assertEqual("LibraryMissingError", payload["error"])
             self.assertFalse(db_path.exists())
+
+    def test_cli_read_commands_report_missing_library_without_creating_it(self) -> None:
+        # #55：遇到不存在的库报 LibraryMissingError，不再建空库后答“未找到”。
+        commands = [
+            ["search", "合同"],
+            ["article", "民法典", "533"],
+            ["list"],
+            ["applicable", "--date", "2024-01-01"],
+            ["norm", "list"],
+            ["law", "delete", "missing-id"],
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "missing" / "library.db"
+            for command in commands:
+                with self.subTest(command=command):
+                    code, payload = _run_cli(
+                        ["--no-notice", "--db", str(db_path), *command, "--format", "json"]
+                    )
+
+                    self.assertEqual(2, code)
+                    self.assertEqual("LibraryMissingError", payload["error"])
+                    self.assertIn(str(db_path), payload["message"])
+                    self.assertFalse(db_path.parent.exists())
+
+    def test_cli_norm_import_still_creates_a_project_library(self) -> None:
+        # 项目级私域库（chinalaw-maintaining 模式 3）靠写入命令直接建库。
+        norm = {
+            "id": "project-policy",
+            "name": "项目放款要求（示例）",
+            "source_type": "contractual_requirement",
+            "authority": "某甲方风控部",
+            "binding_scope": "某融资项目放款审查",
+            "jurisdiction": "CN",
+            "effective_at": "2026-01-01",
+            "source_name": "local-file",
+            "source_checked_at": "2026-01-01T00:00:00+00:00",
+            "clauses": [{"number": "第一条", "number_display": "第一条", "text": "应提交授权文件。"}],
+        }
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "project.db"
+            norm_file = Path(td) / "norm.json"
+            norm_file.write_text(json.dumps(norm, ensure_ascii=False), encoding="utf-8")
+
+            code, payload = _run_cli(
+                ["--no-notice", "--db", str(db_path), "norm", "import", str(norm_file)]
+            )
+
+            self.assertEqual(0, code)
+            self.assertEqual(1, payload["clauses_loaded"])
+            self.assertTrue(db_path.exists())
 
 
 class CliBoundaryTests(unittest.TestCase):
