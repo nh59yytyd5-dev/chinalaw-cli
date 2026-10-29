@@ -590,6 +590,7 @@ def parse_articles_from_text(text: str) -> list[dict]:
     context = _new_parse_context()
     position = 1
     statute_numbering = False
+    pending_headings: list[str] = []
 
     for raw_line in text.splitlines():
         line = _clean_text(raw_line.strip().lstrip("#").strip())
@@ -600,10 +601,12 @@ def parse_articles_from_text(text: str) -> list[dict]:
 
         if _is_structural_heading(line, context):
             _update_context(context, line)
+            pending_headings.append(line)
             continue
 
         article_match = _article_heading(line, current, statute_numbering=statute_numbering)
         if article_match:
+            pending_headings = []
             number_display = article_match.group("number_display")
             body = article_match.group("body").strip()
             statute_numbering = statute_numbering or number_display.startswith("第")
@@ -620,6 +623,11 @@ def parse_articles_from_text(text: str) -> list[dict]:
             continue
 
         if current is not None:
+            # 标题后没有条文承接（末条之后附件里的“第一章 申请文件”）：标题随续段
+            # 并入当前条文，不静默丢弃（#60）。
+            for heading in pending_headings:
+                _append_article_text(current, heading)
+            pending_headings = []
             _append_article_text(current, line)
 
     if current is not None:
@@ -1059,6 +1067,8 @@ def _parse_nested_outline_items(lines: list[str], *, min_items: int) -> list[dic
     saw_heading = False
     expected_ordinal = 1
     expected_section_ordinal = 1
+    section_line: str | None = None
+    section_start = 0
 
     def _synthesize_section_item() -> dict:
         """为"只有无编号段落、没有任何（N）条目"的节合成一个条目。"""
@@ -1071,6 +1081,23 @@ def _parse_nested_outline_items(lines: list[str], *, min_items: int) -> list[dic
             "part": pending_section_part,
             "position": len(items) + 1,
         }
+
+    def _settle_sentence_section() -> None:
+        """节标记行本身是句子（"三、本规定自公布之日起施行。"）且节内既无条目
+        也无段落时，该行自成一条；否则它只记在后续条目的 part 上，没有后续条目
+        就静默丢失（#60）。"""
+
+        if section_line is None or len(items) > section_start or "。" not in section_line:
+            return
+        marker = OUTLINE_SECTION_MARKER_RE.match(section_line)
+        items.append({
+            "number": str(len(items) + 1),
+            "number_display": f"第{len(items) + 1}项",
+            "title": f"{marker.group('ordinal')}、",
+            "text": marker.group("body").strip(),
+            "part": None,
+            "position": len(items) + 1,
+        })
 
     for line in lines:
         marker_match = OUTLINE_SECTION_MARKER_RE.match(line)
@@ -1086,6 +1113,9 @@ def _parse_nested_outline_items(lines: list[str], *, min_items: int) -> list[dic
             if pending_leadin:
                 items.append(_synthesize_section_item())
                 pending_leadin = []
+            _settle_sentence_section()
+            section_line = line
+            section_start = len(items)
             section_part = line
             pending_section_part = line
             expected_section_ordinal = marker_ordinal + 1
@@ -1101,6 +1131,9 @@ def _parse_nested_outline_items(lines: list[str], *, min_items: int) -> list[dic
             if pending_leadin:
                 items.append(_synthesize_section_item())
                 pending_leadin = []
+            _settle_sentence_section()
+            section_line = None
+            section_start = len(items)
             _update_context(context, line)
             section_part = _part_label(context)
             pending_section_part = section_part
@@ -1148,6 +1181,7 @@ def _parse_nested_outline_items(lines: list[str], *, min_items: int) -> list[dic
     if pending_leadin:
         # 全文以裸段落节收尾：同样合成节条目，不回挂到上一节的末条目。
         items.append(_synthesize_section_item())
+    _settle_sentence_section()
 
     return _finish_outline_items(items, preamble, min_items=min_items)
 

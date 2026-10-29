@@ -130,6 +130,30 @@ class SecuritiesRuleCleaningTests(unittest.TestCase):
         self.assertIn("......4－1－n。", articles[1]["text"])
         self.assertIn("前款规定的……情形除外。", articles[2]["text"])
 
+    def test_headings_after_the_last_article_stay_in_its_text(self) -> None:
+        # #60: chapter headings of an appended form (申请文件目录) have no article
+        # to label, so they used to vanish while the lines under them were kept.
+        text = "\n".join(
+            [
+                "第一章 总则",
+                "第一条 申请文件目录见附件。",
+                "附件：申请文件目录",
+                "第一章 募集文件",
+                "1-1 募集说明书",
+                "第二章 授权文件",
+                "2-1 董事会决议",
+            ]
+        )
+
+        articles = cleaning.parse_articles_from_text(text)
+
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(articles[0]["part"], "第一章 总则")
+        self.assertEqual(
+            articles[0]["text"],
+            "申请文件目录见附件。\n附件：申请文件目录\n第一章 募集文件\n1-1 募集说明书\n第二章 授权文件\n2-1 董事会决议",
+        )
+
 
 class SzseCnAdapterTests(unittest.TestCase):
     def test_search_list_uses_szse_content_api(self) -> None:
