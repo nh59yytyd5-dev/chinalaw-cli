@@ -17,7 +17,14 @@ from pathlib import Path
 from chinalaw import __version__, applicability, loader, service
 from chinalaw.admin.errors import LibraryError
 from chinalaw.admin.lease import ProcessLease
-from chinalaw.db import DEFAULT_DB_PATH, connect, connect_readonly, current_version, migrate
+from chinalaw.db import (
+    DEFAULT_DB_PATH,
+    connect,
+    connect_readonly,
+    current_version,
+    migrate,
+    resolve_db_path,
+)
 from chinalaw.schema import SCHEMA_VERSION
 
 # Open MCP streams never end on their own. Without a bound, SIGTERM waits for them until
@@ -36,9 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("queries", "导出检索日志（JSON Lines）"),
     ):
         command = commands.add_parser(name, help=help_text)
-        command.add_argument(
-            "--db", type=Path, default=Path(os.environ.get("CHINALAW_DB", str(DEFAULT_DB_PATH)))
-        )
+        command.add_argument("--db")
         if name == "init":
             command.add_argument("--with-fixtures", action="store_true", help="加载随包公开法规")
             command.add_argument("--json", action="store_true", help="以 JSON 输出结果")
@@ -227,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     _configure_text_stdio()
     parser = build_parser()
     args = parser.parse_args(argv)
+    args.db = resolve_db_path(args.db)
     try:
         if args.command == "init":
             result = initialize(args.db, with_fixtures=args.with_fixtures)

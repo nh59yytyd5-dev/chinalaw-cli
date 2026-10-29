@@ -7,6 +7,7 @@ import socket
 import sqlite3
 import threading
 import time
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +17,7 @@ from fastapi.testclient import TestClient
 from chinalaw.admin import backups, drafts
 from chinalaw.admin.errors import LibraryError
 from chinalaw.admin.gate import MaintenanceGate
-from chinalaw.db import connect, migrate
+from chinalaw.db import DEFAULT_DB_PATH, connect, migrate
 from chinalaw.server import auth_store as auth_module
 from chinalaw.server import cli
 from chinalaw.server.app import create_app
@@ -330,3 +331,18 @@ def test_password_change_invalidates_existing_sessions(owner_api):
     session = owner_api.get("/api/v1/auth/session").json()
     assert session["authenticated"] is False and session["csrf_token"] is None
     assert owner_api.get("/api/v1/system").status_code == 401
+
+
+def test_server_db_follows_cli_resolution(monkeypatch):
+    # #52：空的 CHINALAW_DB 视为未设，~ 展开，与 chinalaw、chinalaw-mcp 一致。
+    seen = []
+
+    def fake_initialize(db_path, **_kwargs):
+        seen.append(db_path)
+        return {}
+
+    monkeypatch.setattr(cli, "initialize", fake_initialize)
+    for value in ("", "~/library.db"):
+        monkeypatch.setenv("CHINALAW_DB", value)
+        assert cli.main(["init", "--json"]) == 0
+    assert seen == [DEFAULT_DB_PATH, Path.home() / "library.db"]

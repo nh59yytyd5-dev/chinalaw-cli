@@ -431,7 +431,7 @@ CREATE TABLE meta (
 >
 > - 除命令级另有说明外，命令支持 `--format json|md`（默认 `json`）。
 > - 所有命令支持 `--db <path>`（默认 `~/.chinalaw/chinalaw.db`）。
-> - 未传 `--db` 时读取 `CHINALAW_DB`；命令行参数优先于环境变量。
+> - 未传 `--db` 时读取 `CHINALAW_DB`，都没有时用默认路径；命令行参数优先于环境变量，空值视为未设，路径中的 `~` 会展开。`chinalaw-mcp` 与 `chinalaw-server` 按同一顺序选库。
 > - JSON 输出为 UTF-8、`indent=2`、`ensure_ascii=False`。
 > - **退出码**：`0` 成功；`1` 业务级 not found；`2` 参数错误 / 调用前置不满足。
 
@@ -2072,6 +2072,8 @@ CONTRACT 塞进上下文。MCP server 必须复用公开服务函数，不直接
 ```bash
 chinalaw-mcp --db ~/.chinalaw/chinalaw.db
 ```
+
+省略 `--db` 时与 CLI 一样读取 `CHINALAW_DB`，都没有时用 `~/.chinalaw/chinalaw.db`。MCP 客户端配置里的 `args` 不经过 shell，`--db ~/...` 由 `chinalaw-mcp` 自行展开。
 
 **私域规范默认不暴露**：不带 `--allow-private-norms` 启动时，
 `chinalaw_article` / `chinalaw_articles` 不做私域 fallback（等同 CLI 的

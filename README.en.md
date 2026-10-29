@@ -91,7 +91,7 @@ The SQLite package needs chinalaw 0.7.1+ and SQLite 3.34+ with FTS5 / trigram. I
 
 **Bundled baseline**: `chinalaw init` loads the 74 bundled public texts (49 laws once loaded) and the temporal-applicability rules, with no network access. It suits getting started offline and testing, but covers only the main codes, procedural laws and major judicial interpretations.
 
-Keep the snapshot as a separate library and point `--db` at it (the CLI also reads the `CHINALAW_DB` environment variable) rather than overwriting your working library. `status` and `doctor` report the size of whichever library is in use.
+Keep the snapshot as a separate library and point `--db` at it (the CLI and the local MCP server also read the `CHINALAW_DB` environment variable) rather than overwriting your working library. `status` and `doctor` report the size of whichever library is in use.
 
 ### Query
 
