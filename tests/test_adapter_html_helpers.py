@@ -321,6 +321,28 @@ class OutlineNumberedItemsParseTests(unittest.TestCase):
         self.assertIn("改革正文第二段。", items[1]["text"])
         self.assertEqual(items[3]["title"], "三、完善证据裁判和非法证据排除规则")
 
+    def test_sentence_section_without_items_is_kept(self) -> None:
+        """#60：节标记行本身是句子、节内没有（N）条目时自成一条，不再静默丢失。"""
+
+        # 条目多于节标记行，按形态 A（节 + 条目）解析。
+        items = cleaning.parse_outline_numbered_items_from_text(
+            "一、申请文件包括：\n"
+            "（一）申请报告；\n"
+            "（二）说明书；\n"
+            "（三）财务报表；\n"
+            "（四）其他文件。\n"
+            "二、公司应当保证申请文件内容真实、准确、完整。\n"
+            "三、本指引自公布之日起施行。\n"
+        )
+
+        self.assertEqual(
+            [item["title"] for item in items], ["（一）", "（二）", "（三）", "（四）", "二、", "三、"]
+        )
+        self.assertEqual(items[0]["part"], "一、申请文件包括：")
+        self.assertEqual(items[4]["text"], "公司应当保证申请文件内容真实、准确、完整。")
+        self.assertEqual(items[5]["text"], "本指引自公布之日起施行。")
+        self.assertEqual(items[5]["number_display"], "第6项")
+
     def test_broken_item_sequence_fails_loud(self) -> None:
         text = "一、节标题\n（一）正文一。\n（三）正文三。\n"
         with self.assertRaises(ValueError):
