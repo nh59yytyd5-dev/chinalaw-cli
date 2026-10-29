@@ -17,7 +17,7 @@ from typing import Any, BinaryIO, TextIO
 
 from chinalaw import __version__, ensure, metadata, service
 from chinalaw.article_views import article_view
-from chinalaw.db import DEFAULT_DB_PATH
+from chinalaw.db import DEFAULT_DB_PATH, resolve_db_path
 from chinalaw.search_views import search_view
 
 PROTOCOL_VERSION = "2025-06-18"
@@ -720,8 +720,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--db",
-        default=str(DEFAULT_DB_PATH),
-        help=f"SQLite DB path (default {DEFAULT_DB_PATH})",
+        default=None,
+        help=f"SQLite DB path (default: $CHINALAW_DB, then {DEFAULT_DB_PATH})",
     )
     parser.add_argument(
         "--allow-private-norms",
@@ -732,7 +732,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
-    serve_stdio(db_path=Path(args.db), allow_private_norms=args.allow_private_norms)
+    serve_stdio(db_path=resolve_db_path(args.db), allow_private_norms=args.allow_private_norms)
     return 0
 
 

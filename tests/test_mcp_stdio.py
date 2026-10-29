@@ -6,12 +6,14 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from io import BytesIO, StringIO
 from pathlib import Path
 from unittest import mock
 
-from chinalaw import mcp
+from chinalaw import loader, mcp
+from chinalaw.db import DEFAULT_DB_PATH
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,6 +25,16 @@ def _line(payload: object) -> bytes:
 def _header(payload: object) -> bytes:
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+
+
+def _module_env(**overrides: str) -> dict[str, str]:
+    env = os.environ.copy()
+    source_path = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = os.pathsep.join(
+        part for part in (source_path, env.get("PYTHONPATH", "")) if part
+    )
+    env.update(overrides)
+    return env
 
 
 def _read_all(stream: BytesIO) -> list[tuple[object, str]]:
@@ -157,18 +169,13 @@ class McpStdioTests(unittest.TestCase):
 
     def test_real_module_stdio_recovers_after_parse_error(self) -> None:
         request = b"bad-json\n" + _line({"jsonrpc": "2.0", "id": 10, "method": "ping"})
-        env = os.environ.copy()
-        source_path = str(REPO_ROOT / "src")
-        env["PYTHONPATH"] = os.pathsep.join(
-            part for part in (source_path, env.get("PYTHONPATH", "")) if part
-        )
 
         completed = subprocess.run(
             [sys.executable, "-m", "chinalaw.mcp"],
             input=request,
             capture_output=True,
             cwd=REPO_ROOT,
-            env=env,
+            env=_module_env(),
             timeout=10,
             check=False,
         )
@@ -177,6 +184,65 @@ class McpStdioTests(unittest.TestCase):
         self.assertEqual(0, completed.returncode, completed.stderr.decode("utf-8"))
         self.assertEqual(-32700, messages[0][0]["error"]["code"])
         self.assertEqual({}, messages[1][0]["result"])
+
+
+class McpDatabasePathTests(unittest.TestCase):
+    """chinalaw-mcp 与 chinalaw 同样选库：--db，其次 CHINALAW_DB，最后默认路径（#52）。"""
+
+    def _served_db(self, argv: list[str], db_env: str | None) -> Path:
+        with mock.patch.dict(os.environ), mock.patch("chinalaw.mcp.serve_stdio") as serve:
+            os.environ.pop("CHINALAW_DB", None)
+            if db_env is not None:
+                os.environ["CHINALAW_DB"] = db_env
+            self.assertEqual(0, mcp.main(argv))
+        return serve.call_args.kwargs["db_path"]
+
+    def test_db_resolution_order(self) -> None:
+        cases = [
+            ("environment", [], "/env/library.db", Path("/env/library.db")),
+            ("argument first", ["--db", "/arg/library.db"], "/env/library.db", Path("/arg/library.db")),
+            ("default", [], None, DEFAULT_DB_PATH),
+            ("empty environment is unset", [], "", DEFAULT_DB_PATH),
+            ("home expanded", ["--db", "~/library.db"], None, Path.home() / "library.db"),
+        ]
+        for label, argv, db_env, expected in cases:
+            with self.subTest(label):
+                self.assertEqual(expected, self._served_db(argv, db_env))
+
+    def test_real_module_reads_environment_without_creating_default_db(self) -> None:
+        request = _line(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "chinalaw_article",
+                    "arguments": {"law": "民法典", "number": "533"},
+                },
+            }
+        )
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "library.db"
+            home = Path(td) / "home"
+            home.mkdir()
+            loader.load_fixtures(db_path, loader.FIXTURES_DIR)
+
+            completed = subprocess.run(
+                [sys.executable, "-m", "chinalaw.mcp"],
+                input=request,
+                capture_output=True,
+                cwd=REPO_ROOT,
+                env=_module_env(CHINALAW_DB=str(db_path), HOME=str(home), USERPROFILE=str(home)),
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(0, completed.returncode, completed.stderr.decode("utf-8"))
+            result = _read_all(BytesIO(completed.stdout))[0][0]["result"]["structuredContent"]
+            self.assertTrue(result["found"])
+            self.assertEqual("中华人民共和国民法典", result["law"]["title"])
+            self.assertEqual("533", str(result["article"]["number"]))
+            self.assertEqual([], list(home.iterdir()))
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ from chinalaw import (
 )
 from chinalaw import fetch as fetch_mod
 from chinalaw.contracts import NORM_SOURCE_TYPE_VALUES
-from chinalaw.db import DEFAULT_DB_PATH
+from chinalaw.db import DEFAULT_DB_PATH, resolve_db_path
 from chinalaw.sync import SYNC_SOURCES, sync_source
 
 _NOTICE_CONTEXT: dict[str, object] = {}
@@ -77,7 +77,7 @@ def _add_format_arg(
     p.add_argument(
         "--db",
         default=None,
-        help=f"SQLite 数据库路径（默认 {DEFAULT_DB_PATH}）",
+        help=f"SQLite 数据库路径（未传时读 CHINALAW_DB，再缺省为 {DEFAULT_DB_PATH}）",
     )
 
 
@@ -1203,7 +1203,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--db",
         dest="global_db",
         default=None,
-        help=f"SQLite 数据库路径（默认 {DEFAULT_DB_PATH}）；也可放在子命令之后",
+        help=(
+            f"SQLite 数据库路径（未传时读 CHINALAW_DB，再缺省为 {DEFAULT_DB_PATH}）；"
+            "也可放在子命令之后"
+        ),
     )
     parser.add_argument(
         "--no-notice",
@@ -2554,12 +2557,7 @@ def app(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
 
-    db_path = Path(
-        getattr(args, "db", None)
-        or getattr(args, "global_db", None)
-        or os.environ.get("CHINALAW_DB")
-        or DEFAULT_DB_PATH
-    ).expanduser()
+    db_path = resolve_db_path(getattr(args, "db", None) or getattr(args, "global_db", None))
     fmt = getattr(args, "format", "json")
     _NOTICE_CONTEXT.clear()
     _NOTICE_CONTEXT.update(

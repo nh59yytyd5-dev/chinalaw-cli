@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import time
 import uuid
@@ -30,11 +31,27 @@ from chinalaw.schema import (
     articles_fts_ddl,
 )
 
+DB_ENV = "CHINALAW_DB"
 DEFAULT_DB_PATH = Path.home() / ".chinalaw" / "chinalaw.db"
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 _SQLITE_LOCK_RETRY_INITIAL_SECONDS = 0.005
 _SQLITE_LOCK_RETRY_MAX_SECONDS = 0.1
 _READ_ONLY_OPERATION: ContextVar[bool] = ContextVar("chinalaw_read_only", default=False)
+
+
+def resolve_db_path(explicit: str | Path | None = None) -> Path:
+    """Return the library path used by chinalaw, chinalaw-mcp and chinalaw-server.
+
+    Resolution order:
+    1. explicit ``--db`` path;
+    2. ``CHINALAW_DB``;
+    3. ``DEFAULT_DB_PATH``.
+
+    Empty values count as unset. ``~`` is always expanded: MCP clients pass
+    ``args`` to the server without a shell.
+    """
+
+    return Path(explicit or os.environ.get(DB_ENV) or DEFAULT_DB_PATH).expanduser()
 
 
 @contextmanager
