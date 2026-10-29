@@ -156,6 +156,38 @@ class CourtMainAdapterTests(unittest.TestCase):
 </html>
 """
 
+    BATCH_AMENDMENT_DECISION_DETAIL_FIXTURE = """
+<html>
+<head>
+  <title>最高人民法院关于修改《示例甲规定》等二件执行类司法解释的决定 - 中华人民共和国最高人民法院</title>
+</head>
+<body>
+<div class="title">最高人民法院关于修改《示例甲规定》等二件执行类司法解释的决定</div>
+<ul class="info">
+  <li>发布时间：2020-12-31 10:00:00</li>
+</ul>
+<div class="txt_txt" id="zoom">
+  <p>《最高人民法院关于修改〈示例甲规定〉等二件执行类司法解释的决定》已于2020年12月23日由最高人民法院审判委员会第1823次会议通过，现予公布，自2021年1月1日起施行。</p>
+  <p>最高人民法院</p>
+  <p>2020年12月29日</p>
+  <p>法释〔2020〕21号</p>
+  <p>根据审判、执行实践需要，对《示例甲规定》等二件司法解释作如下修改：</p>
+  <p>一、修改《示例甲规定》</p>
+  <p>将第三条修改为：“甲新第三条。”</p>
+  <p>二、修改《示例乙规定》</p>
+  <p>将第四条修改为：“乙新第四条。”</p>
+  <p>本决定自2021年1月1日起施行。</p>
+  <p>根据本决定，《示例甲规定》等二件司法解释作相应修改后重新公布。</p>
+  <p>二件执行类司法解释修改后全文</p>
+  <p>示例甲规定</p>
+  <p>第一条 甲第一条。</p>
+  <p>示例乙规定</p>
+  <p>第一条 乙第一条。</p>
+</div>
+</body>
+</html>
+"""
+
     def _search_result(self) -> court_main.FetchResult:
         return court_main.FetchResult(
             url="https://www.court.gov.cn/search.html?content=%E7%A4%BA%E4%BE%8B",
@@ -387,6 +419,43 @@ class CourtMainAdapterTests(unittest.TestCase):
             }],
         )
 
+    def test_decision_amending_several_documents_keeps_only_the_decision(self) -> None:
+        adapter = court_main.CourtMainAdapter()
+        page = court_main.FetchResult(
+            url="https://www.court.gov.cn/fabu/xiangqing/282661.html",
+            status_code=200,
+            headers={},
+            text=self.BATCH_AMENDMENT_DECISION_DETAIL_FIXTURE,
+        )
+        with patch.object(court_main, "_fetch_text", return_value=page):
+            payload = adapter.build_law_payload("fabu/xiangqing/282661")
+
+        # The page reprints every amended document; none of them is one 修正本.
+        self.assertNotIn("republished", payload)
+        self.assertEqual(payload["document_number"], "法释〔2020〕21号")
+        self.assertEqual(payload["effective_at"], "2021-01-01")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["正文"])
+        body = payload["articles"][0]["text"]
+        self.assertTrue(body.endswith("作相应修改后重新公布。"))
+        self.assertNotIn("甲第一条", body)
+        self.assertEqual(
+            [(item["code"], item["republished_title"]) for item in payload["warnings"]],
+            [("republished_texts_not_imported", "示例甲规定")],
+        )
+
+    def test_reprint_sentence_naming_several_documents_marks_a_batch(self) -> None:
+        title = "关于修改《示例甲规定》《示例乙规定》的决定"
+        for sentence, batch in (
+            ("根据本决定，《示例甲规定》等二件司法解释作相应修改后重新公布。", True),
+            ("根据本决定，《示例甲规定》《示例乙规定》作相应修改后重新公布。", True),
+            ("根据本决定，《示例甲规定》作相应修改后重新公布。", False),
+        ):
+            with self.subTest(sentence=sentence):
+                split = court_main._split_amendment_decision(
+                    title, f"{title}\n一、删去第三条。\n{sentence}\n示例甲规定\n第一条 示例。"
+                )
+                self.assertEqual(split.batch, batch)
+
     def test_amendment_decision_without_appended_text_is_not_split(self) -> None:
         text = "关于修改《示例规定》的决定\n一、删去第三条。\n根据本决定，《示例规定》作相应修改，重新公布。"
         self.assertIsNone(court_main._split_amendment_decision("关于修改《示例规定》的决定", text))
@@ -445,7 +514,8 @@ class CourtMainRepublishedFetchTests(unittest.TestCase):
                 **kwargs,
             )
 
-    def _seed_2012_version(self, db_path) -> None:
+    def _seed_version(self, db_path, **fields) -> None:
+        """Store a version of the amended document; the 2012 original unless overridden."""
         with connect(db_path) as conn:
             migrate(conn)
             load_law_from_dict(conn, {
@@ -462,12 +532,13 @@ class CourtMainRepublishedFetchTests(unittest.TestCase):
                 "source_checked_at": "2026-10-01T00:00:00+08:00",
                 "source_hash": "example-2012",
                 "articles": [{"number": "1", "number_display": "第一条", "text": "原第一条。"}],
+                **fields,
             })
 
     def test_republished_text_joins_the_amended_documents_work(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             db_path = Path(td) / "t.db"
-            self._seed_2012_version(db_path)
+            self._seed_version(db_path)
 
             result = self._fetch(db_path)
 
@@ -507,6 +578,34 @@ class CourtMainRepublishedFetchTests(unittest.TestCase):
                     )
                 }
             self.assertNotIn("court_main", sources_indexed)
+
+    def test_republished_text_already_in_the_work_is_not_stored_again(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            self._seed_version(db_path)
+            # flk keeps the amended text under its own id, without the 文号.
+            self._seed_version(
+                db_path,
+                id="flk-example-2026",
+                document_number=None,
+                released_at="2026-07-24",
+                effective_at="2026-07-27",
+                source_hash="example-2026",
+            )
+
+            result = self._fetch(db_path)
+
+            self.assertTrue(result["loaded"])
+            republished = result["republished"]
+            self.assertEqual(republished["aligned_with"], "flk-example-2012")
+            self.assertEqual(republished["existing_version"], "flk-example-2026")
+            self.assertFalse(republished["loaded"])
+            self.assertIsNone(republished["wrote_fixture"])
+            original = service.get_law(db_path, "flk-example-2012")
+            self.assertEqual(
+                [version["id"] for version in original["work_versions"]],
+                ["flk-example-2012", "flk-example-2026"],
+            )
 
     def test_republished_text_is_written_beside_the_decision_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as td:

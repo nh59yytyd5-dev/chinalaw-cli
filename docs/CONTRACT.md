@@ -1571,10 +1571,13 @@ JSON 输出 schema（成功 / 主流程）：
 id 为 `court_main:<detail_id>/republished`，文号取决定中“对《……》（法释〔2012〕6号）”所载被修改文书的文号，发布、施行日期取决定的，
 `relations` 含指向决定的 `amendment_basis`。库内已有同文号、同名的被修改文书时，修正本沿用其标题、`level`、`issuing_body` 与 `work_id`，
 与之归入同一作品，旧版本自修正本施行之日起按日期推算为 `amended`；库内没有时，修正本是该文书在库内的首个版本。
+该作品库内已有同日施行的版本（如 flk 另行收录的修正本）时，附载文本不入库、不写 fixture，免得同一版本存两份（#57）。
 结果新增可选字段 `republished`：
-`{"id", "title", "document_number", "effective_at", "version_label", "aligned_with": "string|null", "article_count", "loaded", "skipped", "wrote_fixture"}`，
-`aligned_with` 为归入作品时所依的库内记录；`--to-fixture <名>.json` 时修正本写到同目录的 `<名>.republished.json`。
-此前的临时告警 `republished_text_not_imported` 不再出现。`law.warnings` 为运行时诊断，写库与 `--to-fixture` 前剥离。
+`{"id", "title", "document_number", "effective_at", "version_label", "aligned_with": "string|null", "existing_version": "string|null", "article_count", "loaded", "skipped", "wrote_fixture"}`，
+`aligned_with` 为归入作品时所依的库内记录，`existing_version` 为已有的同日版本（此时 `loaded=false`、`skipped=true`）；`--to-fixture <名>.json` 时修正本写到同目录的 `<名>.republished.json`。
+此前的临时告警 `republished_text_not_imported` 不再出现。决定一次修改多件文书、页面附载多件全文（“《……》等十八件……重新公布”）时只存决定本身，
+不拆修正本，`law.warnings` 给出 `{"severity": "warning", "code": "republished_texts_not_imported", "republished_title", "message"}`，各件修正本另行抓取。
+`law.warnings` 为运行时诊断，写库与 `--to-fixture` 前剥离。
 
 JSON 输出 schema（list-matches 模式）：
 

@@ -43,7 +43,7 @@ from chinalaw.document_numbers import (
 )
 from chinalaw.identity import law_row_matches_payload
 from chinalaw.loader import load_law_from_dict, refresh_law_metadata
-from chinalaw.service import _resolve_law_row, normalize_article_number
+from chinalaw.service import _resolve_law_row, _work_member_rows, normalize_article_number
 from chinalaw.sources import (
     CURRENT_ONLY_STATUS_SOURCES,
     STATUS_FILTER_SUPPORTED,
@@ -469,7 +469,9 @@ def _apply_republished_output(
 
     Its 修正依据 points at the decision as stored, and it joins the work of the
     document it amends when the library holds that document. ``--to-fixture``
-    writes it beside the decision as ``<name>.republished.json``.
+    writes it beside the decision as ``<name>.republished.json``. When that work
+    already holds a version in force from the same day, the text is neither
+    stored nor written, and ``existing_version`` names that record.
     """
 
     republished = {
@@ -482,20 +484,24 @@ def _apply_republished_output(
         ],
     }
     republished, aligned_with = _align_with_amended_document(db_path, republished)
-    fixture = None
-    if to_fixture is not None:
-        path = Path(to_fixture)
-        fixture = path.with_name(f"{path.stem}.republished{path.suffix or '.json'}")
-    wrote_fixture, loaded, skipped, article_count = _apply_fetch_output(
-        db_path,
-        republished,
-        source,
-        name,
-        chosen_id=chosen_id,
-        dry_run=dry_run,
-        to_fixture=fixture,
-        force=force,
-    )
+    existing = _stored_version(db_path, republished)
+    wrote_fixture, loaded, skipped = None, False, True
+    article_count = len(republished.get("articles") or [])
+    if existing is None:
+        fixture = None
+        if to_fixture is not None:
+            path = Path(to_fixture)
+            fixture = path.with_name(f"{path.stem}.republished{path.suffix or '.json'}")
+        wrote_fixture, loaded, skipped, article_count = _apply_fetch_output(
+            db_path,
+            republished,
+            source,
+            name,
+            chosen_id=chosen_id,
+            dry_run=dry_run,
+            to_fixture=fixture,
+            force=force,
+        )
     return {
         "id": republished["id"],
         "title": republished["title"],
@@ -503,6 +509,7 @@ def _apply_republished_output(
         "effective_at": republished.get("effective_at"),
         "version_label": republished.get("version_label"),
         "aligned_with": aligned_with,
+        "existing_version": existing,
         "article_count": article_count,
         "loaded": loaded,
         "skipped": skipped,
@@ -549,6 +556,32 @@ def _align_with_amended_document(db_path: Path | str, payload: dict) -> tuple[di
     if original["work_id"]:
         aligned["work_id"] = original["work_id"]
     return aligned, original["id"]
+
+
+def _stored_version(db_path: Path | str, payload: dict) -> str | None:
+    """The record already holding this 修正本: same work, in force from the same day.
+
+    flk keeps re-promulgated texts as versions of their own; storing the
+    decision page's copy beside one would list that version twice (#57).
+    """
+
+    start = (payload.get("effective_at") or payload.get("released_at") or "")[:10]
+    if not start or not Path(db_path).exists():
+        return None
+    keys = ("id", "work_id", "title", "level", "issuing_body", "effective_at", "released_at")
+    try:
+        with connect_readonly(db_path) as conn:
+            members = _work_member_rows(conn, {key: payload.get(key) for key in keys})
+    except sqlite3.ProgrammingError:
+        raise
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
+        return None
+    for row in members:
+        if row["id"] != payload["id"] and (
+            (row["effective_at"] or row["released_at"] or "")[:10] == start
+        ):
+            return row["id"]
+    return None
 
 
 def _search_candidate_rows(

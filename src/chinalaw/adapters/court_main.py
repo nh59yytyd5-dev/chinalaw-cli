@@ -108,8 +108,10 @@ EFFECTIVE_DATE_RE = re.compile(
 BOOK_TITLE_RE = re.compile(r"《(?P<title>[^》]{4,120})》")
 # 修改决定的末句；其后附载的是另一份文书（重新公布的被修改文书）。
 REPUBLISHED_SENTENCE_RE = re.compile(
-    r"根据本决定[，,]?\s*《(?P<title>[^》]{4,120})》[^。\n]{0,80}?重新公布。"
+    r"根据本决定[，,]?\s*《(?P<title>[^》]{4,120})》(?P<scope>[^。\n]{0,80}?)重新公布。"
 )
+# 末句列出不止一件文书："《……》等十八件司法解释作相应修改后重新公布"，或并列书名号。
+REPUBLISHED_BATCH_RE = re.compile(r"《|等[〇零一二三四五六七八九十百两\d]+件")
 NORMATIVE_TITLE_TOKENS = (
     "解释",
     "规定",
@@ -562,6 +564,7 @@ class AmendmentSplit(NamedTuple):
     republished_title: str
     republished_text: str
     amended_number: str | None  # 被修改文书的文号，取自决定的“对《……》（法释〔2012〕6号）”
+    batch: bool  # 决定修改多件文书，附载的是多件全文
 
 
 def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
@@ -572,6 +575,8 @@ def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
     The decision text starts at its promulgation sentence (dropping the press
     release) and ends with that sentence, matching how flk stores amendment
     decisions as a single body; what follows is the amended text (修正本).
+    A decision amending several documents ("《……》等十八件……") prints all of
+    them; ``batch`` is set and ``republished_text`` holds them together.
     """
 
     if "修改" not in title or not title.endswith("决定"):
@@ -584,7 +589,8 @@ def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
     start = head.rfind("\n", 0, anchor) + 1 if anchor >= 0 else 0
     decision_text = head[start:].strip()
     republished_title = match.group("title")
-    number = re.search(
+    batch = bool(REPUBLISHED_BATCH_RE.search(match.group("scope")))
+    number = None if batch else re.search(
         re.escape(f"《{republished_title}》")
         + r"\s*[（(]\s*(?P<number>[^（）()\s]{2,40}?号)\s*[）)]",
         decision_text,
@@ -594,6 +600,7 @@ def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
         republished_title,
         text[match.end():].strip(),
         number.group("number") if number else None,
+        batch,
     )
 
 
@@ -817,7 +824,22 @@ class CourtMainAdapter:
                 },
                 source_kind="external_json",
             )
-            if decision:
+            if decision and decision.batch:
+                # Transient fetch diagnostic; stripped before canonical writes.
+                payload["warnings"] = [
+                    {
+                        "severity": "warning",
+                        "code": "republished_texts_not_imported",
+                        "republished_title": decision.republished_title,
+                        "message": (
+                            f"the page also prints 《{decision.republished_title}》 and the "
+                            "other documents this decision amends as re-promulgated; they "
+                            "were not imported with the decision and must be fetched as "
+                            "versions of their own"
+                        ),
+                    }
+                ]
+            elif decision:
                 # Transient: fetch stores it as its own record, then strips it.
                 payload["republished"] = self._republished_payload(detail, payload, decision)
         else:
