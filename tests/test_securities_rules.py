@@ -107,6 +107,29 @@ class SecuritiesRuleCleaningTests(unittest.TestCase):
         self.assertEqual(articles[0]["number"], "1.1")
         self.assertEqual(articles[0]["part"], "第一章 总 则")
 
+    def test_ellipsis_in_body_text_is_not_a_table_of_contents_leader(self) -> None:
+        # #58: lines holding “……” / “......” used to be dropped as TOC noise,
+        # losing whole articles and paragraphs without any warning.
+        text = "\n".join(
+            [
+                "目录",
+                "第一章 总则 ........ 1",
+                "第二章 附则……",
+                "第一章 总则",
+                "第七十九条 甲。",
+                "第八十条 页码标注为4－1－1，4－1－2，......4－1－n。",
+                "第八十一条 违反本规定的，依照……处理。",
+                "前款规定的……情形除外。",
+            ]
+        )
+
+        articles = cleaning.parse_articles_from_text(text)
+
+        self.assertEqual([item["number"] for item in articles], ["79", "80", "81"])
+        self.assertEqual(articles[0]["part"], "第一章 总则")
+        self.assertIn("......4－1－n。", articles[1]["text"])
+        self.assertIn("前款规定的……情形除外。", articles[2]["text"])
+
 
 class SzseCnAdapterTests(unittest.TestCase):
     def test_search_list_uses_szse_content_api(self) -> None:

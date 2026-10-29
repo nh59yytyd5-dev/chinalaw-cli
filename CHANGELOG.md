@@ -7,6 +7,7 @@
 
 - `chinalaw-mcp` 未传 `--db` 时读取 `CHINALAW_DB`，与 `chinalaw`、`chinalaw-server` 一致。此前它固定用 `~/.chinalaw/chinalaw.db`，已用该变量指向公开快照或其他库的用户会静默查到另一个库，得到 `law_missing` 或规模小得多的结果。三个入口改用同一选库规则：`--db` > `CHINALAW_DB` > 默认路径，空值视为未设，路径中的 `~` 一律展开（MCP 客户端配置的参数不经过 shell）；`chinalaw-server` 不再把空的 `CHINALAW_DB` 当成当前目录。`chinalaw` 与 `chinalaw-mcp` 的 `--help` 写明这一顺序（#52）。
 - 查询遇到不存在的库不再新建空库：`search`、`article`、`list`、`applicable` 等只读命令，以及 `law delete`、`rebuild-clean` 等只改动已有内容的命令，输出 `cli_command_error`，`error` 为 `LibraryMissingError`，退出码 `2`，提示检查 `--db` / `CHINALAW_DB` 或运行 `chinalaw init`。此前它们会先建一个空库再答“未找到”，`search`、`list` 甚至返回成功的空结果。`init`、`sync`、`fetch`、`ensure` 与 `norm import|ingest`、`commentary import`、`pack add|import` 仍可新建资料库。`chinalaw-mcp` 与 `chinalaw-server` 一样不新建资料库，库不存在时各工具（含 `chinalaw_ensure`）返回 `isError` 与 `LibraryMissingError`。`status` 遇到不存在的库时，`error` 由 `FileNotFoundError` 改为其子类 `LibraryMissingError`（#55）。
+- 正文中含省略号（`……`、`......`）的行不再被当作目录行丢弃。此前文本解析一见点号或省略号就判为目录，所在条文整条或整段消失且无告警，如证监会《公开发行证券的公司信息披露内容与格式准则第26号》第八十条；markdown / docx / PDF 各入口（court_main、spp_gov_cn、csrc_gov_cn、securities_rules 与面板导入）均受影响。现在只把以页码收尾、或接在章节标题后的点号引导线判为目录。已入库文本可能缺条缺段，需要重抓核对（#58）。
 
 ## 0.7.4 — 2026-10-28
 

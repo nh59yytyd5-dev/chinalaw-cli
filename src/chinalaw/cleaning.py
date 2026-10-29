@@ -142,7 +142,11 @@ ENUM_STRUCTURAL_HEADING_RE = re.compile(
     r"(?P<body>[\u4e00-\u9fff（）()《》·“”‘’、]{2,24})$"
 )
 TOC_MARKER_RE = re.compile(r"目\s*录")
-TOC_DOT_LEADER_RE = re.compile(r"(?:\.{3,}|…{2,})")
+# 目录行的点号引导线以行尾页码收尾（"第一章 总则 ........ 4" / "........- 4 -"）。
+# 正文里的省略号（"规定的……情形"）不是引导线，不能据此丢行（#58）。
+TOC_DOT_LEADER_RE = re.compile(
+    r"(?:\.{3,}|…{2,})\s*(?P<page>[-－]?\s*\d{1,4}\s*[-－]?)?\s*$"
+)
 TOC_STRUCTURAL_PAGE_RE = re.compile(
     r"^(?:第[〇零一二三四五六七八九十百千万两0-9]+(?:编|章|节|分编).+|"
     r"附则|[〇零一二三四五六七八九十百千万两0-9]{1,3}、.+)\s+\d{1,4}$"
@@ -1602,13 +1606,18 @@ def _is_toc_line(text: str) -> bool:
     Exchange rule PDFs/DOCX often contain a generated TOC before the actual
     clauses. Those lines look like structural headings, so if we keep them they
     pollute ``article.part`` until the real heading appears. This rule is
-    intentionally shape-based: marker line, dot leaders, or structural heading
-    followed by a page number.
+    intentionally shape-based: marker line, a dot leader ending in a page number
+    (or ending a structural heading), or structural heading followed by a page
+    number. An ellipsis inside body text is not a leader.
     """
 
     if TOC_MARKER_RE.fullmatch(text):
         return True
-    if TOC_DOT_LEADER_RE.search(text):
+    leader = TOC_DOT_LEADER_RE.search(text)
+    if leader and (
+        leader.group("page")
+        or STRUCTURAL_HEADING_RE.match(text[: leader.start()].strip())
+    ):
         return True
     return bool(TOC_STRUCTURAL_PAGE_RE.match(text))
 
