@@ -162,7 +162,7 @@ class CourtMainAdapterTests(unittest.TestCase):
   <title>最高人民法院关于修改《示例甲规定》等二件执行类司法解释的决定 - 中华人民共和国最高人民法院</title>
 </head>
 <body>
-<div class="title">最高人民法院关于修改《示例甲规定》等二件执行类司法解释的决定</div>
+<div class="title">最高人民法院关于修改 《示例甲 规定》等二件执行类司法解释的决定</div>
 <ul class="info">
   <li>发布时间：2020-12-31 10:00:00</li>
 </ul>
@@ -183,6 +183,43 @@ class CourtMainAdapterTests(unittest.TestCase):
   <p>第一条 甲第一条。</p>
   <p>示例乙规定</p>
   <p>第一条 乙第一条。</p>
+</div>
+</body>
+</html>
+"""
+
+    UNANNOUNCED_REPRINT_DETAIL_FIXTURE = """
+<html>
+<head>
+  <title>最高人民法院关于修改《关于审理示例借贷案件适用法律若干问题的规定》的决定 - 中华人民共和国最高人民法院</title>
+</head>
+<body>
+<div class="title">最高人民法院关于修改《关于审理示例借贷案件适用法律若干问题的规定》的决定</div>
+<ul class="info">
+  <li>发布时间：2020-08-20 10:00:00</li>
+</ul>
+<div class="txt_txt" id="zoom">
+  <p>《最高人民法院关于修改〈关于审理示例借贷案件适用法律若干问题的规定〉的决定》已于2020年8月18日由最高人民法院审判委员会第1809次会议通过，现予公布，自2020年8月20日起施行。</p>
+  <p>最高人民法院</p>
+  <p>2020年8月19日</p>
+  <p>法释〔2020〕6号</p>
+  <p>最高人民法院</p>
+  <p>关于修改《关于审理示例借贷案件</p>
+  <p>适用法律若干问题的规定》的决定</p>
+  <p>（2020年8月18日最高人民法院审判委员会</p>
+  <p>第1809次会议通过，自2020年8月20日起施行）</p>
+  <p>根据审判实践需要，对《关于审理示例借贷案件适用法律若干问题的规定》作如下修改：</p>
+  <p>一、将第一条修改为：</p>
+  <p>“本规定所称的示例借贷，是指示例行为。”</p>
+  <p>（一）示例项。</p>
+  <p>本决定自2020年8月20日起施行。</p>
+  <p>最高人民法院</p>
+  <p>关于审理示例借贷案件适用法律若干问题的规定</p>
+  <p>（2015年6月23日最高人民法院审判委员会第1655次会议通过，</p>
+  <p>根据2020年8月18日最高人民法院审判委员会第1809次会议《关于修改〈关于审理示例借贷案件适用法律若干问题的规定〉的决定》修正，该修正自2020年8月20日起施行）</p>
+  <p>为正确审理示例借贷纠纷案件，制定本规定。</p>
+  <p>第一条 本规定所称的示例借贷，是指示例行为。</p>
+  <p>第二条 示例第二条。</p>
 </div>
 </body>
 </html>
@@ -432,6 +469,8 @@ class CourtMainAdapterTests(unittest.TestCase):
 
         # The page reprints every amended document; none of them is one 修正本.
         self.assertNotIn("republished", payload)
+        # #63: the page title wraps; the line breaks leave no spaces behind.
+        self.assertEqual(payload["title"], "最高人民法院关于修改《示例甲规定》等二件执行类司法解释的决定")
         self.assertEqual(payload["document_number"], "法释〔2020〕21号")
         self.assertEqual(payload["effective_at"], "2021-01-01")
         self.assertEqual([item["number"] for item in payload["articles"]], ["正文"])
@@ -442,6 +481,58 @@ class CourtMainAdapterTests(unittest.TestCase):
             [(item["code"], item["republished_title"]) for item in payload["warnings"]],
             [("republished_texts_not_imported", "示例甲规定")],
         )
+
+    def test_amended_text_printed_without_the_reprint_sentence_is_split_at_its_heading(self) -> None:
+        adapter = court_main.CourtMainAdapter()
+        page = court_main.FetchResult(
+            url="https://www.court.gov.cn/fabu/xiangqing/249031.html",
+            status_code=200,
+            headers={},
+            text=self.UNANNOUNCED_REPRINT_DETAIL_FIXTURE,
+        )
+        with patch.object(court_main, "_fetch_text", return_value=page):
+            payload = adapter.build_law_payload("fabu/xiangqing/249031")
+
+        # #62: no "……重新公布。" sentence; the amended text's 题注 marks where it starts.
+        self.assertEqual(payload["document_number"], "法释〔2020〕6号")
+        self.assertEqual(payload["effective_at"], "2020-08-20")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["正文"])
+        body = payload["articles"][0]["text"]
+        self.assertTrue(body.startswith("《最高人民法院关于修改〈关于审理示例借贷案件"))
+        self.assertTrue(body.endswith("本决定自2020年8月20日起施行。"))
+        self.assertNotIn("示例第二条", body)
+        republished = payload["republished"]
+        self.assertEqual(
+            republished["title"], "最高人民法院关于审理示例借贷案件适用法律若干问题的规定"
+        )
+        self.assertIsNone(republished["document_number"])
+        self.assertEqual(republished["level"], "judicial_interpretation")
+        self.assertEqual(
+            (republished["released_at"], republished["effective_at"]), ("2020-08-20", "2020-08-20")
+        )
+        self.assertEqual(republished["version_label"], "2020年修正")
+        self.assertEqual([item["number"] for item in republished["articles"]], ["1", "2"])
+        self.assertEqual(
+            [(item["relation_type"], item["to_law_id"], item["notes"]) for item in republished["relations"]],
+            [("amendment_basis", "court_main:fabu/xiangqing/249031", "法释〔2020〕6号")],
+        )
+
+    def test_wrapped_titles_lose_their_line_break_spaces(self) -> None:
+        for raw, tidy in (
+            (
+                "最高人民法院关于修改 《最高人民法院关于人民法院扣押铁路运输货物 若干问题的规定》"
+                "等十八件执行类司法解释的决定",
+                "最高人民法院关于修改《最高人民法院关于人民法院扣押铁路运输货物若干问题的规定》"
+                "等十八件执行类司法解释的决定",
+            ),
+            (
+                "最高人民法院 最高人民检察院 关于办理示例刑事案件适用法律若干问题的解释",
+                "最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释",
+            ),
+            ("关于 Example Rules 的通知", "关于Example Rules的通知"),
+        ):
+            with self.subTest(raw=raw):
+                self.assertEqual(court_main._tidy_title(raw), tidy)
 
     def test_reprint_sentence_naming_several_documents_marks_a_batch(self) -> None:
         title = "关于修改《示例甲规定》《示例乙规定》的决定"
@@ -460,6 +551,13 @@ class CourtMainAdapterTests(unittest.TestCase):
         text = "关于修改《示例规定》的决定\n一、删去第三条。\n根据本决定，《示例规定》作相应修改，重新公布。"
         self.assertIsNone(court_main._split_amendment_decision("关于修改《示例规定》的决定", text))
         self.assertIsNone(court_main._split_amendment_decision("示例规定", text + "\n第一条 示例。"))
+        # Without that sentence, only a 题注 naming an amending decision starts a reprint.
+        unannounced = (
+            "关于修改《示例规定》的决定\n（2020年8月18日通过，自2020年8月20日起施行）\n"
+            "一、将第三条修改为：\n（一）示例项。\n本决定自2020年8月20日起施行。\n"
+            "示例规定\n（2015年6月23日通过）\n第一条 示例。"
+        )
+        self.assertIsNone(court_main._split_amendment_decision("关于修改《示例规定》的决定", unannounced))
 
     def test_infer_document_title_preserves_direct_normative_title(self) -> None:
         title = "最高人民法院关于适用《中华人民共和国刑事诉讼法》的解释"
