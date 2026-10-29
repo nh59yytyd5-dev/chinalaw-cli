@@ -25,6 +25,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html import unescape
+from typing import NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request
@@ -107,8 +108,19 @@ EFFECTIVE_DATE_RE = re.compile(
 BOOK_TITLE_RE = re.compile(r"《(?P<title>[^》]{4,120})》")
 # 修改决定的末句；其后附载的是另一份文书（重新公布的被修改文书）。
 REPUBLISHED_SENTENCE_RE = re.compile(
-    r"根据本决定[，,]?\s*《(?P<title>[^》]{4,120})》[^。\n]{0,80}?重新公布。"
+    r"根据本决定[，,]?\s*《(?P<title>[^》]{4,120})》(?P<scope>[^。\n]{0,80}?)重新公布。"
 )
+# 末句列出不止一件文书："《……》等十八件司法解释作相应修改后重新公布"，或并列书名号。
+REPUBLISHED_BATCH_RE = re.compile(r"《|等[〇零一二三四五六七八九十百两\d]+件")
+# 没有末句、决定之后直接接排修正后全文时（法释〔2020〕6号），全文题注注明据本决定修正（#62）。
+REPRINT_NOTE_RE = re.compile(r"根据.*决定》[^（）()]{0,8}修正")
+SENTENCE_ENDINGS = ("。", "；", "：", "！", "？", "”")
+# 标题跨行排版时换行留下的空白（#63）：并列的发文机关以“、”相连，汉字与中文标点两侧的空白删去。
+TITLE_ISSUERS = "最高人民法院|最高人民检察院|公安部|国家安全部|司法部"
+TITLE_ISSUER_GAP_RE = re.compile(rf"({TITLE_ISSUERS})\s+(?={TITLE_ISSUERS})")
+ISSUER_LINE_RE = re.compile(rf"(?:{TITLE_ISSUERS})(?:[、\s]*(?:{TITLE_ISSUERS}))*")
+CJK_TITLE_CHARS = r"—‘’“”…、-〿一-鿿＀-￯"
+TITLE_CJK_GAP_RE = re.compile(rf"(?<=[{CJK_TITLE_CHARS}])\s+|\s+(?=[{CJK_TITLE_CHARS}])")
 NORMATIVE_TITLE_TOKENS = (
     "解释",
     "规定",
@@ -285,7 +297,7 @@ def _parse_rows(html: str, *, base_url: str, query: str | None = None) -> list[d
         rows.append(
             {
                 "detail_id": detail_id,
-                "title": title,
+                "title": _tidy_title(title),
                 "released_at": _date_part(date_text),
                 "published_at": date_text or None,
                 "url": urljoin(base_url, f"/{detail_id}.html"),
@@ -422,7 +434,7 @@ def _book_titles(text: str) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
     for match in BOOK_TITLE_RE.finditer(text or ""):
-        title = match.group("title").strip()
+        title = _tidy_title(match.group("title"))
         if title and title not in seen:
             seen.add(title)
             result.append(title)
@@ -431,6 +443,21 @@ def _book_titles(text: str) -> list[str]:
 
 def _compact_title(text: str) -> str:
     return re.sub(r"\s+", "", text or "")
+
+
+def _tidy_title(title: str) -> str:
+    """Drop the spaces a title picks up where the page wraps it (#63).
+
+    Issuers listed side by side are joined with "、", as in their official
+    titles; spaces between Latin words stay.
+    """
+
+    title = TITLE_ISSUER_GAP_RE.sub(r"\1、", (title or "").strip())
+    return TITLE_CJK_GAP_RE.sub("", title)
+
+
+def _bracketless(text: str) -> str:
+    return re.sub(r"[《》〈〉\s]", "", text or "")
 
 
 def _looks_like_normative_title(title: str) -> bool:
@@ -472,7 +499,7 @@ def _looks_like_normative_title(title: str) -> bool:
 def _infer_document_title(page_title: str, text: str) -> str:
     """Convert press-release titles into the embedded normative title."""
 
-    title = _strip_title_suffix(page_title).strip()
+    title = _tidy_title(_strip_title_suffix(page_title))
     if _looks_like_normative_title(title):
         return title
 
@@ -556,25 +583,113 @@ def _single_body_article(text: str) -> list[dict]:
     return cleaning.single_body_article(text)
 
 
-def _split_amendment_decision(title: str, text: str) -> tuple[str, str] | None:
+class AmendmentSplit(NamedTuple):
+    decision_text: str
+    republished_title: str
+    republished_text: str
+    amended_number: str | None  # 被修改文书的文号，取自决定的“对《……》（法释〔2012〕6号）”
+    batch: bool  # 决定修改多件文书，附载的是多件全文
+
+
+def _is_amendment_decision(title: str) -> bool:
+    return "修改" in title and title.endswith("决定")
+
+
+def _from_promulgation(text: str) -> str:
+    """A decision's text from its promulgation sentence on, without the press release."""
+
+    anchor = text.rfind("现予公布")
+    start = text.rfind("\n", 0, anchor) + 1 if anchor >= 0 else 0
+    return text[start:].strip()
+
+
+def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
     """Separate an amendment decision from the re-promulgated document appended to it.
 
     Pages such as "关于修改《……解释》的决定" end the decision with "根据本决定，
     《……》作相应修改……重新公布。" and then print the amended document in full.
-    Returns ``(decision_text, republished_title)``; the decision text starts at its
-    promulgation sentence (dropping the press release) and ends with that sentence,
-    matching how flk stores amendment decisions as a single body.
+    Some (法释〔2020〕6号) print it straight after the decision without that
+    sentence; its heading is then found by its 题注 (#62).
+    The decision text starts at its promulgation sentence (dropping the press
+    release) and ends where the amended text begins, matching how flk stores
+    amendment decisions as a single body; what follows is the amended text (修正本).
+    A decision amending several documents ("《……》等十八件……") prints all of
+    them; ``batch`` is set and ``republished_text`` holds them together.
     """
 
-    if "修改" not in title or not title.endswith("决定"):
+    if not _is_amendment_decision(title):
         return None
     match = REPUBLISHED_SENTENCE_RE.search(text)
-    if match is None or not text[match.end():].strip():
-        return None
-    head = text[: match.end()]
-    anchor = head.rfind("现予公布")
-    start = head.rfind("\n", 0, anchor) + 1 if anchor >= 0 else 0
-    return head[start:].strip(), match.group("title")
+    if match is not None:
+        if not text[match.end():].strip():
+            return None
+        boundary, cited, scope = match.end(), match.group("title"), match.group("scope")
+        republished_title = _tidy_title(cited)
+    else:
+        book = BOOK_TITLE_RE.search(title)
+        heading = _reprinted_heading(book.group("title"), text) if book else None
+        if heading is None:
+            return None
+        boundary, republished_title = heading
+        cited, scope = book.group("title"), title[book.end():]
+    decision_text = _from_promulgation(text[:boundary])
+    batch = bool(REPUBLISHED_BATCH_RE.search(scope))
+    number = None if batch else re.search(
+        re.escape(f"《{cited}》")
+        + r"\s*[（(]\s*(?P<number>[^（）()\s]{2,40}?号)\s*[）)]",
+        decision_text,
+    )
+    return AmendmentSplit(
+        decision_text,
+        republished_title,
+        text[boundary:].strip(),
+        number.group("number") if number else None,
+        batch,
+    )
+
+
+def _reprinted_heading(cited: str, text: str) -> tuple[int, str] | None:
+    """Offset and title of the amended document a decision page reprints unannounced.
+
+    The reprint opens with that document's title, then a 题注 saying it was
+    amended under a decision ("根据……《……决定》修正"). The title must be the one
+    the decision cites (``cited``), optionally under its issuer's line.
+    """
+
+    target = _bracketless(cited)
+    lines = [
+        (match.start(), match.group().strip())
+        for match in re.finditer(r"[^\n]+", text)
+        if match.group().strip()
+    ]
+    for index, (_start, line) in enumerate(lines):
+        if not line.startswith(("（", "(")):
+            continue
+        note = ""
+        for _offset, part in lines[index:index + 6]:
+            note += part
+            if part.endswith(("）", ")", *SENTENCE_ENDINGS)):
+                break
+        if not note.endswith(("）", ")")) or not REPRINT_NOTE_RE.search(note):
+            continue
+        heading = _heading_above(lines, index, target)
+        if heading is not None:
+            return heading
+    return None
+
+
+def _heading_above(lines: list[tuple[int, str]], index: int, target: str) -> tuple[int, str] | None:
+    """The title lines just above ``lines[index]`` when they spell ``target``."""
+
+    for first in range(index - 1, max(index - 5, -1), -1):
+        if lines[first][1].endswith(SENTENCE_ENDINGS):
+            return None
+        if not _bracketless("".join(part for _offset, part in lines[first:index])).endswith(target):
+            continue
+        if first > 0 and ISSUER_LINE_RE.fullmatch(lines[first - 1][1]):
+            first -= 1
+        return lines[first][0], _tidy_title(" ".join(part for _offset, part in lines[first:index]))
+    return None
 
 
 def _policy_item_articles(level: str, text: str) -> list[dict]:
@@ -755,7 +870,14 @@ class CourtMainAdapter:
         level = _infer_level(title, raw_text)
         issuing_body = _infer_issuing_body(title, raw_text)
         decision = _split_amendment_decision(title, raw_text)
-        text = decision[0] if decision else raw_text
+        amendment = _is_amendment_decision(title)
+        if decision:
+            text = decision.decision_text
+        elif amendment:
+            # A page that reprints nothing holds the decision alone (#64).
+            text = _from_promulgation(raw_text)
+        else:
+            text = raw_text
         document_number = cleaning.extract_document_number_from_preamble(text)
         released_at = _date_part(detail.get("published_at")) or (search_row or {}).get(
             "released_at"
@@ -763,7 +885,8 @@ class CourtMainAdapter:
         effective_at = _infer_effective_at(text)
 
         body_articles: list[dict] | None = None
-        if decision:
+        if amendment:
+            # Like flk, a decision's items (一、二、……) form one body.
             body_articles = _single_body_article(text)
         else:
             articles = cleaning.parse_articles_from_text(text)
@@ -797,20 +920,24 @@ class CourtMainAdapter:
                 },
                 source_kind="external_json",
             )
-            if decision:
+            if decision and decision.batch:
                 # Transient fetch diagnostic; stripped before canonical writes.
                 payload["warnings"] = [
                     {
                         "severity": "warning",
-                        "code": "republished_text_not_imported",
-                        "republished_title": decision[1],
+                        "code": "republished_texts_not_imported",
+                        "republished_title": decision.republished_title,
                         "message": (
-                            f"the page also prints 《{decision[1]}》 as re-promulgated "
-                            "under this decision; that document was not imported "
-                            "with the decision and must be verified separately"
+                            f"the page also prints 《{decision.republished_title}》 and the "
+                            "other documents this decision amends as re-promulgated; they "
+                            "were not imported with the decision and must be fetched as "
+                            "versions of their own"
                         ),
                     }
                 ]
+            elif decision:
+                # Transient: fetch stores it as its own record, then strips it.
+                payload["republished"] = self._republished_payload(detail, payload, decision)
         else:
             payload = cleaning.canonicalize(
                 text,
@@ -830,6 +957,48 @@ class CourtMainAdapter:
                 source_hash=self._hash_text(text),
             )
         return payload
+
+    def _republished_payload(self, detail: dict, decision: dict, split: AmendmentSplit) -> dict:
+        """The amended text a decision page reprints: a new version of that document (#39).
+
+        It keeps the amended document's 文号, takes the decision's dates, and
+        records the decision as its 修正依据 (``amendment_basis``).
+        """
+
+        title = split.republished_title
+        text = split.republished_text
+        number = decision.get("document_number")
+        year = re.search(r"〔(\d{4})〕", number or "")
+        year = year.group(1) if year else (decision.get("released_at") or "")[:4]
+        payload = cleaning.canonicalize(
+            text,
+            source_kind="markdown",
+            id=f"court_main:{detail['detail_id']}/republished",
+            title=title,
+            short_title=_infer_short_title(title),
+            level=_infer_level(title, text),
+            status="current",
+            issuing_body=_infer_issuing_body(title, text),
+            document_number=split.amended_number,
+            released_at=decision.get("released_at"),
+            effective_at=decision.get("effective_at"),
+            source_url=detail.get("url"),
+            source_name="www.court.gov.cn",
+            source_checked_at=detail.get("checked_at"),
+            source_hash=self._hash_text(text),
+        )
+        return {
+            **payload,
+            "version_label": f"{year}年修正" if year else "修正本",
+            "revision_notes": f"根据《{decision['title']}》（{number}）修正。" if number else None,
+            "relations": [{
+                "relation_type": "amendment_basis",
+                "to_law_id": decision["id"],
+                "to_law_title": decision["title"],
+                "effective_at": decision.get("effective_at"),
+                "notes": number,
+            }],
+        }
 
     @staticmethod
     def _hash_text(text: str) -> str:

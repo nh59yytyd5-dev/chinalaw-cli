@@ -43,7 +43,7 @@ from chinalaw.document_numbers import (
 )
 from chinalaw.identity import law_row_matches_payload
 from chinalaw.loader import load_law_from_dict, refresh_law_metadata
-from chinalaw.service import _resolve_law_row, normalize_article_number
+from chinalaw.service import _resolve_law_row, _work_member_rows, normalize_article_number
 from chinalaw.sources import (
     CURRENT_ONLY_STATUS_SOURCES,
     STATUS_FILTER_SUPPORTED,
@@ -403,6 +403,9 @@ def fetch_law(
         enrich_aliases=enrich_aliases,
     )
     chosen_id = chosen["id"]
+    republished = payload.get("republished")
+    if republished is not None:
+        payload = {key: value for key, value in payload.items() if key != "republished"}
     wrote_fixture, loaded, skipped, article_count = _apply_fetch_output(
         db_path,
         storage_payload,
@@ -413,6 +416,19 @@ def fetch_law(
         to_fixture=to_fixture,
         force=force,
     )
+    extra = {}
+    if republished is not None:
+        extra["republished"] = _apply_republished_output(
+            db_path,
+            republished,
+            storage_payload,
+            normalized_source,
+            name_clean,
+            chosen_id=chosen_id,
+            dry_run=dry_run,
+            to_fixture=to_fixture,
+            force=force,
+        )
 
     return {
         "kind": "law_fetch",
@@ -433,7 +449,139 @@ def fetch_law(
         "dry_run": bool(dry_run),
         "force": bool(force),
         "wrote_fixture": wrote_fixture,
+        **extra,
     }
+
+
+def _apply_republished_output(
+    db_path: Path | str,
+    republished: dict,
+    decision: dict,
+    source: str,
+    name: str,
+    *,
+    chosen_id: str,
+    dry_run: bool,
+    to_fixture: Path | str | None,
+    force: bool,
+) -> dict:
+    """Store the amended text a decision page reprints as its own version (#39).
+
+    Its 修正依据 points at the decision as stored, and it joins the work of the
+    document it amends when the library holds that document. ``--to-fixture``
+    writes it beside the decision as ``<name>.republished.json``. When that work
+    already holds a version in force from the same day, the text is neither
+    stored nor written, and ``existing_version`` names that record.
+    """
+
+    republished = {
+        **republished,
+        "relations": [
+            {**relation, "to_law_id": decision["id"]}
+            if relation.get("relation_type") == "amendment_basis"
+            else relation
+            for relation in republished.get("relations") or []
+        ],
+    }
+    republished, aligned_with = _align_with_amended_document(db_path, republished)
+    existing = _stored_version(db_path, republished)
+    wrote_fixture, loaded, skipped = None, False, True
+    article_count = len(republished.get("articles") or [])
+    if existing is None:
+        fixture = None
+        if to_fixture is not None:
+            path = Path(to_fixture)
+            fixture = path.with_name(f"{path.stem}.republished{path.suffix or '.json'}")
+        wrote_fixture, loaded, skipped, article_count = _apply_fetch_output(
+            db_path,
+            republished,
+            source,
+            name,
+            chosen_id=chosen_id,
+            dry_run=dry_run,
+            to_fixture=fixture,
+            force=force,
+        )
+    return {
+        "id": republished["id"],
+        "title": republished["title"],
+        "document_number": republished.get("document_number"),
+        "effective_at": republished.get("effective_at"),
+        "version_label": republished.get("version_label"),
+        "aligned_with": aligned_with,
+        "existing_version": existing,
+        "article_count": article_count,
+        "loaded": loaded,
+        "skipped": skipped,
+        "wrote_fixture": wrote_fixture,
+    }
+
+
+def _align_with_amended_document(db_path: Path | str, payload: dict) -> tuple[dict, str | None]:
+    """Put a 修正本 into the work of the document it amends (CONTRACT §2.1).
+
+    That document is the library record with the same 文号 and a matching name.
+    The new version takes its title, level, issuing body and ``work_id``, which
+    is what groups versions into one work. Read-only; returns the payload and
+    the id of the record it was aligned with, or ``None``.
+    """
+
+    number = _normalize_document_number(payload.get("document_number"))
+    if not number or not Path(db_path).exists():
+        return payload, None
+    try:
+        with connect_readonly(db_path) as conn:
+            rows = [
+                row
+                for row in conn.execute(
+                    "SELECT * FROM laws WHERE replace(document_number, ' ', '') = ? "
+                    "AND id != ? AND status != 'seed'",
+                    (number, payload["id"]),
+                )
+                if law_row_matches_payload(row, payload, strict=False)
+            ]
+    except sqlite3.ProgrammingError:
+        raise
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
+        return payload, None
+    if not rows:
+        return payload, None
+    original = max(rows, key=lambda row: row["effective_at"] or row["released_at"] or "")
+    aligned = {
+        **payload,
+        "title": original["title"],
+        "level": original["level"],
+        "issuing_body": original["issuing_body"],
+    }
+    if original["work_id"]:
+        aligned["work_id"] = original["work_id"]
+    return aligned, original["id"]
+
+
+def _stored_version(db_path: Path | str, payload: dict) -> str | None:
+    """The record already holding this 修正本: same work, in force from the same day.
+
+    flk keeps re-promulgated texts as versions of their own; storing the
+    decision page's copy beside one would list that version twice (#57).
+    """
+
+    start = (payload.get("effective_at") or payload.get("released_at") or "")[:10]
+    if not start or not Path(db_path).exists():
+        return None
+    keys = ("id", "work_id", "title", "level", "issuing_body", "effective_at", "released_at")
+    try:
+        with connect_readonly(db_path) as conn:
+            members = _work_member_rows(conn, {key: payload.get(key) for key in keys})
+    except sqlite3.ProgrammingError:
+        raise
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
+        return None
+    for row in members:
+        if row["id"] != payload["id"] and (
+            (row["effective_at"] or row["released_at"] or "")[:10] == start
+        ):
+            return row["id"]
+    return None
 
 
 def _search_candidate_rows(
@@ -674,7 +822,7 @@ def _maybe_replace_aliases(payload: dict, aliases: list[str]) -> dict:
     return {**payload, "aliases": aliases}
 
 
-_TRANSIENT_FETCH_PAYLOAD_KEYS = {"warnings"}
+_TRANSIENT_FETCH_PAYLOAD_KEYS = {"warnings", "republished"}
 
 
 def _strip_transient_fetch_metadata(payload: dict) -> dict:

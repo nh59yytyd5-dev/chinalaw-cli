@@ -78,10 +78,20 @@ def index_document_number(
     payloads without a recoverable upstream source id are skipped silently. A
     missing table is also skipped so older ad-hoc DBs do not break fixture
     loading before migration has run.
+
+    A 修正本 (a payload with an ``amendment_basis`` relation) keeps the number of
+    the document it amends but is published on the decision's page, so it never
+    claims that number for its source: fetching the number must still reach the
+    document itself (#39).
     """
 
     document_number = normalize_document_number(payload.get("document_number"))
     if not document_number:
+        return
+    if any(
+        (relation or {}).get("relation_type") == "amendment_basis"
+        for relation in payload.get("relations") or []
+    ):
         return
 
     source_key = _normalize_source(source) or infer_source(payload)

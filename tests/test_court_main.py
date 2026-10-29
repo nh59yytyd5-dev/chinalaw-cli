@@ -9,12 +9,18 @@ embed a normative document title in book-title marks.
 
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from chinalaw import sources
+from chinalaw import fetch as fetch_mod
+from chinalaw import service, sources
 from chinalaw.adapters import court_main
+from chinalaw.db import connect, migrate
 from chinalaw.document_numbers import infer_source, infer_source_id
+from chinalaw.loader import load_law_from_dict
 
 
 class CourtMainAdapterTests(unittest.TestCase):
@@ -133,7 +139,7 @@ class CourtMainAdapterTests(unittest.TestCase):
   <p>2026年7月24日</p>
   <p>法释〔2026〕13号</p>
   <p>关于修改《最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释》的决定</p>
-  <p>根据司法实践情况，现决定对《解释》作如下修改：</p>
+  <p>根据司法实践情况，现决定对《最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释》（法释〔2012〕6号）作如下修改：</p>
   <p>一、将第六条修改为：“在敏感期内从事示例交易，具有下列情形之一的，应当认定为情节严重：</p>
   <p>“（一）成交额在二百万元以上的；</p>
   <p>“（二）具有其他严重情节的。”</p>
@@ -146,6 +152,104 @@ class CourtMainAdapterTests(unittest.TestCase):
   <p>第六条 本解释所称“敏感期”是指信息自形成至公开的期间。</p>
 </div>
 <div class="txt_etr">分享区</div>
+</body>
+</html>
+"""
+
+    BATCH_AMENDMENT_DECISION_DETAIL_FIXTURE = """
+<html>
+<head>
+  <title>最高人民法院关于修改《示例甲规定》等二件执行类司法解释的决定 - 中华人民共和国最高人民法院</title>
+</head>
+<body>
+<div class="title">最高人民法院关于修改 《示例甲 规定》等二件执行类司法解释的决定</div>
+<ul class="info">
+  <li>发布时间：2020-12-31 10:00:00</li>
+</ul>
+<div class="txt_txt" id="zoom">
+  <p>《最高人民法院关于修改〈示例甲规定〉等二件执行类司法解释的决定》已于2020年12月23日由最高人民法院审判委员会第1823次会议通过，现予公布，自2021年1月1日起施行。</p>
+  <p>最高人民法院</p>
+  <p>2020年12月29日</p>
+  <p>法释〔2020〕21号</p>
+  <p>根据审判、执行实践需要，对《示例甲规定》等二件司法解释作如下修改：</p>
+  <p>一、修改《示例甲规定》</p>
+  <p>将第三条修改为：“甲新第三条。”</p>
+  <p>二、修改《示例乙规定》</p>
+  <p>将第四条修改为：“乙新第四条。”</p>
+  <p>本决定自2021年1月1日起施行。</p>
+  <p>根据本决定，《示例甲规定》等二件司法解释作相应修改后重新公布。</p>
+  <p>二件执行类司法解释修改后全文</p>
+  <p>示例甲规定</p>
+  <p>第一条 甲第一条。</p>
+  <p>示例乙规定</p>
+  <p>第一条 乙第一条。</p>
+</div>
+</body>
+</html>
+"""
+
+    UNANNOUNCED_REPRINT_DETAIL_FIXTURE = """
+<html>
+<head>
+  <title>最高人民法院关于修改《关于审理示例借贷案件适用法律若干问题的规定》的决定 - 中华人民共和国最高人民法院</title>
+</head>
+<body>
+<div class="title">最高人民法院关于修改《关于审理示例借贷案件适用法律若干问题的规定》的决定</div>
+<ul class="info">
+  <li>发布时间：2020-08-20 10:00:00</li>
+</ul>
+<div class="txt_txt" id="zoom">
+  <p>《最高人民法院关于修改〈关于审理示例借贷案件适用法律若干问题的规定〉的决定》已于2020年8月18日由最高人民法院审判委员会第1809次会议通过，现予公布，自2020年8月20日起施行。</p>
+  <p>最高人民法院</p>
+  <p>2020年8月19日</p>
+  <p>法释〔2020〕6号</p>
+  <p>最高人民法院</p>
+  <p>关于修改《关于审理示例借贷案件</p>
+  <p>适用法律若干问题的规定》的决定</p>
+  <p>（2020年8月18日最高人民法院审判委员会</p>
+  <p>第1809次会议通过，自2020年8月20日起施行）</p>
+  <p>根据审判实践需要，对《关于审理示例借贷案件适用法律若干问题的规定》作如下修改：</p>
+  <p>一、将第一条修改为：</p>
+  <p>“本规定所称的示例借贷，是指示例行为。”</p>
+  <p>（一）示例项。</p>
+  <p>本决定自2020年8月20日起施行。</p>
+  <p>最高人民法院</p>
+  <p>关于审理示例借贷案件适用法律若干问题的规定</p>
+  <p>（2015年6月23日最高人民法院审判委员会第1655次会议通过，</p>
+  <p>根据2020年8月18日最高人民法院审判委员会第1809次会议《关于修改〈关于审理示例借贷案件适用法律若干问题的规定〉的决定》修正，该修正自2020年8月20日起施行）</p>
+  <p>为正确审理示例借贷纠纷案件，制定本规定。</p>
+  <p>第一条 本规定所称的示例借贷，是指示例行为。</p>
+  <p>第二条 示例第二条。</p>
+</div>
+</body>
+</html>
+"""
+
+    DECISION_ONLY_DETAIL_FIXTURE = """
+<html>
+<head>
+  <title>最高人民法院关于修改《最高人民法院关于适用〈示例诉讼法〉的解释》的决定 - 中华人民共和国最高人民法院</title>
+</head>
+<body>
+<div class="title">最高人民法院关于修改《最高人民法院关于适用〈示例诉讼法〉的解释》的决定</div>
+<ul class="info">
+  <li>发布时间：2022-04-02 10:00:00</li>
+</ul>
+<div class="txt_txt" id="zoom">
+  <p>最高法修改示例诉讼法司法解释</p>
+  <p>《最高人民法院关于修改〈最高人民法院关于适用《示例诉讼法》的解释〉的决定》已于2022年3月22日由最高人民法院审判委员会第1866次会议通过，现予公布，自2022年4月10日起施行。</p>
+  <p>最高人民法院</p>
+  <p>2022年4月1日</p>
+  <p>法释〔2022〕11号</p>
+  <p>最高人民法院</p>
+  <p>关于修改《最高人民法院关于适用〈示例诉讼法〉的解释》的决定</p>
+  <p>（2022年3月22日最高人民法院审判委员会第1866次会议通过，自2022年4月10日起施行）</p>
+  <p>最高人民法院审判委员会第1866次会议决定，对《最高人民法院关于适用〈示例诉讼法〉的解释》作如下修改：</p>
+  <p>一、将第十一条修改为：“示例新第十一条。”</p>
+  <p>二、删去第十二条。</p>
+  <p>本决定自2022年4月10日起施行。</p>
+  <p>根据本决定，《最高人民法院关于适用〈示例诉讼法〉的解释》作相应修改，重新公布。</p>
+</div>
 </body>
 </html>
 """
@@ -325,7 +429,7 @@ class CourtMainAdapterTests(unittest.TestCase):
         self.assertEqual(payload["articles"][2]["part"], "二、关于破产案件的审理")
         self.assertIn("破产受理条件", payload["articles"][2]["text"])
 
-    def test_amendment_decision_excludes_appended_republished_document(self) -> None:
+    def test_amendment_decision_splits_off_the_republished_document(self) -> None:
         adapter = court_main.CourtMainAdapter()
         page = court_main.FetchResult(
             url="https://www.court.gov.cn/zixun/xiangqing/506981.html",
@@ -352,18 +456,159 @@ class CourtMainAdapterTests(unittest.TestCase):
         self.assertTrue(body.endswith("作相应修改后，重新公布。"))
         self.assertNotIn("依法惩治示例犯罪", body)
         self.assertNotIn("本解释所称“敏感期”", body)
+        self.assertNotIn("warnings", payload)
+
+        # #39: the reprinted text is the amended document's 修正本 — its 文号,
+        # the decision's dates, and the decision as 修正依据.
+        republished = payload["republished"]
+        self.assertEqual(republished["id"], "court_main:zixun/xiangqing/506981/republished")
+        self.assertEqual(
+            republished["title"],
+            "最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释",
+        )
+        self.assertEqual(republished["level"], "judicial_interpretation")
+        self.assertEqual(republished["document_number"], "法释〔2012〕6号")
+        self.assertEqual(republished["status"], "current")
+        self.assertEqual(
+            (republished["released_at"], republished["effective_at"]), ("2026-07-24", "2026-07-27")
+        )
+        self.assertEqual(republished["version_label"], "2026年修正")
+        self.assertEqual([item["number"] for item in republished["articles"]], ["1", "6"])
+        self.assertEqual(
+            republished["relations"],
+            [{
+                "relation_type": "amendment_basis",
+                "to_law_id": "court_main:zixun/xiangqing/506981",
+                "to_law_title": payload["title"],
+                "effective_at": "2026-07-27",
+                "notes": "法释〔2026〕13号",
+            }],
+        )
+
+    def test_decision_amending_several_documents_keeps_only_the_decision(self) -> None:
+        adapter = court_main.CourtMainAdapter()
+        page = court_main.FetchResult(
+            url="https://www.court.gov.cn/fabu/xiangqing/282661.html",
+            status_code=200,
+            headers={},
+            text=self.BATCH_AMENDMENT_DECISION_DETAIL_FIXTURE,
+        )
+        with patch.object(court_main, "_fetch_text", return_value=page):
+            payload = adapter.build_law_payload("fabu/xiangqing/282661")
+
+        # The page reprints every amended document; none of them is one 修正本.
+        self.assertNotIn("republished", payload)
+        # #63: the page title wraps; the line breaks leave no spaces behind.
+        self.assertEqual(payload["title"], "最高人民法院关于修改《示例甲规定》等二件执行类司法解释的决定")
+        self.assertEqual(payload["document_number"], "法释〔2020〕21号")
+        self.assertEqual(payload["effective_at"], "2021-01-01")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["正文"])
+        body = payload["articles"][0]["text"]
+        self.assertTrue(body.endswith("作相应修改后重新公布。"))
+        self.assertNotIn("甲第一条", body)
         self.assertEqual(
             [(item["code"], item["republished_title"]) for item in payload["warnings"]],
-            [(
-                "republished_text_not_imported",
-                "最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释",
-            )],
+            [("republished_texts_not_imported", "示例甲规定")],
         )
+
+    def test_amended_text_printed_without_the_reprint_sentence_is_split_at_its_heading(self) -> None:
+        adapter = court_main.CourtMainAdapter()
+        page = court_main.FetchResult(
+            url="https://www.court.gov.cn/fabu/xiangqing/249031.html",
+            status_code=200,
+            headers={},
+            text=self.UNANNOUNCED_REPRINT_DETAIL_FIXTURE,
+        )
+        with patch.object(court_main, "_fetch_text", return_value=page):
+            payload = adapter.build_law_payload("fabu/xiangqing/249031")
+
+        # #62: no "……重新公布。" sentence; the amended text's 题注 marks where it starts.
+        self.assertEqual(payload["document_number"], "法释〔2020〕6号")
+        self.assertEqual(payload["effective_at"], "2020-08-20")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["正文"])
+        body = payload["articles"][0]["text"]
+        self.assertTrue(body.startswith("《最高人民法院关于修改〈关于审理示例借贷案件"))
+        self.assertTrue(body.endswith("本决定自2020年8月20日起施行。"))
+        self.assertNotIn("示例第二条", body)
+        republished = payload["republished"]
+        self.assertEqual(
+            republished["title"], "最高人民法院关于审理示例借贷案件适用法律若干问题的规定"
+        )
+        self.assertIsNone(republished["document_number"])
+        self.assertEqual(republished["level"], "judicial_interpretation")
+        self.assertEqual(
+            (republished["released_at"], republished["effective_at"]), ("2020-08-20", "2020-08-20")
+        )
+        self.assertEqual(republished["version_label"], "2020年修正")
+        self.assertEqual([item["number"] for item in republished["articles"]], ["1", "2"])
+        self.assertEqual(
+            [(item["relation_type"], item["to_law_id"], item["notes"]) for item in republished["relations"]],
+            [("amendment_basis", "court_main:fabu/xiangqing/249031", "法释〔2020〕6号")],
+        )
+
+    def test_decision_page_without_reprinted_text_is_one_body(self) -> None:
+        adapter = court_main.CourtMainAdapter()
+        page = court_main.FetchResult(
+            url="https://www.court.gov.cn/fabu/xiangqing/353731.html",
+            status_code=200,
+            headers={},
+            text=self.DECISION_ONLY_DETAIL_FIXTURE,
+        )
+        with patch.object(court_main, "_fetch_text", return_value=page):
+            payload = adapter.build_law_payload("fabu/xiangqing/353731")
+
+        # #64: items numbered 一、二、 are not articles; the decision is one body.
+        self.assertEqual(payload["document_number"], "法释〔2022〕11号")
+        self.assertEqual(payload["effective_at"], "2022-04-10")
+        self.assertEqual([item["number"] for item in payload["articles"]], ["正文"])
+        body = payload["articles"][0]["text"]
+        self.assertTrue(body.startswith("《最高人民法院关于修改〈最高人民法院关于适用"))
+        self.assertTrue(body.endswith("作相应修改，重新公布。"))
+        self.assertNotIn("最高法修改示例诉讼法司法解释", body)
+        self.assertNotIn("republished", payload)
+        self.assertNotIn("warnings", payload)
+
+    def test_wrapped_titles_lose_their_line_break_spaces(self) -> None:
+        for raw, tidy in (
+            (
+                "最高人民法院关于修改 《最高人民法院关于人民法院扣押铁路运输货物 若干问题的规定》"
+                "等十八件执行类司法解释的决定",
+                "最高人民法院关于修改《最高人民法院关于人民法院扣押铁路运输货物若干问题的规定》"
+                "等十八件执行类司法解释的决定",
+            ),
+            (
+                "最高人民法院 最高人民检察院 关于办理示例刑事案件适用法律若干问题的解释",
+                "最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释",
+            ),
+            ("关于 Example Rules 的通知", "关于Example Rules的通知"),
+        ):
+            with self.subTest(raw=raw):
+                self.assertEqual(court_main._tidy_title(raw), tidy)
+
+    def test_reprint_sentence_naming_several_documents_marks_a_batch(self) -> None:
+        title = "关于修改《示例甲规定》《示例乙规定》的决定"
+        for sentence, batch in (
+            ("根据本决定，《示例甲规定》等二件司法解释作相应修改后重新公布。", True),
+            ("根据本决定，《示例甲规定》《示例乙规定》作相应修改后重新公布。", True),
+            ("根据本决定，《示例甲规定》作相应修改后重新公布。", False),
+        ):
+            with self.subTest(sentence=sentence):
+                split = court_main._split_amendment_decision(
+                    title, f"{title}\n一、删去第三条。\n{sentence}\n示例甲规定\n第一条 示例。"
+                )
+                self.assertEqual(split.batch, batch)
 
     def test_amendment_decision_without_appended_text_is_not_split(self) -> None:
         text = "关于修改《示例规定》的决定\n一、删去第三条。\n根据本决定，《示例规定》作相应修改，重新公布。"
         self.assertIsNone(court_main._split_amendment_decision("关于修改《示例规定》的决定", text))
         self.assertIsNone(court_main._split_amendment_decision("示例规定", text + "\n第一条 示例。"))
+        # Without that sentence, only a 题注 naming an amending decision starts a reprint.
+        unannounced = (
+            "关于修改《示例规定》的决定\n（2020年8月18日通过，自2020年8月20日起施行）\n"
+            "一、将第三条修改为：\n（一）示例项。\n本决定自2020年8月20日起施行。\n"
+            "示例规定\n（2015年6月23日通过）\n第一条 示例。"
+        )
+        self.assertIsNone(court_main._split_amendment_decision("关于修改《示例规定》的决定", unannounced))
 
     def test_infer_document_title_preserves_direct_normative_title(self) -> None:
         title = "最高人民法院关于适用《中华人民共和国刑事诉讼法》的解释"
@@ -392,6 +637,138 @@ class CourtMainAdapterTests(unittest.TestCase):
         }
         self.assertEqual(infer_source(payload), "court_main")
         self.assertEqual(infer_source_id(payload, "court_main"), "zixun/xiangqing/499051")
+
+
+class CourtMainRepublishedFetchTests(unittest.TestCase):
+    """#39: fetching a decision page stores its reprinted text as a 修正本."""
+
+    TITLE = "最高人民法院、最高人民检察院关于办理示例刑事案件适用法律若干问题的解释"
+    DECISION_ID = "court_main:zixun/xiangqing/506981"
+
+    def _fetch(self, db_path, **kwargs) -> dict:
+        page = court_main.FetchResult(
+            url="https://www.court.gov.cn/zixun/xiangqing/506981.html",
+            status_code=200,
+            headers={},
+            text=CourtMainAdapterTests.AMENDMENT_DECISION_DETAIL_FIXTURE,
+        )
+        with patch.object(court_main, "_fetch_text", return_value=page), patch(
+            "chinalaw.fetch.get_source_adapter", return_value=court_main.CourtMainAdapter()
+        ):
+            return fetch_mod.fetch_law(
+                db_path,
+                "关于修改示例解释的决定",
+                source="court_main",
+                prefer_bbbs="zixun/xiangqing/506981",
+                **kwargs,
+            )
+
+    def _seed_version(self, db_path, **fields) -> None:
+        """Store a version of the amended document; the 2012 original unless overridden."""
+        with connect(db_path) as conn:
+            migrate(conn)
+            load_law_from_dict(conn, {
+                "id": "flk-example-2012",
+                "title": self.TITLE,
+                "level": "judicial_interpretation",
+                "status": "current",
+                "issuing_body": "最高人民法院;最高人民检察院",
+                "document_number": "法释〔2012〕6号",
+                "released_at": "2012-03-29",
+                "effective_at": "2012-06-01",
+                "source_url": "https://flk.npc.gov.cn/detail?id=example",
+                "source_name": "flk.npc.gov.cn",
+                "source_checked_at": "2026-10-01T00:00:00+08:00",
+                "source_hash": "example-2012",
+                "articles": [{"number": "1", "number_display": "第一条", "text": "原第一条。"}],
+                **fields,
+            })
+
+    def test_republished_text_joins_the_amended_documents_work(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            self._seed_version(db_path)
+
+            result = self._fetch(db_path)
+
+            republished = result["republished"]
+            self.assertNotIn("republished", result["law"])
+            self.assertEqual(republished["id"], f"{self.DECISION_ID}/republished")
+            self.assertEqual(republished["aligned_with"], "flk-example-2012")
+            self.assertTrue(republished["loaded"])
+            self.assertEqual(republished["article_count"], 2)
+
+            # The 文号 names the document as amended: the 修正本 in force today.
+            current = service.get_law(db_path, "法释〔2012〕6号")
+            self.assertEqual(current["id"], f"{self.DECISION_ID}/republished")
+            self.assertEqual(current["issuing_body"], "最高人民法院;最高人民检察院")
+            self.assertEqual(current["effective_status_as_of"], "current")
+            self.assertEqual(
+                current["amendment_basis"],
+                [{
+                    "law_id": self.DECISION_ID,
+                    "title": result["law"]["title"],
+                    "document_number": "法释〔2026〕13号",
+                    "effective_at": "2026-07-27",
+                }],
+            )
+            original = service.get_law(db_path, "flk-example-2012")
+            self.assertEqual(original["effective_status_as_of"], "amended")
+            self.assertNotIn("amendment_basis", original)
+            self.assertEqual(
+                [version["id"] for version in original["work_versions"]],
+                ["flk-example-2012", f"{self.DECISION_ID}/republished"],
+            )
+            with connect(db_path) as conn:
+                sources_indexed = {
+                    row["source"] for row in conn.execute(
+                        "SELECT source FROM document_number_index WHERE document_number = ?",
+                        ("法释〔2012〕6号",),
+                    )
+                }
+            self.assertNotIn("court_main", sources_indexed)
+
+    def test_republished_text_already_in_the_work_is_not_stored_again(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "t.db"
+            self._seed_version(db_path)
+            # flk keeps the amended text under its own id, without the 文号.
+            self._seed_version(
+                db_path,
+                id="flk-example-2026",
+                document_number=None,
+                released_at="2026-07-24",
+                effective_at="2026-07-27",
+                source_hash="example-2026",
+            )
+
+            result = self._fetch(db_path)
+
+            self.assertTrue(result["loaded"])
+            republished = result["republished"]
+            self.assertEqual(republished["aligned_with"], "flk-example-2012")
+            self.assertEqual(republished["existing_version"], "flk-example-2026")
+            self.assertFalse(republished["loaded"])
+            self.assertIsNone(republished["wrote_fixture"])
+            original = service.get_law(db_path, "flk-example-2012")
+            self.assertEqual(
+                [version["id"] for version in original["work_versions"]],
+                ["flk-example-2012", "flk-example-2026"],
+            )
+
+    def test_republished_text_is_written_beside_the_decision_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            fixture = Path(td) / "decision.json"
+
+            result = self._fetch(Path(td) / "absent.db", to_fixture=fixture)
+
+            stored = json.loads((Path(td) / "decision.republished.json").read_text(encoding="utf-8"))
+            self.assertEqual(result["republished"]["wrote_fixture"], str(Path(td) / "decision.republished.json"))
+            self.assertIsNone(result["republished"]["aligned_with"])
+            self.assertEqual(stored["document_number"], "法释〔2012〕6号")
+            self.assertEqual(stored["relations"][0]["to_law_id"], json.loads(fixture.read_text(encoding="utf-8"))["id"])
+            self.assertNotIn("republished", json.loads(fixture.read_text(encoding="utf-8")))
+            self.assertFalse((Path(td) / "absent.db").exists())
 
 
 if __name__ == "__main__":  # pragma: no cover

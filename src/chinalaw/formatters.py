@@ -85,6 +85,16 @@ def _effective_note_lines(law: dict) -> list[str]:
     return [f"- 效力说明：{note}"] if note else []
 
 
+def _amendment_basis_lines(law: dict) -> list[str]:
+    """修正本的修正依据：修改决定的文号、标题与施行日期，按时间先后（#39）。"""
+    entries = []
+    for basis in law.get("amendment_basis") or []:
+        title = f"《{basis['title']}》" if basis.get("title") else ""
+        effective = f"（{basis['effective_at']} 施行）" if basis.get("effective_at") else ""
+        entries.append(f"{basis.get('document_number') or ''}{title}{effective}")
+    return [f"- 修正依据：{'；'.join(entries)}"] if entries else []
+
+
 def _full_article_footer(law: dict) -> list[str]:
     """Render the shared provenance footer for article-shaped Markdown."""
 
@@ -92,6 +102,7 @@ def _full_article_footer(law: dict) -> list[str]:
     if law.get("status"):
         lines.append(f"- 文本状态：{law.get('effective_status_as_of') or law.get('status')}")
     lines.extend(_effective_note_lines(law))
+    lines.extend(_amendment_basis_lines(law))
     if law.get("effective_at"):
         lines.append(f"- 施行日期：{law.get('effective_at')}")
     if law.get("repealed_at"):
@@ -490,6 +501,7 @@ def law_to_markdown(law: dict) -> str:
         lines.append(f"- 制定机关：{law.get('issuing_body')}")
     if law.get("document_number"):
         lines.append(f"- 发文号：{law.get('document_number')}")
+    lines.extend(_amendment_basis_lines(law))
     if law.get("released_at"):
         lines.append(f"- 发布日期：{law.get('released_at')}")
     if law.get("effective_at"):
@@ -1839,6 +1851,18 @@ def fetch_to_markdown(payload: dict) -> str:
         f"- 动作: {action_text}",
         f"- 条文数: {payload.get('article_count', 0)}",
     ]
+    republished = payload.get("republished")
+    if republished:
+        joined = (
+            f"，与 `{republished['aligned_with']}` 同一作品"
+            if republished.get("aligned_with")
+            else "，库内无原文书，作为首个版本"
+        )
+        lines.append(
+            f"- 修正本: 《{republished.get('title')}》 `{republished.get('id')}`"
+            f"（{republished.get('version_label')}，"
+            f"{republished.get('article_count', 0)} 条{joined}）"
+        )
     article = payload.get("article")
     if article:
         text = (article.get("text") or "").strip().replace("\n", " ")

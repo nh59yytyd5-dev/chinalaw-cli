@@ -617,8 +617,12 @@ def _resolve_law_row_with_via(
     if looks_like_document_number(identifier):
         rows = _document_number_rows(conn, identifier)
         # One notice number may issue several different documents. Never pick
-        # one of those arbitrarily for article/document lookup.
-        return (rows[0], "document_number_match") if len(rows) == 1 else (None, None)
+        # one of those arbitrarily for article/document lookup. Versions of one
+        # work sharing the number (a 修正本 and its original) are not ambiguous.
+        if len(rows) == 1:
+            return rows[0], "document_number_match"
+        version = _shared_number_version(conn, rows) if rows else None
+        return (version, "document_number_match") if version is not None else (None, None)
 
     if _looks_like_short_normative_name(identifier):
         return None, None
@@ -1180,6 +1184,9 @@ def _annotate_effective_status(
     law["status_checked_at"] = member["status_checked_at"]
     if note:
         law["effective_status_note"] = note
+    basis = _amendment_basis(conn, member["id"])
+    if basis:
+        law["amendment_basis"] = basis
     law["work_versions"] = [
         {
             "id": other["id"],
@@ -1190,6 +1197,49 @@ def _annotate_effective_status(
         }
         for other in sorted(members, key=lambda item: _version_start(item) or date.min)
     ]
+
+
+def _amendment_basis(conn: sqlite3.Connection, law_id: str) -> list[dict]:
+    """修正依据：修正本据以修正的修改决定，按施行日期先后排列（#39）。"""
+    rows = conn.execute(
+        """
+        SELECT to_law_id, to_law_title, effective_at, notes FROM law_relations
+        WHERE from_law_id = ? AND relation_type = 'amendment_basis'
+        ORDER BY COALESCE(effective_at, ''), to_law_id
+        """,
+        (law_id,),
+    ).fetchall()
+    return [
+        {
+            "law_id": row["to_law_id"],
+            "title": row["to_law_title"],
+            "document_number": row["notes"],
+            "effective_at": row["effective_at"],
+        }
+        for row in rows
+    ]
+
+
+def _shared_number_version(
+    conn: sqlite3.Connection, rows: list[sqlite3.Row]
+) -> sqlite3.Row | None:
+    """The version a 文号 names when several versions of one work carry it.
+
+    A 修正本 keeps the number of the document it amends (#39), so the number
+    names that document as amended: the version in force today, else the latest.
+    Rows from different works mean one notice issued several documents; None.
+    """
+    members = _work_member_rows(conn, rows[0])
+    member_ids = {member["id"] for member in members}
+    if any(row["id"] not in member_ids for row in rows):
+        return None
+    today = legal_today()
+    starts = _work_version_starts(conn, members)
+    in_force = [
+        row for row in rows
+        if _status_as_of(row, members, today, starts=starts)[0] == "current"
+    ]
+    return max(in_force or rows, key=lambda row: _version_start(row) or date.min)
 
 
 def _current_work_version(
