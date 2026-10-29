@@ -3,7 +3,7 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## Unreleased
+## 0.7.6 — 2026-10-30
 
 - `csrc_gov_cn` 按公布形式标效力层级（#68）。此前证监会文件一律标为 `department_rule`（部门规章），以公告发布的规范性文件因此被标高；部门规章须由部门首长签署命令公布（立法法第九十六条），证监会的规章以“证监会令”公布。现在的规则：
   - 文号为“证监会令第 N 号”的标 `department_rule`；页面标题前缀“【第 N 号令】”也作文号使用。
