@@ -23,9 +23,9 @@ import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import NamedTuple
 from datetime import datetime, timezone
 from html import unescape
+from typing import NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request
@@ -585,7 +585,8 @@ def _split_amendment_decision(title: str, text: str) -> AmendmentSplit | None:
     decision_text = head[start:].strip()
     republished_title = match.group("title")
     number = re.search(
-        re.escape(f"《{republished_title}》") + r"\s*[（(]\s*(?P<number>[^（）()\s]{2,40}?号)\s*[）)]",
+        re.escape(f"《{republished_title}》")
+        + r"\s*[（(]\s*(?P<number>[^（）()\s]{2,40}?号)\s*[）)]",
         decision_text,
     )
     return AmendmentSplit(

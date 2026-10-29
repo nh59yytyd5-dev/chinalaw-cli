@@ -1860,7 +1860,8 @@ def fetch_to_markdown(payload: dict) -> str:
         )
         lines.append(
             f"- 修正本: 《{republished.get('title')}》 `{republished.get('id')}`"
-            f"（{republished.get('version_label')}，{republished.get('article_count', 0)} 条{joined}）"
+            f"（{republished.get('version_label')}，"
+            f"{republished.get('article_count', 0)} 条{joined}）"
         )
     article = payload.get("article")
     if article:
