@@ -129,6 +129,10 @@ NORMATIVE_COLUMNS = {
     "行政规范性文件",
     "证券基金经营机构监管规则",
 }
+# Columns that tell how a document was promulgated, for pages without a number (#68).
+ORDER_COLUMNS = {"证监会令", "规章"}
+ANNOUNCEMENT_COLUMNS = {"证监会公告", "行政规范性文件"}
+ORDER_TITLE_RE = re.compile(r"^【第(?P<num>\d+)号令】")
 
 
 @dataclass
@@ -568,6 +572,31 @@ def _infer_document_number(text: str) -> str | None:
     return None
 
 
+def _order_number_from_title(raw_title: str | None) -> str | None:
+    match = ORDER_TITLE_RE.match(_clean_text_fragment(raw_title))
+    return f"证监会令第{int(match.group('num'))}号" if match else None
+
+
+def _infer_level(document_number: str | None, column: str | None) -> tuple[str, bool]:
+    """Return the level, and whether neither a number nor a column backs it.
+
+    A department rule is promulgated by an order the head of the department
+    signs (立法法 art. 96): the CSRC's rules carry a 证监会令 number, while what
+    it issues by announcement is a normative document (#68). Without a number,
+    the CSRC column tells how the document was promulgated; a document nothing
+    identifies is not presumed to be a rule.
+    """
+    if document_number and document_number.startswith("证监会令"):
+        return "department_rule", False
+    if document_number and document_number.startswith("中国证券监督管理委员会公告"):
+        return "other", False
+    if column in ORDER_COLUMNS:
+        return "department_rule", False
+    if column in ANNOUNCEMENT_COLUMNS:
+        return "other", False
+    return "other", True
+
+
 def _infer_short_title(title: str) -> str | None:
     return _adapter_html.infer_short_title(title, site_prefixes=ISSUER_PREFIXES)
 
@@ -766,7 +795,11 @@ class CsrcGovCnAdapter:
         effective_at = _infer_effective_at(raw_text) or (
             released_at if _takes_effect_on_publication(metadata_text) else None
         )
-        document_number = _infer_document_number(metadata_text)
+        document_number = _infer_document_number(metadata_text) or _order_number_from_title(
+            detail.get("raw_title")
+        )
+        column = _clean_text_fragment(detail.get("column_name") or (search_row or {}).get("column"))
+        level, level_unverified = _infer_level(document_number, column)
         # The canonical contract rejects zero-article payloads with a generic
         # message; check first so callers learn where the official text lives.
         if not cleaning.parse_articles_from_text(raw_text):
@@ -777,7 +810,7 @@ class CsrcGovCnAdapter:
             id=f"csrc_gov_cn:{detail['detail_id']}",
             title=title,
             short_title=_infer_short_title(title),
-            level="department_rule",
+            level=level,
             status=_adapter_html.status_from_current_listing(search_row),
             issuing_body="中国证券监督管理委员会",
             document_number=document_number,
@@ -788,6 +821,20 @@ class CsrcGovCnAdapter:
             source_checked_at=detail.get("checked_at"),
             source_hash=self._hash_text(raw_text),
         )
+        if level_unverified:
+            # Transient fetch diagnostic; stripped before canonical writes.
+            payload["warnings"] = [
+                {
+                    "severity": "warning",
+                    "code": "level_unverified",
+                    "column": column or None,
+                    "message": (
+                        "neither a 证监会令 / announcement number nor the CSRC column shows how "
+                        "this document was promulgated; stored as other (normative document), "
+                        "check its level by hand"
+                    ),
+                }
+            ]
         return payload
 
     @staticmethod

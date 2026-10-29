@@ -3,6 +3,15 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## Unreleased
+
+- `csrc_gov_cn` 按公布形式标效力层级（#68）。此前证监会文件一律标为 `department_rule`（部门规章），以公告发布的规范性文件因此被标高；部门规章须由部门首长签署命令公布（立法法第九十六条），证监会的规章以“证监会令”公布。现在的规则：
+  - 文号为“证监会令第 N 号”的标 `department_rule`；页面标题前缀“【第 N 号令】”也作文号使用。
+  - 文号为“中国证券监督管理委员会公告〔……〕……号”的标 `other`（其他规范性文件）。
+  - 认不出文号时看证监会页面栏目：“证监会令”“规章”标 `department_rule`，“证监会公告”“行政规范性文件”标 `other`。
+  - 其余情况标 `other`，`law.warnings` 给出 `level_unverified`，提示人工核对。
+  - 已入库的证监会文件不会自动改标，需 `fetch --force` 重抓。
+
 ## 0.7.5 — 2026-10-29
 
 - `chinalaw-mcp` 未传 `--db` 时读取 `CHINALAW_DB`，与 `chinalaw`、`chinalaw-server` 一致。此前它固定用 `~/.chinalaw/chinalaw.db`，已用该变量指向公开快照或其他库的用户会静默查到另一个库，得到 `law_missing` 或规模小得多的结果。三个入口改用同一选库规则：`--db` > `CHINALAW_DB` > 默认路径，空值视为未设，路径中的 `~` 一律展开（MCP 客户端配置的参数不经过 shell）；`chinalaw-server` 不再把空的 `CHINALAW_DB` 当成当前目录。`chinalaw` 与 `chinalaw-mcp` 的 `--help` 写明这一顺序（#52）。

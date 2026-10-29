@@ -336,6 +336,11 @@ CREATE TABLE meta (
 | `self_regulatory_rule` | 交易所 / 行业协会 / 登记结算机构自律业务规则 |
 | `other` | 其他规范性文件 |
 
+`csrc_gov_cn` 按公布形式取 `level`（#68）：文号为“证监会令第 N 号”（含标题前缀“【第 N 号令】”）的为
+`department_rule`，为“中国证券监督管理委员会公告〔……〕……号”的为 `other`；认不出文号时看证监会页面栏目，
+“证监会令”“规章”为 `department_rule`，“证监会公告”“行政规范性文件”为 `other`；其余为 `other`，
+并在 `law.warnings` 给出 `level_unverified`（§4.11）。
+
 `judicial_meeting_minutes` / `judicial_policy` / `guiding_case` 不在 flk.npc 数据
 范围内，由 `court_gongbao` / `court_main` / `spp_gov_cn` 等多源 adapter 直接写入。
 
@@ -1579,6 +1584,8 @@ id 为 `court_main:<detail_id>/republished`，文号取决定中“对《……�
 `aligned_with` 为归入作品时所依的库内记录，`existing_version` 为已有的同日版本（此时 `loaded=false`、`skipped=true`）；`--to-fixture <名>.json` 时修正本写到同目录的 `<名>.republished.json`。
 此前的临时告警 `republished_text_not_imported` 不再出现。决定一次修改多件文书、页面附载多件全文（“《……》等十八件……重新公布”）时只存决定本身，
 不拆修正本，`law.warnings` 给出 `{"severity": "warning", "code": "republished_texts_not_imported", "republished_title", "message"}`，各件修正本另行抓取。
+`csrc_gov_cn` 的页面既无可认的文号、栏目也看不出公布形式时，`level` 记 `other`，`law.warnings` 给出
+`{"severity": "warning", "code": "level_unverified", "column": "string|null", "message"}`（§2.9，#68）。
 `law.warnings` 为运行时诊断，写库与 `--to-fixture` 前剥离。
 
 JSON 输出 schema（list-matches 模式）：
