@@ -265,6 +265,7 @@ class CsrcGovCnAdapterTests(unittest.TestCase):
         self.assertEqual(payload["id"], "csrc_gov_cn:csrc/c101953/c7547359")
         self.assertEqual(payload["title"], "上市公司信息披露管理办法")
         self.assertEqual(payload["document_number"], "证监会令第226号")
+        self.assertEqual(payload["level"], "department_rule")
         self.assertEqual(payload["released_at"], "2025-03-26")
         self.assertEqual(payload["effective_at"], "2025-07-01")
         self.assertEqual(len(payload["articles"]), 3)
@@ -295,11 +296,68 @@ class CsrcGovCnAdapterTests(unittest.TestCase):
             "上市公司监管指引第3号——上市公司现金分红（2023年修订）",
         )
         self.assertEqual(payload["document_number"], "中国证券监督管理委员会公告〔2023〕61号")
+        # Issued by announcement, not by order: a normative document (#68).
+        self.assertEqual(payload["level"], "other")
         self.assertEqual(payload["released_at"], "2023-12-15")
         self.assertEqual(payload["effective_at"], "2023-12-15")
         self.assertEqual([item["number"] for item in payload["articles"]], ["1", "2", "17"])
         self.assertIn("附件1", fetch_bytes.call_args.args[0])
         self.assertNotIn("修订说明", fetch_bytes.call_args.args[0])
+
+    def _numberless_payload(self, *, column_name=None, search_row=None, raw_title=None, text=None):
+        detail = {
+            "detail_id": "csrc/c101864/c1000001",
+            "url": "https://www.csrc.gov.cn/csrc/c101864/c1000001/content.shtml",
+            "title": "示例监管指引",
+            "raw_title": raw_title or "示例监管指引_中国证券监督管理委员会",
+            "subtitle": "",
+            "content_html": "",
+            "content_text": text or "第一条 为了规范示例行为，制定本指引。\n第二条 本指引自公布之日起施行。",
+            "column_name": column_name,
+            "published_at": "2024-01-02 10:00:00",
+            "checked_at": "2026-10-30T00:00:00+00:00",
+        }
+        adapter = csrc_gov_cn.CsrcGovCnAdapter()
+        return adapter.build_law_payload(detail["detail_id"], detail=detail, search_row=search_row)
+
+    def test_numberless_page_takes_its_level_from_the_csrc_column(self) -> None:
+        # #68: only an order promulgates a department rule; without a number the
+        # column the CSRC files the page under says how it was promulgated.
+        cases = [
+            ({"column_name": "证监会令"}, "department_rule"),
+            ({"search_row": {"column": "规章 "}}, "department_rule"),
+            ({"column_name": "证监会公告"}, "other"),
+            ({"search_row": {"column": "行政规范性文件"}}, "other"),
+        ]
+        for kwargs, level in cases:
+            with self.subTest(**kwargs):
+                payload = self._numberless_payload(**kwargs)
+                self.assertIsNone(payload["document_number"])
+                self.assertEqual(payload["level"], level)
+                self.assertNotIn("warnings", payload)
+
+    def test_unidentified_page_is_not_presumed_a_rule(self) -> None:
+        for column in (None, "证券基金经营机构监管规则", "证监会要闻"):
+            with self.subTest(column=column):
+                payload = self._numberless_payload(column_name=column)
+                self.assertEqual(payload["level"], "other")
+                [warning] = payload["warnings"]
+                self.assertEqual(warning["code"], "level_unverified")
+                self.assertEqual(warning["column"], column)
+
+    def test_order_title_prefix_counts_as_the_document_number(self) -> None:
+        payload = self._numberless_payload(raw_title="【第226号令】《示例办法》_中国证券监督管理委员会")
+
+        self.assertEqual(payload["document_number"], "证监会令第226号")
+        self.assertEqual(payload["level"], "department_rule")
+        self.assertNotIn("warnings", payload)
+
+    def test_document_number_outweighs_the_column(self) -> None:
+        text = "中国证券监督管理委员会公告〔2024〕1号\n第一条 为了规范示例行为，制定本指引。"
+        payload = self._numberless_payload(column_name="规章", text=text)
+
+        self.assertEqual(payload["document_number"], "中国证券监督管理委员会公告〔2024〕1号")
+        self.assertEqual(payload["level"], "other")
 
     def test_zero_article_decision_lists_official_attachments(self) -> None:
         adapter = csrc_gov_cn.CsrcGovCnAdapter()
