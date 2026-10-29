@@ -62,8 +62,8 @@ $ chinalaw article 民法典 533 --format md
 从[最新 release](https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/latest) 下载 wheel：
 
 ```bash
-python -m pip install ./chinalaw-0.7.4-py3-none-any.whl              # CLI 与本地 MCP，无第三方依赖
-python -m pip install './chinalaw-0.7.4-py3-none-any.whl[server]'    # 另含管理面板与 HTTP 服务
+python -m pip install ./chinalaw-0.7.5-py3-none-any.whl              # CLI 与本地 MCP，无第三方依赖
+python -m pip install './chinalaw-0.7.5-py3-none-any.whl[server]'    # 另含管理面板与 HTTP 服务
 ```
 
 给 Claude Code、Codex 等本机 agent 使用时，也可以从仓库安装：
@@ -158,7 +158,7 @@ chinalaw doctor --format md                      # 安装、数据库、MCP 与 
 <p align="center"><img src="docs/images/library-overview.png" alt="chinalaw 资料库管理面板概览" width="900"></p>
 
 ```bash
-python -m pip install './chinalaw-0.7.4-py3-none-any.whl[server]'
+python -m pip install './chinalaw-0.7.5-py3-none-any.whl[server]'
 # 仓库内安装：scripts/install-local --with-server（Windows：.\scripts\install-local.ps1 -WithServer）
 chinalaw-server init --with-fixtures    # 随包基线；全国公开法规按在线接入文档导入快照
 chinalaw-server serve --open            # 终端输出一次性配对链接，进入面板后可设置密码

@@ -64,8 +64,8 @@ Requires Python 3.10 or later.
 Download the wheel from the [latest release](https://github.com/nh59yytyd5-dev/chinalaw-cli/releases/latest):
 
 ```bash
-python -m pip install ./chinalaw-0.7.4-py3-none-any.whl              # CLI and local MCP, no third-party dependencies
-python -m pip install './chinalaw-0.7.4-py3-none-any.whl[server]'    # also the admin panel and HTTP service
+python -m pip install ./chinalaw-0.7.5-py3-none-any.whl              # CLI and local MCP, no third-party dependencies
+python -m pip install './chinalaw-0.7.5-py3-none-any.whl[server]'    # also the admin panel and HTTP service
 ```
 
 For local agents such as Claude Code or Codex you can also install from the repository:
@@ -161,7 +161,7 @@ The repository ships 7 skills (search method, citation checking, contract review
 <p align="center"><img src="docs/images/library-overview.png" alt="Overview of the chinalaw library admin panel" width="900"></p>
 
 ```bash
-python -m pip install './chinalaw-0.7.4-py3-none-any.whl[server]'
+python -m pip install './chinalaw-0.7.5-py3-none-any.whl[server]'
 # From the repository: scripts/install-local --with-server (Windows: .\scripts\install-local.ps1 -WithServer)
 chinalaw-server init --with-fixtures    # bundled baseline; for nationwide public law, import the snapshot as the online guide describes
 chinalaw-server serve --open            # prints a one-time pairing link; set a password once in the panel
